@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme, AppThemeName } from '../theme/appTheme';
 import { useAppMode } from '../navigation/AppModeContext';
+import { useHisabApp } from '../navigation/HisabAppContext';
 
 export const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
@@ -26,21 +28,72 @@ export const ProfileScreen = () => {
     weightHistory,
   } = useFitnessApp();
 
+  const {
+    isLocked,
+    lock,
+    pinEnabled = false,
+    securityPin = '1234',
+    biometricEnabled = true,
+    patchState,
+    saveProfile,
+    user,
+    localOnly,
+  } = useHisabApp();
+
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(profile.name);
+  const [name, setName] = useState(profile.name || 'Sourav Mahanty');
   const [age, setAge] = useState(profile.age.toString());
   const [height, setHeight] = useState(profile.heightCm.toString());
   const [targetWeight, setTargetWeight] = useState(profile.targetWeightKg.toString());
 
+  // Security PIN Change Modal state
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [newPinInput, setNewPinInput] = useState('');
+
+  const displayName = profile.name || user?.displayName || 'Sourav Mahanty';
+  const displayEmail = user?.email || profile.email || 'souravrasiknagar@gmail.com';
+
+  const getInitials = (n: string) => {
+    if (!n || n === 'Guest User') return 'SM';
+    const parts = n.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return n.slice(0, 2).toUpperCase();
+  };
+
   const handleSaveProfile = async () => {
+    const trimmedName = name.trim() || 'Sourav Mahanty';
     await updateProfile({
-      name,
-      age: parseInt(age, 10) || 25,
+      name: trimmedName,
+      age: parseInt(age, 10) || 26,
       heightCm: parseInt(height, 10) || 178,
       targetWeightKg: parseFloat(targetWeight) || 80,
     });
+    if (saveProfile) {
+      try {
+        await saveProfile({ displayName: trimmedName });
+      } catch (e) {
+        // silent fallback
+      }
+    }
     setIsEditing(false);
-    Alert.alert('✅ Profile Updated', 'Athlete settings saved.');
+    Alert.alert('✅ Profile Synchronized', 'Identity saved across Daily Hisab and TitanFit.');
+  };
+
+  const handleSavePin = () => {
+    const clean = newPinInput.replace(/\D/g, '').slice(0, 4);
+    if (clean.length !== 4) {
+      Alert.alert('Invalid PIN', 'Please enter a 4-digit numeric PIN.');
+      return;
+    }
+    patchState({ securityPin: clean, pinEnabled: true });
+    setShowPinModal(false);
+    setNewPinInput('');
+    Alert.alert('✅ PIN Updated', `Your app security PIN is now updated.`);
+  };
+
+  const handleThemeChange = (newTheme: AppThemeName) => {
+    setThemeName(newTheme);
+    patchState({ theme: newTheme });
   };
 
   const themesList: { id: AppThemeName; label: string; dot: string }[] = [
@@ -61,8 +114,8 @@ export const ProfileScreen = () => {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
         <View>
-          <Text style={[styles.headerSub, { color: theme.muted }]}>ATHLETE SETTINGS</Text>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Profile & Stats</Text>
+          <Text style={[styles.headerSub, { color: theme.muted }]}>ATHLETE & ACCOUNT SETTINGS</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Profile & Security</Text>
         </View>
 
         <TouchableOpacity
@@ -79,7 +132,7 @@ export const ProfileScreen = () => {
         {/* User Avatar & Identity Card */}
         <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           <View style={[styles.avatarCircle, { backgroundColor: theme.primary }]}>
-            <Text style={styles.avatarText}>{profile.name.charAt(0).toUpperCase()}</Text>
+            <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
           </View>
 
           {isEditing ? (
@@ -89,12 +142,16 @@ export const ProfileScreen = () => {
               onChangeText={setName}
             />
           ) : (
-            <Text style={[styles.userName, { color: theme.text }]}>{profile.name}</Text>
+            <Text style={[styles.userName, { color: theme.text }]}>{displayName}</Text>
           )}
 
-          <Text style={[styles.userGoalText, { color: theme.muted }]}>
-            Goal: {profile.fitnessGoal === 'weight_gain' ? 'Muscle Gain & Hypertrophy' : 'Fat Loss & Cutting'}
-          </Text>
+          <Text style={[styles.userEmailText, { color: theme.muted }]}>{displayEmail}</Text>
+
+          <View style={[styles.badgePill, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}>
+            <Text style={[styles.badgePillText, { color: '#14B8A6' }]}>
+              {localOnly ? '⚡ OFFLINE LOCAL ACCOUNT' : '☁️ DAILY HISAB & TITANFIT SYNCED'}
+            </Text>
+          </View>
 
           {/* Quick Stats Triple */}
           <View style={styles.tripleStats}>
@@ -110,6 +167,101 @@ export const ProfileScreen = () => {
               <Text style={[styles.statLabel, { color: theme.muted }]}>STREAK</Text>
               <Text style={[styles.statVal, { color: theme.success }]}>{profile.streakDays} Days</Text>
             </View>
+          </View>
+        </View>
+
+        {/* SECURITY & APP LOCK CARD */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+          <View style={styles.securityHeaderRow}>
+            <Text style={{ fontSize: 18 }}>🛡️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 2 }]}>SECURITY & APP LOCK</Text>
+              <Text style={[styles.securitySubDesc, { color: theme.muted }]}>
+                Unified PIN & biometric lock protecting both Daily Hisab & TitanFit
+              </Text>
+            </View>
+          </View>
+
+          {/* Lock App Now Action */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.lockNowButton, { backgroundColor: theme.surfaceAlt, borderColor: theme.danger }]}
+            onPress={() => lock()}
+          >
+            <Text style={[styles.lockNowText, { color: theme.danger }]}>🔒 LOCK APP NOW</Text>
+          </TouchableOpacity>
+
+          {/* PIN Lock Toggle Row */}
+          <View style={styles.rowField}>
+            <View>
+              <Text style={[styles.fieldLabel, { color: theme.text }]}>PIN Protection</Text>
+              <Text style={[styles.fieldSub, { color: theme.muted }]}>
+                Require 4-digit PIN upon app launch
+              </Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => patchState({ pinEnabled: !pinEnabled })}
+              style={[
+                styles.toggleSwitch,
+                {
+                  backgroundColor: pinEnabled ? theme.success : theme.surfaceAlt,
+                  borderColor: pinEnabled ? theme.success : theme.borderSoft,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  { transform: [{ translateX: pinEnabled ? 18 : 0 }] },
+                ]}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Biometric Toggle Row */}
+          <View style={styles.rowField}>
+            <View>
+              <Text style={[styles.fieldLabel, { color: theme.text }]}>Biometric Unlock</Text>
+              <Text style={[styles.fieldSub, { color: theme.muted }]}>
+                Unlock using fingerprint / Face ID
+              </Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => patchState({ biometricEnabled: !biometricEnabled })}
+              style={[
+                styles.toggleSwitch,
+                {
+                  backgroundColor: biometricEnabled ? theme.accent : theme.surfaceAlt,
+                  borderColor: biometricEnabled ? theme.accent : theme.borderSoft,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  { transform: [{ translateX: biometricEnabled ? 18 : 0 }] },
+                ]}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Change PIN Row */}
+          <View style={[styles.rowField, { borderBottomWidth: 0 }]}>
+            <View>
+              <Text style={[styles.fieldLabel, { color: theme.text }]}>App Security PIN</Text>
+              <Text style={[styles.fieldSub, { color: theme.muted }]}>Current: ••••</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.smallBtn, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
+              onPress={() => {
+                setNewPinInput('');
+                setShowPinModal(true);
+              }}
+            >
+              <Text style={[styles.smallBtnText, { color: theme.accent }]}>CHANGE PIN</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -209,7 +361,7 @@ export const ProfileScreen = () => {
 
         {/* App Theme Selector */}
         <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>APP THEME</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>APP THEME (SYNCED WITH DAILY HISAB)</Text>
           <View style={styles.themesWrap}>
             {themesList.map((t) => {
               const isSelected = themeName === t.id;
@@ -224,7 +376,7 @@ export const ProfileScreen = () => {
                       borderColor: isSelected ? theme.primary : theme.borderSoft,
                     },
                   ]}
-                  onPress={() => setThemeName(t.id)}
+                  onPress={() => handleThemeChange(t.id)}
                 >
                   <View style={[styles.themeDot, { backgroundColor: t.dot }]} />
                   <Text style={[styles.themeLabel, { color: isSelected ? theme.primary : theme.text, fontWeight: isSelected ? '800' : '500' }]}>
@@ -270,6 +422,44 @@ export const ProfileScreen = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Change PIN Modal */}
+      <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pinModalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+            <Text style={[styles.pinModalTitle, { color: theme.text }]}>Set 4-Digit Security PIN</Text>
+            <Text style={[styles.pinModalSub, { color: theme.muted }]}>
+              Enter a 4-digit code to protect Daily Hisab and TitanFit.
+            </Text>
+
+            <TextInput
+              style={[styles.pinInput, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.primary }]}
+              placeholder="1234"
+              placeholderTextColor={theme.muted}
+              keyboardType="numeric"
+              maxLength={4}
+              secureTextEntry
+              value={newPinInput}
+              onChangeText={setNewPinInput}
+            />
+
+            <View style={styles.pinModalActions}>
+              <TouchableOpacity
+                style={[styles.pinCancelBtn, { borderColor: theme.borderSoft }]}
+                onPress={() => setShowPinModal(false)}
+              >
+                <Text style={{ color: theme.muted, fontWeight: '700' }}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.pinSaveBtn, { backgroundColor: theme.primary }]}
+                onPress={handleSavePin}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>SAVE PIN</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -343,10 +533,128 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-  userGoalText: {
+  userEmailText: {
     fontSize: 12,
     marginTop: 2,
+    marginBottom: 8,
+  },
+  badgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
     marginBottom: 14,
+  },
+  badgePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  securityHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  securitySubDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  lockNowButton: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  lockNowText: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  fieldSub: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  smallBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  smallBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  pinModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  pinModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  pinModalSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  pinInput: {
+    width: 140,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 8,
+    marginBottom: 20,
+  },
+  pinModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  pinCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  pinSaveBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   tripleStats: {
     flexDirection: 'row',

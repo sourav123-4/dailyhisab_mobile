@@ -55,8 +55,8 @@ interface FitnessContextType {
 
 const DEFAULT_PROFILE: UserProfile = {
   id: 'user_local_default',
-  name: 'Titan Athlete',
-  email: 'athlete@titanfit.ai',
+  name: 'Sourav Mahanty',
+  email: 'souravrasiknagar@gmail.com',
   gender: 'male',
   age: 26,
   heightCm: 178,
@@ -198,7 +198,16 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         AsyncStorage.getItem(STORAGE_KEYS.THEME),
       ]);
 
-      if (savedProf) setProfile(JSON.parse(savedProf));
+      if (savedProf) {
+        const parsedProf = JSON.parse(savedProf);
+        if (!parsedProf.name || parsedProf.name === 'Titan Athlete') {
+          parsedProf.name = 'Sourav Mahanty';
+        }
+        if (!parsedProf.email || parsedProf.email === 'athlete@titanfit.ai') {
+          parsedProf.email = 'souravrasiknagar@gmail.com';
+        }
+        setProfile(parsedProf);
+      }
       if (savedSplit) {
         const parsed = JSON.parse(savedSplit);
         const merged = parsed.map((d: any) => {

@@ -116,7 +116,7 @@ export type BillCalendarEvent = {
 export type HisabState = {
   schemaVersion: number;
   currency: string;
-  theme: 'midnight' | 'oled' | 'emerald' | 'light';
+  theme: 'midnight' | 'oled' | 'emerald' | 'light' | 'cyber';
   pinEnabled?: boolean;
   securityPin?: string;
   biometricEnabled?: boolean;
