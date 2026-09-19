@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
 import { AIChatMessage } from '../types/fitness';
@@ -22,6 +23,7 @@ import {
 } from '../services/geminiAiService';
 
 export const AICoachScreen = () => {
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { aiChatHistory, sendAICoachQuery, profile } = useFitnessApp();
   const [inputText, setInputText] = useState('');
@@ -142,7 +144,7 @@ export const AICoachScreen = () => {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.headerLeft}>
           <View style={[styles.onlineDot, { backgroundColor: hasConfiguredKey ? '#00E5FF' : theme.success }]} />
           <View>
