@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,16 @@ export const WeightTrackerScreen = () => {
   const [weightNotes, setWeightNotes] = useState('');
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [measureModalVisible, setMeasureModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 350));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Measurement form state
   const [bicepsL, setBicepsL] = useState('38.5');
@@ -84,8 +95,8 @@ export const WeightTrackerScreen = () => {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Top Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View>
-          <Text style={[styles.headerSub, { color: theme.muted }]}>TRANSFORMATION CENTER</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerSub, { color: theme.muted }]}>BODY COMPOSITION & METRICS</Text>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Weight & Macros</Text>
         </View>
 
@@ -98,7 +109,18 @@ export const WeightTrackerScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
+      >
         {/* Goal Mode Switcher Pills */}
         <View style={styles.goalSection}>
           <Text style={[styles.sectionLabel, { color: theme.muted }]}>ACTIVE FITNESS GOAL:</Text>

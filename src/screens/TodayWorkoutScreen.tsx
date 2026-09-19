@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,6 +40,16 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [selectedExerciseForModal, setSelectedExerciseForModal] = useState<Exercise | null>(null);
   const [streakModalVisible, setStreakModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 350));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const currentSplitDay =
     weeklySplit.find((d) => d.dayIndex === selectedDayIndex) || weeklySplit[1];
@@ -67,56 +78,70 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Top Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View>
-          <Text style={[styles.greetingText, { color: theme.muted }]}>
-            WELCOME BACK, {profile.name.toUpperCase()}
-          </Text>
-          <Text style={[styles.mainHeading, { color: theme.text }]}>Daily Routine</Text>
+        {/* Tier 1: Brand & Actions */}
+        <View style={styles.headerTopRow}>
+          <View style={styles.brandRow}>
+            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
+            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
+            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
+              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
+            </View>
+          </View>
+
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
+              onPress={() => setAppMode('hisab')}
+            >
+              <Text style={{ fontSize: 13 }}>💰</Text>
+              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.voiceBtn, { backgroundColor: theme.primary }]}
+              onPress={() => setVoiceModalVisible(true)}
+            >
+              <Text style={styles.voiceBtnIcon}>🎙</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.headerRight}>
-          {/* Switch to Daily Hisab */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: 'rgba(20, 184, 166, 0.15)',
-              borderColor: '#14B8A6',
-              borderWidth: 1,
-              borderRadius: 10,
-              paddingHorizontal: 8,
-              paddingVertical: 5,
-              gap: 4,
-            }}
-            onPress={() => setAppMode('hisab')}
-          >
-            <Text style={{ fontSize: 13 }}>💰</Text>
-            <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11 }}>Hisab</Text>
-          </TouchableOpacity>
+        {/* Tier 2: Athlete Greeting & Streak */}
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>
+              Welcome back, {profile.name.split(' ')[0]} 👋
+            </Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>Today's Split</Text>
+          </View>
 
-          {/* Interactive Streak Badge */}
           <TouchableOpacity
             activeOpacity={0.75}
             style={[styles.streakBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
             onPress={() => setStreakModalVisible(true)}
           >
             <Text style={styles.streakEmoji}>🔥</Text>
-            <Text style={[styles.streakText, { color: theme.primary }]}>{profile.streakDays}d Streak</Text>
-          </TouchableOpacity>
-
-          {/* Voice Assistant Button */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[styles.voiceBtn, { backgroundColor: theme.primary }]}
-            onPress={() => setVoiceModalVisible(true)}
-          >
-            <Text style={styles.voiceBtnIcon}>🎙</Text>
+            <View>
+              <Text style={[styles.streakDays, { color: theme.primary }]}>{profile.streakDays}d Streak</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
+      >
         {/* Active Workout Resume Card (if in progress) */}
         {activeWorkout && (
           <TouchableOpacity
@@ -395,44 +420,86 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 54,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
   },
-  greetingText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  mainHeading: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  headerRight: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  brandTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  proBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modeSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 5,
+  },
+  headerBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  greetingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  mainHeading: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 4,
+    gap: 6,
   },
   streakEmoji: {
-    fontSize: 12,
+    fontSize: 14,
   },
-  streakText: {
-    fontSize: 11,
-    fontWeight: '800',
+  streakDays: {
+    fontSize: 12,
+    fontWeight: '900',
   },
   voiceBtn: {
     width: 36,
