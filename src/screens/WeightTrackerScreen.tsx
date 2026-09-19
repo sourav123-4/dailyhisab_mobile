@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
+import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
 import { WeightTrendChart } from '../components/WeightTrendChart';
 import { MacroPlanModal } from '../components/MacroPlanModal';
@@ -22,6 +23,7 @@ import { WeightGoal } from '../types/fitness';
 export const WeightTrackerScreen = () => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const { setAppMode } = useAppMode();
   const {
     profile,
     weightHistory,
@@ -91,22 +93,54 @@ export const WeightTrackerScreen = () => {
     Math.round(((profile.todayWaterMl || 0) / (profile.dailyWaterTargetMl || 3000)) * 100)
   );
 
+  const weightDelta = (profile.currentWeightKg - profile.targetWeightKg).toFixed(1);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Top Header */}
+      {/* Two-Tier Dashboard Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerSub, { color: theme.muted }]}>BODY COMPOSITION & METRICS</Text>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Weight & Macros</Text>
+        {/* Tier 1: Brand & Top Actions */}
+        <View style={styles.headerTopRow}>
+          <View style={styles.brandRow}>
+            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
+            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
+            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
+              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
+            </View>
+          </View>
+
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
+              onPress={() => setAppMode('hisab')}
+            >
+              <Text style={{ fontSize: 13 }}>💰</Text>
+              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.logWeightBtn, { backgroundColor: theme.primary }]}
+              onPress={() => setWeightInputModal(true)}
+            >
+              <Text style={styles.logWeightBtnText}>+ Log Weight</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={[styles.logWeightBtn, { backgroundColor: theme.primary }]}
-          onPress={() => setWeightInputModal(true)}
-        >
-          <Text style={styles.logWeightBtnText}>+ Log Weight</Text>
-        </TouchableOpacity>
+        {/* Tier 2: Subtitle, Title & Goal Pill */}
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>BODY COMPOSITION & MACROS</Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>Weight & Nutrition</Text>
+          </View>
+
+          <View style={[styles.targetPill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+            <Text style={[styles.targetPillLabel, { color: theme.muted }]}>TARGET</Text>
+            <Text style={[styles.targetPillVal, { color: theme.primary }]}>{profile.targetWeightKg} kg</Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -420,33 +454,98 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
+    gap: 12,
   },
-  headerSub: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  headerTitle: {
-    fontSize: 22,
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  brandTitle: {
+    fontSize: 16,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: 0.8,
+  },
+  proBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modeSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   logWeightBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   logWeightBtnText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '800',
+  },
+  headerBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  greetingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  mainHeading: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  targetPill: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  targetPillLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  targetPillVal: {
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 1,
   },
   scrollContent: {
     padding: 16,
