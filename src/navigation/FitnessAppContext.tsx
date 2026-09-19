@@ -48,6 +48,7 @@ interface FitnessContextType {
   sendAICoachQuery: (prompt: string) => Promise<string>;
   triggerRestTimer: (seconds?: number) => void;
   clearRestTimer: () => void;
+  claimDailyStreak: () => Promise<number>;
   loginGuest: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -388,20 +389,40 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setWorkoutHistory(nextHistory);
     setActiveWorkout(null);
 
-    // Update streak
-    setProfile((prev) => ({
-      ...prev,
-      streakDays: prev.streakDays + 1,
-      lastWorkoutDate: new Date().toISOString().split('T')[0],
-    }));
+    // Update streak accurately
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isAlreadyCompletedToday = profile.lastWorkoutDate === todayStr;
+    const nextStreak = isAlreadyCompletedToday ? profile.streakDays : profile.streakDays + 1;
+
+    const updatedProfile: UserProfile = {
+      ...profile,
+      streakDays: nextStreak,
+      lastWorkoutDate: todayStr,
+    };
+    setProfile(updatedProfile);
 
     await Promise.all([
       AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(nextHistory)),
       AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_WORKOUT),
-      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile)),
+      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updatedProfile)),
     ]);
 
     return finishedSession;
+  };
+
+  const claimDailyStreak = async (): Promise<number> => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isAlreadyCompletedToday = profile.lastWorkoutDate === todayStr;
+    const nextStreak = isAlreadyCompletedToday ? profile.streakDays : profile.streakDays + 1;
+
+    const updatedProfile: UserProfile = {
+      ...profile,
+      streakDays: nextStreak,
+      lastWorkoutDate: todayStr,
+    };
+    setProfile(updatedProfile);
+    await AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updatedProfile));
+    return nextStreak;
   };
 
   const cancelActiveWorkout = () => {
@@ -549,6 +570,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         sendAICoachQuery,
         triggerRestTimer,
         clearRestTimer,
+        claimDailyStreak,
         loginGuest,
         logout,
       }}
