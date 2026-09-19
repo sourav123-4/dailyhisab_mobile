@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
 import { MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META } from '../data/exercisesData';
@@ -17,6 +20,7 @@ import { Exercise } from '../types/fitness';
 import { useAppMode } from '../navigation/AppModeContext';
 
 export const TodayWorkoutScreen = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
   const {
@@ -28,11 +32,13 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
     workoutHistory,
     sendAICoachQuery,
     logWeight,
+    claimDailyStreak,
   } = useFitnessApp();
 
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay());
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [selectedExerciseForModal, setSelectedExerciseForModal] = useState<Exercise | null>(null);
+  const [streakModalVisible, setStreakModalVisible] = useState(false);
 
   const currentSplitDay =
     weeklySplit.find((d) => d.dayIndex === selectedDayIndex) || weeklySplit[1];
@@ -60,7 +66,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Top Header */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
         <View>
           <Text style={[styles.greetingText, { color: theme.muted }]}>
             WELCOME BACK, {profile.name.toUpperCase()}
@@ -89,11 +95,15 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
             <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11 }}>Hisab</Text>
           </TouchableOpacity>
 
-          {/* Streak Badge */}
-          <View style={[styles.streakBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+          {/* Interactive Streak Badge */}
+          <TouchableOpacity
+            activeOpacity={0.75}
+            style={[styles.streakBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
+            onPress={() => setStreakModalVisible(true)}
+          >
             <Text style={styles.streakEmoji}>🔥</Text>
             <Text style={[styles.streakText, { color: theme.primary }]}>{profile.streakDays}d Streak</Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Voice Assistant Button */}
           <TouchableOpacity
@@ -320,6 +330,62 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
           onClose={() => setSelectedExerciseForModal(null)}
         />
       )}
+
+      {/* Interactive Streak Celebration Modal */}
+      <Modal
+        visible={streakModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStreakModalVisible(false)}
+      >
+        <View style={styles.streakOverlay}>
+          <View style={[styles.streakCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+            <Text style={styles.streakBigFire}>🔥</Text>
+            <Text style={[styles.streakModalTitle, { color: theme.text }]}>DAILY STREAK</Text>
+            <Text style={[styles.streakModalCount, { color: theme.primary }]}>
+              {profile.streakDays} DAYS STRONG
+            </Text>
+            <Text style={[styles.streakModalSub, { color: theme.muted }]}>
+              Discipline equals freedom. You are actively building world-class physiological momentum.
+            </Text>
+
+            <View style={[styles.streakStatusBox, { backgroundColor: theme.surfaceAlt }]}>
+              <Text style={{ fontSize: 13, color: profile.lastWorkoutDate === new Date().toISOString().split('T')[0] ? theme.success : theme.accent, fontWeight: '700' }}>
+                {profile.lastWorkoutDate === new Date().toISOString().split('T')[0]
+                  ? '✅ Checked in today! Streak safe.'
+                  : '⚡ Today is not claimed yet!'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.claimStreakBtn, { backgroundColor: theme.primary }]}
+              onPress={async () => {
+                const s = await claimDailyStreak();
+                Alert.alert('🔥 Streak Claimed!', `You now have a ${s}-day active streak! Keep crushing it.`);
+                setStreakModalVisible(false);
+              }}
+            >
+              <Text style={styles.claimStreakBtnText}>🔥 CLAIM TODAY (+1 DAY)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.startFromStreakBtn, { borderColor: theme.borderSoft }]}
+              onPress={() => {
+                setStreakModalVisible(false);
+                handleStartWorkout();
+              }}
+            >
+              <Text style={[styles.startFromStreakBtnText, { color: theme.text }]}>START WORKOUT NOW ⚡</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setStreakModalVisible(false)} style={{ marginTop: 12 }}>
+              <Text style={{ color: theme.muted, fontSize: 13, fontWeight: '600' }}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -585,5 +651,72 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontStyle: 'italic',
+  },
+  streakOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  streakCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    padding: 24,
+    alignItems: 'center',
+  },
+  streakBigFire: {
+    fontSize: 56,
+    marginBottom: 8,
+  },
+  streakModalTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  streakModalCount: {
+    fontSize: 26,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  streakModalSub: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  streakStatusBox: {
+    width: '100%',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  claimStreakBtn: {
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  claimStreakBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  startFromStreakBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  startFromStreakBtnText: {
+    fontWeight: '800',
+    fontSize: 13,
   },
 });
