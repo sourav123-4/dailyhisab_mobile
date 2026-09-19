@@ -17,86 +17,24 @@ import { SecurityLockModal } from '../../components/SecurityLockModal';
 import { Tab } from '../../types';
 import { useAppMode } from '../AppModeContext';
 
+import { TitanFitBottomTabBar } from '../../components/TitanFitBottomTabBar';
+
 const TabNav = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function TabIcon({ emoji, label, focused, color }: { emoji: string; label: string; focused: boolean; color: string }) {
-  const theme = useAppTheme();
-  return (
-    <View style={styles.tabItem}>
-      <Text style={[styles.tabEmoji, { transform: [{ scale: focused ? 1.15 : 1 }] }]}>{emoji}</Text>
-      <Text
-        numberOfLines={1}
-        style={[styles.tabLabel, { color: focused ? theme.primary : theme.muted, fontWeight: focused ? '800' : '600' }]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function TitanFitTabsNavigator() {
-  const theme = useAppTheme();
-
   return (
     <TabNav.Navigator
+      tabBar={(props) => <TitanFitBottomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: theme.surface,
-          borderTopColor: theme.borderSoft,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarShowLabel: false,
       }}
     >
-      <TabNav.Screen
-        name="Today"
-        component={TodayWorkoutScreen}
-        options={{
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon emoji="⚡" label="Today" focused={focused} color={color} />
-          ),
-        }}
-      />
-      <TabNav.Screen
-        name="MuscleExplore"
-        component={ExerciseExplorerScreen}
-        options={{
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon emoji="🧬" label="Anatomy" focused={focused} color={color} />
-          ),
-        }}
-      />
-      <TabNav.Screen
-        name="Weight"
-        component={WeightTrackerScreen}
-        options={{
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon emoji="⚖️" label="Weight" focused={focused} color={color} />
-          ),
-        }}
-      />
-      <TabNav.Screen
-        name="AICoach"
-        component={AICoachScreen}
-        options={{
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon emoji="🤖" label="AI Coach" focused={focused} color={color} />
-          ),
-        }}
-      />
-      <TabNav.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon emoji="👤" label="Profile" focused={focused} color={color} />
-          ),
-        }}
-      />
+      <TabNav.Screen name="Today" component={TodayWorkoutScreen} />
+      <TabNav.Screen name="MuscleExplore" component={ExerciseExplorerScreen} />
+      <TabNav.Screen name="AICoach" component={AICoachScreen} />
+      <TabNav.Screen name="Weight" component={WeightTrackerScreen} />
+      <TabNav.Screen name="Profile" component={ProfileScreen} />
     </TabNav.Navigator>
   );
 }
