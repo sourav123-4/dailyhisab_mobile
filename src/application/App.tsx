@@ -5,8 +5,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 
-import { HisabAppProvider } from '../navigation/HisabAppContext';
-import { FitnessAppProvider } from '../navigation/FitnessAppContext';
+import { HisabAppProvider, useHisabApp } from '../navigation/HisabAppContext';
+import { FitnessAppProvider, useFitnessApp } from '../navigation/FitnessAppContext';
 import { AppModeProvider, useAppMode } from '../navigation/AppModeContext';
 import { AppThemeProvider, useAppTheme } from '../theme/appTheme';
 import { RootNavigator } from '../navigation/root/RootNavigator';
@@ -39,15 +39,27 @@ const ThemedAppShell = () => {
   );
 };
 
+const ThemedAppContainer = () => {
+  const { appMode } = useAppMode();
+  const fitness = useFitnessApp();
+  const hisab = useHisabApp();
+
+  const activeThemeName = appMode === 'fitness' ? fitness.themeName : (hisab.theme || 'cyber');
+
+  return (
+    <AppThemeProvider themeName={activeThemeName}>
+      <ThemedAppShell />
+    </AppThemeProvider>
+  );
+};
+
 const App = () => (
   <SafeAreaProvider>
     <GestureHandlerRootView style={styles.root}>
       <AppModeProvider>
         <HisabAppProvider>
           <FitnessAppProvider>
-            <AppThemeProvider>
-              <ThemedAppShell />
-            </AppThemeProvider>
+            <ThemedAppContainer />
           </FitnessAppProvider>
         </HisabAppProvider>
       </AppModeProvider>
