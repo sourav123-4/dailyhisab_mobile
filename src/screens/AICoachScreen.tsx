@@ -40,6 +40,14 @@ export const AICoachScreen = () => {
     checkActiveKey();
   }, []);
 
+  useEffect(() => {
+    if (aiChatHistory.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [aiChatHistory.length]);
+
   const checkActiveKey = async () => {
     const k = await getActiveGeminiApiKey();
     setHasConfiguredKey(!!k && k.length > 5);
