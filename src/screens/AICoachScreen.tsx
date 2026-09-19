@@ -218,7 +218,7 @@ export const AICoachScreen = () => {
       </View>
 
       {/* Input Bar */}
-      <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.borderSoft }]}>
+      <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.borderSoft, paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TextInput
           style={[styles.input, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
           placeholder="Ask about workout splits, form, or macros..."

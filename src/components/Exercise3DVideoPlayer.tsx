@@ -930,7 +930,7 @@ const styles = StyleSheet.create({
   },
   videoViewport: {
     width: '100%',
-    height: 340,
+    height: 255,
     backgroundColor: '#020409',
     position: 'relative',
     overflow: 'hidden',
