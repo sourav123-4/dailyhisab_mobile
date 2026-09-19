@@ -13,16 +13,18 @@ export type CloudCollection =
   | 'settings';
 
 function safeUid() {
-  const uid = auth.currentUser?.uid;
-  return uid && !auth.currentUser?.isAnonymous ? uid.replace(/[^a-zA-Z0-9_-]/g, '_') : null;
+  const uid = auth?.currentUser?.uid;
+  return uid && !auth?.currentUser?.isAnonymous ? uid.replace(/[^a-zA-Z0-9_-]/g, '_') : null;
 }
 
 function collectionRef(name: CloudCollection) {
+  if (!db) return null;
   const uid = safeUid();
   return uid ? collection(db, 'users', uid, name) : collection(db, name);
 }
 
 function docRef(name: CloudCollection, id: string) {
+  if (!db) return null;
   const uid = safeUid();
   const safeId = String(id).replace(/\//g, '_');
   return uid ? doc(db, 'users', uid, name, safeId) : doc(db, name, safeId);
@@ -58,7 +60,7 @@ function markBackendBlocked(durationMs = 60 * 1000) {
 }
 
 function cloudKey(name: CloudCollection, id = '') {
-  return `${auth.currentUser?.uid || 'anonymous'}:${name}:${id}`;
+  return `${auth?.currentUser?.uid || 'anonymous'}:${name}:${id}`;
 }
 
 function stableStringify(value: unknown): string {
@@ -76,11 +78,13 @@ function stableStringify(value: unknown): string {
 }
 
 export function canUseCloudSync() {
+  if (!db) return false;
   const now = Date.now();
   return now >= quotaBlockedUntil && now >= backendBlockedUntil;
 }
 
 export async function setCloudNetworkEnabled(enabled: boolean) {
+  if (!db) return;
   try {
     if (enabled) {
       if (!cloudNetworkDisabled) return;
@@ -102,16 +106,19 @@ export async function setCloudNetworkEnabled(enabled: boolean) {
 }
 
 export async function saveToCloud(name: CloudCollection, id: string, data: Record<string, unknown>) {
-  if (!canUseCloudSync()) return;
+  if (!canUseCloudSync() || !db) return;
 
   const key = cloudKey(name, id);
   const fingerprint = stableStringify(data);
   if (writeCache.get(key) === fingerprint) return;
 
+  const targetRef = docRef(name, id);
+  if (!targetRef) return;
+
   try {
-    await setDoc(docRef(name, id), {
+    await setDoc(targetRef, {
       ...data,
-      userId: auth.currentUser?.uid || 'anonymous',
+      userId: auth?.currentUser?.uid || 'anonymous',
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     writeCache.set(key, fingerprint);
@@ -129,9 +136,11 @@ export async function saveToCloud(name: CloudCollection, id: string, data: Recor
 }
 
 export async function deleteFromCloud(name: CloudCollection, id: string) {
-  if (!canUseCloudSync()) return;
+  if (!canUseCloudSync() || !db) return;
+  const targetRef = docRef(name, id);
+  if (!targetRef) return;
   try {
-    await deleteDoc(docRef(name, id));
+    await deleteDoc(targetRef);
     writeCache.delete(cloudKey(name, id));
   } catch (error) {
     if (isQuotaError(error)) {
@@ -147,7 +156,14 @@ export async function deleteFromCloud(name: CloudCollection, id: string) {
 }
 
 export function subscribeToCloudCollection<T>(name: CloudCollection, onUpdate: (items: T[]) => void) {
-  return onSnapshot(collectionRef(name), snapshot => {
+  if (!db) {
+    return () => {};
+  }
+  const targetRef = collectionRef(name);
+  if (!targetRef) {
+    return () => {};
+  }
+  return onSnapshot(targetRef, snapshot => {
     const items: T[] = [];
     snapshot.forEach(item => items.push(item.data() as T));
     onUpdate(items);
