@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
+import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
 import { AIChatMessage } from '../types/fitness';
 import {
@@ -22,14 +24,71 @@ import {
   clearGeminiApiKey,
 } from '../services/geminiAiService';
 
+function TypingBubble({ theme }: { theme: any }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createBounce = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, {
+            toValue: -6,
+            duration: 280,
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration: 280,
+            useNativeDriver: true,
+          }),
+          Animated.delay(560 - delay),
+        ])
+      );
+
+    const a1 = createBounce(dot1, 0);
+    const a2 = createBounce(dot2, 160);
+    const a3 = createBounce(dot3, 320);
+
+    a1.start();
+    a2.start();
+    a3.start();
+
+    return () => {
+      a1.stop();
+      a2.stop();
+      a3.stop();
+    };
+  }, []);
+
+  return (
+    <View style={styles.typingMessageWrapper}>
+      <View style={[styles.aiAvatar, { backgroundColor: theme.primarySoft, borderColor: theme.primary, borderWidth: 1 }]}>
+        <Text style={styles.aiAvatarText}>🤖</Text>
+      </View>
+      <View style={[styles.typingBubbleCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+        <View style={styles.typingDotsRow}>
+          <Animated.View style={[styles.typingDot, { backgroundColor: theme.primary, transform: [{ translateY: dot1 }] }]} />
+          <Animated.View style={[styles.typingDot, { backgroundColor: theme.primary, transform: [{ translateY: dot2 }] }]} />
+          <Animated.View style={[styles.typingDot, { backgroundColor: theme.primary, transform: [{ translateY: dot3 }] }]} />
+        </View>
+        <Text style={[styles.typingStatusText, { color: theme.muted }]}>TitanAI is analyzing plan...</Text>
+      </View>
+    </View>
+  );
+}
+
 export const AICoachScreen = () => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const { setAppMode } = useAppMode();
   const { aiChatHistory, sendAICoachQuery, profile } = useFitnessApp();
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
-  // Gemini Settings Modal State
+  // AI Intelligence Settings Modal State
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [hasConfiguredKey, setHasConfiguredKey] = useState(false);
@@ -65,35 +124,34 @@ export const AICoachScreen = () => {
     await saveGeminiApiKey(geminiKeyInput.trim());
     setHasConfiguredKey(true);
     setShowKeyModal(false);
-    Alert.alert('Gemini Connected', 'Google Gemini API key saved. Real-time AI fitness reasoning is active!');
+    Alert.alert('AI Engine Connected', 'TitanAI Engine API key saved. Real-time sports science intelligence is active!');
   };
 
-  const handleSend = async (customPrompt?: string) => {
-    const textToSend = (customPrompt || inputText).trim();
-    if (!textToSend || isTyping) return;
+  const handleSend = async (textToSend?: string) => {
+    const msg = (textToSend || inputText).trim();
+    if (!msg || isTyping) return;
 
     setInputText('');
     setIsTyping(true);
 
     try {
-      await sendAICoachQuery(textToSend);
+      await sendAICoachQuery(msg);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    } catch (err) {
-      console.warn('AI query error:', err);
+    } catch (e) {
+      console.warn('AI Coach error:', e);
     } finally {
       setIsTyping(false);
     }
   };
 
   const promptSuggestions = [
-    `Generate full ${profile.fitnessGoal === 'weight_gain' ? 'Bulking' : 'Fat Loss'} weekly split`,
-    'High protein meal ideas under 600 calories',
-    'How to build bigger bicep peaks and arm thickness',
-    'Best warm-up routine for heavy chest and shoulder day',
-    'Analyze my daily calorie & macro targets',
-    'How to break through a strength plateau on bench press',
+    'Generate full Bulking weekly split',
+    'High protein meal ideas for 80kg',
+    'How to grow long head bicep',
+    'Best warm-up for Heavy Bench',
+    'Calculate my daily deficit macros',
   ];
 
   const renderMessage = ({ item }: { item: AIChatMessage }) => {
@@ -104,40 +162,24 @@ export const AICoachScreen = () => {
     });
 
     return (
-      <View
-        style={[
-          styles.msgWrapper,
-          isUser ? styles.userMsgWrapper : styles.aiMsgWrapper,
-        ]}
-      >
+      <View style={[styles.msgWrapper, isUser ? styles.userMsgWrapper : styles.aiMsgWrapper]}>
         {!isUser && (
-          <View style={[styles.aiAvatar, { backgroundColor: theme.primary }]}>
-            <Text style={styles.aiAvatarText}>✨</Text>
+          <View style={[styles.aiAvatar, { backgroundColor: theme.primarySoft, borderColor: theme.primary, borderWidth: 1 }]}>
+            <Text style={styles.aiAvatarText}>🤖</Text>
           </View>
         )}
-
         <View
           style={[
             styles.msgBubble,
             isUser
               ? [styles.userBubble, { backgroundColor: theme.primary }]
-              : [styles.aiBubble, { backgroundColor: theme.surface, borderColor: theme.borderSoft }],
+              : [styles.aiBubble, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }],
           ]}
         >
-          <Text
-            style={[
-              styles.msgText,
-              { color: isUser ? '#FFFFFF' : theme.text },
-            ]}
-          >
+          <Text style={[styles.msgText, { color: isUser ? '#FFFFFF' : theme.text }]}>
             {item.text}
           </Text>
-          <Text
-            style={[
-              styles.msgTime,
-              { color: isUser ? 'rgba(255,255,255,0.7)' : theme.subtle },
-            ]}
-          >
+          <Text style={[styles.msgTime, { color: isUser ? 'rgba(255, 255, 255, 0.7)' : theme.subtle }]}>
             {timeStr}
           </Text>
         </View>
@@ -151,30 +193,57 @@ export const AICoachScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Header */}
+      {/* Two-Tier Dashboard-Quality Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.onlineDot, { backgroundColor: hasConfiguredKey ? '#00E5FF' : theme.success }]} />
-          <View>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>TitanAI Fitness Coach</Text>
-            <Text style={[styles.headerSub, { color: theme.muted }]}>
-              Powered by Google Gemini AI · Sports Science
-            </Text>
+        {/* Tier 1: Brand & Top Actions */}
+        <View style={styles.headerTopRow}>
+          <View style={styles.brandRow}>
+            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
+            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
+            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
+              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
+            </View>
+          </View>
+
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
+              onPress={() => setAppMode('hisab')}
+            >
+              <Text style={{ fontSize: 13 }}>💰</Text>
+              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.75}
+              style={[
+                styles.modelBadge,
+                { backgroundColor: hasConfiguredKey ? 'rgba(0, 229, 255, 0.18)' : theme.surfaceAlt, borderColor: '#00E5FF', borderWidth: hasConfiguredKey ? 1 : 0 },
+              ]}
+              onPress={() => setShowKeyModal(true)}
+            >
+              <Text style={[styles.modelBadgeText, { color: hasConfiguredKey ? '#00E5FF' : theme.accent, fontWeight: '800' }]}>
+                {hasConfiguredKey ? '✨ PRO AI' : '⚙️ AI KEY'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.75}
-          style={[
-            styles.modelBadge,
-            { backgroundColor: hasConfiguredKey ? 'rgba(0, 229, 255, 0.18)' : theme.surfaceAlt, borderColor: '#00E5FF', borderWidth: hasConfiguredKey ? 1 : 0 },
-          ]}
-          onPress={() => setShowKeyModal(true)}
-        >
-          <Text style={[styles.modelBadgeText, { color: hasConfiguredKey ? '#00E5FF' : theme.accent, fontWeight: '800' }]}>
-            {hasConfiguredKey ? '✨ GEMINI 2.5 FLASH' : '⚙️ SETUP KEY'}
-          </Text>
-        </TouchableOpacity>
+        {/* Tier 2: Subtitle & Title */}
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>
+              SPORTS SCIENCE & HYPERTROPHY
+            </Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>TitanAI Coach</Text>
+          </View>
+
+          <View style={[styles.aiStatusBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+            <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
+            <Text style={[styles.aiStatusText, { color: theme.text }]}>AI Active</Text>
+          </View>
+        </View>
       </View>
 
       {/* Chat Messages */}
@@ -186,14 +255,7 @@ export const AICoachScreen = () => {
         contentContainerStyle={styles.chatListContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         ListFooterComponent={
-          isTyping ? (
-            <View style={styles.typingRow}>
-              <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.typingText, { color: theme.muted }]}>
-                Google Gemini is analyzing biomechanics...
-              </Text>
-            </View>
-          ) : null
+          isTyping ? <TypingBubble theme={theme} /> : null
         }
       />
 
@@ -221,7 +283,7 @@ export const AICoachScreen = () => {
       <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.borderSoft, paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TextInput
           style={[styles.input, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
-          placeholder="Ask about workout splits, form, or macros..."
+          placeholder="Ask TitanAI about workout splits, form, or macros..."
           placeholderTextColor={theme.muted}
           value={inputText}
           onChangeText={setInputText}
@@ -242,19 +304,19 @@ export const AICoachScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Google Gemini API Key Configuration Modal */}
+      {/* AI Intelligence Engine Key Modal */}
       <Modal visible={showKeyModal} transparent animationType="fade" onRequestClose={() => setShowKeyModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>✨ Google Gemini AI Settings</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>✨ TitanAI Intelligence Settings</Text>
               <TouchableOpacity onPress={() => setShowKeyModal(false)}>
                 <Text style={[styles.modalCloseText, { color: theme.muted }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <Text style={[styles.modalDesc, { color: theme.muted }]}>
-              Enter your Google AI Studio API key below. TitanAI uses Gemini for sports science reasoning, routine optimization, and food photo identification (adapted from VitalPath).
+              Enter your AI Intelligence API key below. TitanAI uses sports science reasoning for routine optimization, nutrition tracking, and kinematic analysis.
             </Text>
 
             <TextInput
@@ -262,7 +324,7 @@ export const AICoachScreen = () => {
                 styles.keyTextInput,
                 { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft },
               ]}
-              placeholder="AIzaSy... (leave empty to use default)"
+              placeholder="Enter API key... (or leave empty for default)"
               placeholderTextColor={theme.muted}
               value={geminiKeyInput}
               onChangeText={setGeminiKeyInput}
@@ -300,36 +362,93 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
   },
-  headerLeft: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
-  onlineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  headerTitle: {
+  brandTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
-  headerSub: {
+  proBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modeSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  headerBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  greetingText: {
     fontSize: 11,
-    marginTop: 1,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  mainHeading: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  aiStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  aiStatusText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   modelBadge: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   modelBadgeText: {
     fontSize: 11,
@@ -383,15 +502,33 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: 4,
   },
-  typingRow: {
+  typingMessageWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginVertical: 4,
+  },
+  typingBubbleCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    gap: 6,
+  },
+  typingDotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingLeft: 40,
+    gap: 5,
+    height: 14,
   },
-  typingText: {
-    fontSize: 12,
+  typingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  typingStatusText: {
+    fontSize: 11.5,
     fontStyle: 'italic',
   },
   suggestionsContainer: {

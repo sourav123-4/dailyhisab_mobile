@@ -65,7 +65,7 @@ export async function generateFitnessAdviceWithGemini(
     return generateSmartOfflineCoaching(prompt, profile);
   }
 
-  const systemInstructions = `You are TitanAI, an elite Google Gemini-powered strength & conditioning coach, biomechanics specialist, and sports nutritionist for athlete ${profile.name || 'Sourav Mahanty'}.
+  const systemInstructions = `You are TitanAI, an elite AI strength & conditioning coach, biomechanics specialist, and sports nutritionist for athlete ${profile.name || 'Sourav Mahanty'}. Never mention Google, Gemini, or any underlying third-party models; always refer to yourself exclusively as TitanAI or TitanFit AI Coach.
 Athlete Profile:
 - Goal: ${profile.fitnessGoal} (${profile.fitnessGoal === 'weight_loss' ? 'Fat Loss / Cutting' : profile.fitnessGoal === 'muscle_gain' ? 'Hypertrophy / Lean Bulk' : 'Strength & Athletic Performance'})
 - Current Bodyweight: ${profile.currentWeightKg} kg (Target: ${profile.targetWeightKg} kg, Height: ${profile.heightCm} cm, Age: ${profile.age})
@@ -74,7 +74,7 @@ Athlete Profile:
 - Daily Water Target: ${profile.dailyWaterTargetMl} ml (Logged today: ${profile.todayWaterMl} ml)
 
 Coaching Guidelines:
-1. Provide comprehensive, expert-level sports science and hypertrophy coaching.
+1. Provide comprehensive, expert-level sports science and hypertrophy coaching as TitanAI.
 2. For workout splits/routines: specify exact exercises, sets, reps, rest intervals (e.g. 90-120s), and RPE targets.
 3. For anatomy/biomechanics: explain muscle heads (e.g. clavicular vs sternal pectorals, long head vs short head biceps, lateral vs medial deltoids) and proper lifting form cues.
 4. For nutrition: provide precise calorie & macro breakdowns, high-protein meal examples, and pre/post workout fueling advice.
@@ -127,7 +127,7 @@ Coaching Guidelines:
         console.warn(`Gemini API error with ${curModel} (${response.status}):`, errBody);
 
         if (response.status === 429) {
-          return `⚡ Google Gemini rate limit reached. Progressive Overload Tip for ${profile.name}: Prioritize ${profile.targetProteinGrams}g daily protein and maintain 1-2 RIR (reps in reserve) across your main compound lifts!`;
+          return `⚡ AI engine rate limit reached temporarily. Progressive Overload Tip for ${profile.name}: Prioritize ${profile.targetProteinGrams}g daily protein and maintain 1-2 RIR (reps in reserve) across your main compound lifts!`;
         }
 
         if (response.status === 404) {
@@ -149,7 +149,7 @@ Coaching Guidelines:
         return candidateText.trim();
       }
     } catch (error: any) {
-      console.warn(`Gemini fetch error with ${curModel}:`, error);
+      console.warn(`AI engine fetch error with ${curModel}:`, error);
     }
   }
 
@@ -170,7 +170,7 @@ function generateSmartOfflineCoaching(prompt: string, profile: UserProfile): str
 • **Healthy Fats**: ${profile.targetFatsGrams}g for hormonal optimization
 • **Hydration**: ${profile.dailyWaterTargetMl} ml water daily (you logged ${profile.todayWaterMl} ml today).
 
-💡 *Connect your Google Gemini API key in Coach Settings to unlock unlimited real-time vision & conversational analysis!*`;
+💡 *Tip: Activate your AI Engine Key in Coach Settings to unlock unlimited real-time vision & conversational analysis!*`;
   }
 
   if (q.includes('split') || q.includes('routine') || q.includes('workout') || q.includes('exercise')) {
@@ -189,12 +189,12 @@ function generateSmartOfflineCoaching(prompt: string, profile: UserProfile): str
 • Keep a controlled 3-second eccentric (lowering) phase for maximum micro-tears and growth!`;
   }
 
-  return `🤖 **TitanAI Coach (Google Gemini Ready)**:
+  return `🤖 **TitanAI Coach**:
 • Focus on consistency: 3-5 structured training sessions per week.
 • Train each muscle group 2x weekly with 10-20 hard working sets per week near failure (RPE 8-9).
 • Track every workout in your Active Workout logger and watch the 3D exercise video demos for flawless form!
 
-💡 *Tip: Add your Gemini API key in Settings to activate real-time custom answers and photo meal recognition.*`;
+💡 *Tip: Add your AI engine key in Settings to activate real-time custom answers and photo meal recognition.*`;
 }
 
 /**
@@ -261,7 +261,7 @@ Ensure reasonable real-world macronutrient estimates. Do not include markdown ti
             proteinGrams: Number(parsed.proteinGrams) || 30,
             carbsGrams: Number(parsed.carbsGrams) || 50,
             fatGrams: Number(parsed.fatGrams) || 15,
-            confidenceNotes: parsed.confidenceNotes || 'Analyzed via Google Gemini AI',
+            confidenceNotes: parsed.confidenceNotes || 'Analyzed via TitanAI Vision',
           };
         }
       }
