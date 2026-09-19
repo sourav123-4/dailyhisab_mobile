@@ -23,6 +23,7 @@ import {
   EXERCISE_YOUTUBE_IDS,
   EXERCISE_THUMBNAILS,
 } from '../data/exerciseVideoSources';
+import { getExerciseLocalMedia } from '../data/exerciseLocalMedia';
 import { Biomechanical3DExerciseAnimator } from './Biomechanical3DExerciseAnimator';
 
 let WebView: any = null;
@@ -117,7 +118,7 @@ const EXERCISE_KEYFRAMES: Record<
   },
 };
 
-function generateHtml5Player(url: string, speed: number, isPlaying: boolean): string {
+function generateHtml5Player(url: string, speed: number, isPlaying: boolean, posterUrl?: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -129,7 +130,7 @@ function generateHtml5Player(url: string, speed: number, isPlaying: boolean): st
   </style>
 </head>
 <body>
-  <video id="v" src="${url}" autoplay loop muted playsinline webkit-playsinline></video>
+  <video id="v" src="${url}" poster="${posterUrl || ''}" autoplay loop muted playsinline webkit-playsinline controls></video>
   <script>
     const v = document.getElementById('v');
     v.playbackRate = ${speed};
@@ -146,14 +147,14 @@ function generateYouTubePlayer(videoId: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body, html { width:100%; height:100%; background:#000; overflow:hidden; }
-    iframe { width:100%; height:100%; border:none; }
+    body, html { width:100%; height:100%; background:#060913; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    iframe { width:100%; height:100%; border:none; border-radius:12px; }
   </style>
 </head>
 <body>
   <iframe
-    src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1"
-    allow="autoplay; encrypted-media; picture-in-picture"
+    src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=https://dailyhisab.app"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
     allowfullscreen
   ></iframe>
 </body>
@@ -188,9 +189,10 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   const resolvedVideoUrl = exercise.videoUrl || EXERCISE_VIDEO_SOURCES[exercise.id] || '';
   const resolvedYoutubeId = exercise.youtubeId || EXERCISE_YOUTUBE_IDS[exercise.id] || '';
   const resolvedThumbnail = exercise.thumbnailUrl || EXERCISE_THUMBNAILS[exercise.id] || '';
+  const localMedia = getExerciseLocalMedia(exercise.id);
 
-  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>(
-    resolvedVideoUrl ? 'cloud' : 'youtube'
+  const [videoPlayerType, setVideoPlayerType] = useState<'human_demo' | 'cloud' | 'youtube'>(
+    localMedia ? 'human_demo' : resolvedYoutubeId ? 'youtube' : 'cloud'
   );
 
   // Animated values for 60fps photorealistic motion
@@ -495,7 +497,14 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         {activeScene === 'video' ? (
           // ================= SCENE 1: REAL VIDEO DEMO =================
           <View style={styles.videoContainerInner}>
-            {Platform.OS === 'web' ? (
+            {videoPlayerType === 'human_demo' && localMedia ? (
+              <Image
+                source={localMedia.animationGif}
+                defaultSource={localMedia.posterJpg as any}
+                style={styles.fullHumanImage}
+                resizeMode="contain"
+              />
+            ) : Platform.OS === 'web' ? (
               videoPlayerType === 'youtube' && resolvedYoutubeId ? (
                 <iframe
                   src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1`}
@@ -534,10 +543,18 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                 allowsInlineMediaPlayback={true}
                 mediaPlaybackRequiresUserAction={false}
                 originWhitelist={['*']}
+                userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                 source={
                   videoPlayerType === 'youtube' && resolvedYoutubeId
-                    ? { html: generateYouTubePlayer(resolvedYoutubeId) }
-                    : { html: generateHtml5Player(resolvedVideoUrl, speed, isPlaying) }
+                    ? {
+                        html: generateYouTubePlayer(resolvedYoutubeId),
+                        baseUrl: 'https://dailyhisab.app',
+                        headers: { Referer: 'https://dailyhisab.app' },
+                      }
+                    : {
+                        html: generateHtml5Player(resolvedVideoUrl, speed, isPlaying, resolvedThumbnail),
+                        baseUrl: 'https://res.cloudinary.com',
+                      }
                 }
               />
             ) : (
@@ -550,16 +567,16 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
             {/* Video Source Switcher Pill Overlays */}
             <View style={styles.videoFormatSwitcherRow}>
-              {resolvedVideoUrl ? (
+              {localMedia ? (
                 <TouchableOpacity
                   style={[
                     styles.formatSwitchBtn,
-                    videoPlayerType === 'cloud' && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    videoPlayerType === 'human_demo' && { backgroundColor: theme.primary, borderColor: theme.primary },
                   ]}
-                  onPress={() => setVideoPlayerType('cloud')}
+                  onPress={() => setVideoPlayerType('human_demo')}
                 >
-                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'cloud' ? '#FFF' : theme.muted }]}>
-                    HD Loop
+                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'human_demo' ? '#FFF' : theme.muted }]}>
+                    ⚡ Human Demo
                   </Text>
                 </TouchableOpacity>
               ) : null}
@@ -574,6 +591,20 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                 >
                   <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'youtube' ? '#FFF' : theme.muted }]}>
                     YouTube Tutorial
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {resolvedVideoUrl ? (
+                <TouchableOpacity
+                  style={[
+                    styles.formatSwitchBtn,
+                    videoPlayerType === 'cloud' && { backgroundColor: theme.primary, borderColor: theme.primary },
+                  ]}
+                  onPress={() => setVideoPlayerType('cloud')}
+                >
+                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'cloud' ? '#FFF' : theme.muted }]}>
+                    HD Loop
                   </Text>
                 </TouchableOpacity>
               ) : null}
