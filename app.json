@@ -1,25 +1,53 @@
 {
   "expo": {
-    "name": "dailyhisab",
+    "name": "DailyPulse AI",
     "slug": "dailyhisab",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "scheme": "dailyhisab",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#080B12"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dailyhisab.mobile",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "DailyHisab uses microphone for voice-assisted hisab financial entries and workout logging."
+      }
     },
     "android": {
+      "package": "com.dailyhisab.mobile",
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#080B12",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#080B12"
+      },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "@react-native-google-signin/google-signin",
+      "expo-audio",
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

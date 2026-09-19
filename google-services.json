@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "538636186820",
+    "project_id": "taskmanager-bbf73",
+    "storage_bucket": "taskmanager-bbf73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:538636186820:android:5cdc8c3aae761434a60591",
+        "android_client_info": {
+          "package_name": "com.dailyhisab.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "538636186820-uohu2i43da4juk1q25ggfd70n2vdqcf7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dailyhisab.mobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "538636186820-hmkbsgcq4jht78u02q7rpd8rvulbd2a5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAm3VdeXryhZ-3uYivSLqehMb3Gqgqxio0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "538636186820-hmkbsgcq4jht78u02q7rpd8rvulbd2a5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "538636186820-cvr8vkuir9qp5nmhtivm9sbtf5hughgs.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.TaskManagementApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:538636186820:android:44eaec595622526da60591",
+        "android_client_info": {
+          "package_name": "com.taskmanagementapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "538636186820-hmkbsgcq4jht78u02q7rpd8rvulbd2a5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAm3VdeXryhZ-3uYivSLqehMb3Gqgqxio0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "538636186820-hmkbsgcq4jht78u02q7rpd8rvulbd2a5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "538636186820-cvr8vkuir9qp5nmhtivm9sbtf5hughgs.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.TaskManagementApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
