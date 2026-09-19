@@ -167,12 +167,12 @@ export const AICoachScreen = () => {
           activeOpacity={0.75}
           style={[
             styles.modelBadge,
-            { backgroundColor: hasConfiguredKey ? 'rgba(0, 229, 255, 0.15)' : theme.surfaceAlt },
+            { backgroundColor: hasConfiguredKey ? 'rgba(0, 229, 255, 0.18)' : theme.surfaceAlt, borderColor: '#00E5FF', borderWidth: hasConfiguredKey ? 1 : 0 },
           ]}
           onPress={() => setShowKeyModal(true)}
         >
-          <Text style={[styles.modelBadgeText, { color: hasConfiguredKey ? '#00E5FF' : theme.accent }]}>
-            {hasConfiguredKey ? '✨ GEMINI PRO' : '⚙️ SETUP KEY'}
+          <Text style={[styles.modelBadgeText, { color: hasConfiguredKey ? '#00E5FF' : theme.accent, fontWeight: '800' }]}>
+            {hasConfiguredKey ? '✨ GEMINI 2.5 FLASH' : '⚙️ SETUP KEY'}
           </Text>
         </TouchableOpacity>
       </View>
