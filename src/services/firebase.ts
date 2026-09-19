@@ -32,7 +32,13 @@ const firebaseConfig = {
   }),
 };
 
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+let appInstance: any = null;
+try {
+  appInstance = getApps().length ? getApp() : initializeApp(firebaseConfig);
+} catch (appErr) {
+  console.warn('Firebase app init error:', appErr);
+}
+export const app = appInstance;
 
 function createReactNativePersistence(storage: typeof AsyncStorage) {
   return class {
@@ -63,28 +69,42 @@ function createReactNativePersistence(storage: typeof AsyncStorage) {
   };
 }
 
-let authInstance;
-try {
-  const getRNPersistence = (FirebaseAuth as any).getReactNativePersistence;
-  const persistenceObj = getRNPersistence ? getRNPersistence(AsyncStorage) : createReactNativePersistence(AsyncStorage);
-  authInstance = initializeAuth(app, {
-    persistence: persistenceObj,
-  });
-} catch {
-  authInstance = getAuth(app);
+let authInstance: any = null;
+if (app) {
+  try {
+    const getRNPersistence = (FirebaseAuth as any).getReactNativePersistence;
+    const persistenceObj = getRNPersistence ? getRNPersistence(AsyncStorage) : createReactNativePersistence(AsyncStorage);
+    authInstance = initializeAuth(app, {
+      persistence: persistenceObj,
+    });
+  } catch (initAuthErr) {
+    try {
+      authInstance = getAuth(app);
+    } catch (getAuthErr) {
+      console.warn('Firebase auth init bypassed:', getAuthErr);
+    }
+  }
 }
 
 export const auth = authInstance;
 
-setLogLevel('silent');
-
-let firestoreInstance;
 try {
-  firestoreInstance = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
-  });
-} catch {
-  firestoreInstance = getFirestore(app);
+  setLogLevel('silent');
+} catch {}
+
+let firestoreInstance: any = null;
+if (app) {
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
+  } catch {
+    try {
+      firestoreInstance = getFirestore(app);
+    } catch (dbErr) {
+      console.warn('Firestore init bypassed:', dbErr);
+    }
+  }
 }
 
 export const db = firestoreInstance;
@@ -133,12 +153,17 @@ export function cleanAuthError(err: any): string {
 }
 
 export function onAuthChange(callback: (user: User | null) => void) {
+  if (!auth) {
+    setTimeout(() => callback(null), 0);
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
 }
 
 async function restAuthDiagnostics(endpoint: 'signInWithPassword' | 'signUp', email: string, password: string) {
   try {
     const apiKey = ACTIVE_ENV.FIREBASE_API_KEY_IOS || ACTIVE_ENV.FIREBASE_API_KEY_ANDROID;
+    if (!apiKey) return;
     const url = `https://identitytoolkit.googleapis.com/v1/accounts:${endpoint}?key=${apiKey}`;
     const response = await fetch(url, {
       method: 'POST',
@@ -184,6 +209,9 @@ async function restAuthDiagnostics(endpoint: 'signInWithPassword' | 'signUp', em
 }
 
 export async function registerWithEmail(email: string, password: string, displayName = '') {
+  if (!auth) {
+    throw new Error('Authentication is currently offline. Please use Local Mode.');
+  }
   try {
     const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
     if (displayName.trim()) {
@@ -199,6 +227,9 @@ export async function registerWithEmail(email: string, password: string, display
 }
 
 export async function loginWithEmail(email: string, password: string) {
+  if (!auth) {
+    throw new Error('Authentication is currently offline. Please use Local Mode.');
+  }
   try {
     const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
     return credential.user;
@@ -211,13 +242,16 @@ export async function loginWithEmail(email: string, password: string) {
 }
 
 export async function loginWithGoogleIdToken(idToken: string) {
+  if (!auth) {
+    throw new Error('Authentication is currently offline. Please use Local Mode.');
+  }
   const credential = GoogleAuthProvider.credential(idToken);
   const result = await signInWithCredential(auth, credential);
   return result.user;
 }
 
 export async function updateUserProfile(displayName: string) {
-  if (auth.currentUser) {
+  if (auth?.currentUser) {
     await updateProfile(auth.currentUser, { displayName: displayName.trim() });
     return auth.currentUser;
   }
@@ -225,7 +259,7 @@ export async function updateUserProfile(displayName: string) {
 }
 
 export async function changeUserPassword(newPassword: string) {
-  if (auth.currentUser) {
+  if (auth?.currentUser) {
     await FirebaseAuth.updatePassword(auth.currentUser, newPassword);
     return true;
   }
@@ -233,9 +267,14 @@ export async function changeUserPassword(newPassword: string) {
 }
 
 export async function resetPassword(email: string) {
+  if (!auth) {
+    throw new Error('Authentication is currently offline.');
+  }
   await sendPasswordResetEmail(auth, email.trim());
 }
 
 export async function logoutUser() {
-  await signOut(auth);
+  if (auth) {
+    await signOut(auth);
+  }
 }
