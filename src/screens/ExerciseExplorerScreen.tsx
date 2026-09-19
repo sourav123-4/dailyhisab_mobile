@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
 import { MuscleGroup, Equipment, Exercise } from '../types/fitness';
@@ -16,6 +17,7 @@ import { ExerciseDetailModal } from './ExerciseDetailModal';
 import { ARMS_PARTS_BREAKDOWN } from '../data/exercisesData';
 
 export const ExerciseExplorerScreen = () => {
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { exercises, addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
 
@@ -48,7 +50,7 @@ export const ExerciseExplorerScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
         <View>
           <Text style={[styles.headerSub, { color: theme.muted }]}>3D ANATOMY & WORKOUT DIRECTORY</Text>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Muscle Explorer</Text>

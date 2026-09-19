@@ -8,11 +8,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme, AppThemeName } from '../theme/appTheme';
 import { useAppMode } from '../navigation/AppModeContext';
 
 export const ProfileScreen = () => {
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
   const {
@@ -57,7 +59,7 @@ export const ProfileScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
         <View>
           <Text style={[styles.headerSub, { color: theme.muted }]}>ATHLETE SETTINGS</Text>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Profile & Stats</Text>
