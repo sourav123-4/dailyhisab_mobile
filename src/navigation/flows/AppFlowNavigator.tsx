@@ -13,6 +13,7 @@ import { ProfileScreen } from '../../screens/ProfileScreen';
 import { ActiveWorkoutScreen } from '../../screens/ActiveWorkoutScreen';
 
 import { HisabScreenFrame, useHisabApp } from '../HisabAppContext';
+import { SecurityLockModal } from '../../components/SecurityLockModal';
 import { Tab } from '../../types';
 import { useAppMode } from '../AppModeContext';
 
@@ -115,24 +116,37 @@ function DailyHisabFrame() {
 
 export default function AppFlowNavigator() {
   const { appMode } = useAppMode();
-
-  if (appMode === 'hisab') {
-    return <DailyHisabFrame />;
-  }
+  const { isLocked, securityPin, biometricEnabled, unlock } = useHisabApp();
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
-      <Stack.Screen
-        name="ActiveWorkout"
-        component={ActiveWorkoutScreen}
-        options={{ presentation: 'fullScreenModal' }}
+    <View style={styles.rootContainer}>
+      {appMode === 'hisab' ? (
+        <DailyHisabFrame />
+      ) : (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
+          <Stack.Screen
+            name="ActiveWorkout"
+            component={ActiveWorkoutScreen}
+            options={{ presentation: 'fullScreenModal' }}
+          />
+        </Stack.Navigator>
+      )}
+
+      <SecurityLockModal
+        visible={isLocked}
+        storedPin={securityPin}
+        biometricEnabled={biometricEnabled}
+        onUnlock={unlock}
       />
-    </Stack.Navigator>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+  },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',

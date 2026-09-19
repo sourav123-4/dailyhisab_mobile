@@ -121,6 +121,9 @@ type HisabAppContextValue = {
   user: any;
   theme: HisabState['theme'];
   currency: string;
+  pinEnabled?: boolean;
+  lock: () => void;
+  patchState: (partial: Partial<HisabState>) => void;
   isLocked: boolean;
   securityPin?: string;
   biometricEnabled?: boolean;
@@ -2181,6 +2184,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     toggleVoiceEntry,
     handleVoiceSuggestion,
     unlock: () => setIsLocked(false),
+    lock: () => setIsLocked(true),
+    pinEnabled: state.pinEnabled,
+    patchState: (partial: Partial<HisabState>) => setState(prev => ({ ...prev, ...partial })),
     getThemeBg,
     logoutUser: handleLogout,
     saveProfile: handleSaveProfile,
@@ -2210,6 +2216,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     state.currency,
     state.securityPin,
     state.biometricEnabled,
+    state.pinEnabled,
     isLocked,
     recorderState.isRecording,
     isTranscribing,
@@ -2335,12 +2342,6 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
         style={[styles.app, { backgroundColor: theme.bg }]}
       >
         <StatusBar style={theme.dark ? 'light' : 'dark'} />
-        <SecurityLockModal
-          visible={app.isLocked}
-          storedPin={app.securityPin}
-          biometricEnabled={app.biometricEnabled}
-          onUnlock={app.unlock}
-        />
         <VoiceAssistantModal
           visible={app.voiceModalOpen}
           isRecording={app.isRecording}

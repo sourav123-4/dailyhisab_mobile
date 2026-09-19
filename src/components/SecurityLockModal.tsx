@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../theme/appTheme';
 
 const localAuthModule = (() => {
@@ -36,7 +36,7 @@ export function SecurityLockModal({
       const isEnrolled = await localAuthModule.isEnrolledAsync();
       if (hasHardware && isEnrolled) {
         const res = await localAuthModule.authenticateAsync({
-          promptMessage: 'Unlock Daily Hisab',
+          promptMessage: 'Unlock Daily Hisab & TitanFit',
           fallbackLabel: 'Use PIN',
           disableDeviceFallback: false,
         });
@@ -84,13 +84,20 @@ export function SecurityLockModal({
   if (!visible) return null;
 
   return (
-    <View style={[styles.overlay, { backgroundColor: theme.bg }]}>
-      <View style={styles.lockContainer}>
-        <View style={[styles.iconCircle, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}>
-          <Text style={styles.lockIcon}>🔒</Text>
-        </View>
-        <Text style={[styles.title, { color: theme.text }]}>Daily Hisab Locked</Text>
-        <Text style={[styles.subtitle, { color: theme.muted }]}>Enter 4-digit PIN or use Biometrics</Text>
+    <Modal
+      visible={visible}
+      transparent={false}
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => {}}
+    >
+      <View style={[styles.overlay, { backgroundColor: theme.bg }]}>
+        <View style={styles.lockContainer}>
+          <View style={[styles.iconCircle, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}>
+            <Text style={styles.lockIcon}>🔒</Text>
+          </View>
+          <Text style={[styles.title, { color: theme.text }]}>Daily Hisab & TitanFit Locked</Text>
+          <Text style={[styles.subtitle, { color: theme.muted }]}>Enter 4-digit PIN or use Biometrics</Text>
 
         <View style={styles.dotsRow}>
           {[0, 1, 2, 3].map(index => (
@@ -160,7 +167,8 @@ export function SecurityLockModal({
         </View>
       </View>
     </View>
-  );
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({
