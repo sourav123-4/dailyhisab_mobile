@@ -8,6 +8,16 @@ export type WeightGoal = 'weight_loss' | 'weight_gain' | 'muscle_gain' | 'mainte
 
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'athlete';
 
+export interface ExerciseDemonstration {
+  title: string;
+  url: string;
+  author?: string;
+  license?: string;
+  licenseUrl?: string;
+  sourceUrl?: string;
+  changes?: string;
+}
+
 export interface Exercise {
   id: string;
   name: string;
@@ -22,11 +32,23 @@ export interface Exercise {
   instructions: string[];
   tips: string[];
   mistakes: string[];
+  safetyTips?: string[];
+  beginnerModifications?: string[];
+  advancedVariations?: string[];
   animationFrames: string[];
   defaultSets: number;
   defaultReps: number;
   restSeconds: number;
+  // Exact video and scene playback metadata from VitalPath
+  videoUrl?: string;
+  youtubeId?: string;
+  thumbnailUrl?: string;
+  demonstrations?: ExerciseDemonstration[];
+  frontVideoUrl?: string;
+  sideVideoUrl?: string;
+  backVideoUrl?: string;
 }
+
 
 export interface WorkoutSet {
   id: string;
@@ -116,6 +138,7 @@ export interface UserProfile {
   streakDays: number;
   lastWorkoutDate?: string;
   restTimerSeconds: number;
+  geminiApiKey?: string;
 }
 
 export interface AIChatMessage {

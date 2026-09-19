@@ -23,5 +23,7 @@ export const ACTIVE_ENV = {
   GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || androidGoogleClientId,
   GOOGLE_IOS_REVERSED_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_REVERSED_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || '',
+  GEMINI_API_KEY: process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '',
+  GEMINI_MODEL: process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash',
   ENV_NAME: process.env.NODE_ENV || 'production',
 };

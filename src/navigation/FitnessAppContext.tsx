@@ -15,6 +15,7 @@ import {
 import { DEFAULT_WEEKLY_SPLIT, EXERCISES_DATABASE } from '../data/exercisesData';
 import { ACTIVE_ENV } from '../config/active-env';
 import { AppThemeName } from '../theme/appTheme';
+import { generateFitnessAdviceWithGemini } from '../services/geminiAiService';
 
 interface FitnessContextType {
   profile: UserProfile;
@@ -476,55 +477,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setAiChatHistory((prev) => [...prev, userMsg]);
 
     try {
-      const apiKey = (ACTIVE_ENV.GROQ_API_KEY || '').trim();
-
-      if (!apiKey) {
-        const fallback =
-          "Coach Titan: Keep high protein (2g/kg), train in 8-12 rep range for hypertrophy, and apply progressive overload each week!";
-        const aiMsg: AIChatMessage = {
-          id: `ai_${Date.now()}`,
-          sender: 'assistant',
-          text: fallback,
-          timestamp: new Date().toISOString(),
-        };
-        setAiChatHistory((prev) => [...prev, aiMsg]);
-        return fallback;
-      }
-
-      const systemPrompt = `You are TitanAI, an elite fitness coach, master bodybuilder, and sports nutritionist.
-Current User Context:
-- Goal: ${profile.fitnessGoal} (${profile.fitnessGoal === 'weight_loss' ? 'Cutting fat' : 'Gaining muscle / bulking'})
-- Current Weight: ${profile.currentWeightKg} kg, Target Weight: ${profile.targetWeightKg} kg
-- Height: ${profile.heightCm} cm, Age: ${profile.age}
-- Target Daily Calories: ${profile.targetCalories} kcal (Protein: ${profile.targetProteinGrams}g, Carbs: ${profile.targetCarbsGrams}g, Fats: ${profile.targetFatsGrams}g).
-
-Provide direct, motivational, and scientifically precise advice. Keep replies punchy, structured with bullet points where helpful.`;
-
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...aiChatHistory.slice(-4).map((m) => ({
-              role: m.sender === 'user' ? 'user' : 'assistant',
-              content: m.text,
-            })),
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 600,
-        }),
-      });
-
-      const json = await response.json();
-      const aiReply =
-        json?.choices?.[0]?.message?.content ||
-        'Training tip: Prioritize progressive overload, hit your protein targets, and get 7-8 hours of sleep for maximal muscle protein synthesis.';
+      const aiReply = await generateFitnessAdviceWithGemini(prompt, profile, aiChatHistory);
 
       const aiMsg: AIChatMessage = {
         id: `ai_${Date.now()}`,
@@ -541,7 +494,7 @@ Provide direct, motivational, and scientifically precise advice. Keep replies pu
 
       return aiReply;
     } catch (err: any) {
-      console.warn('Groq AI error:', err);
+      console.warn('Gemini AI error:', err);
       const errReply =
         'Coach advice: Progressive overload and a 300-500 kcal surplus or deficit is the most reliable scientific way to reach your physique goal!';
       const aiMsg: AIChatMessage = {
