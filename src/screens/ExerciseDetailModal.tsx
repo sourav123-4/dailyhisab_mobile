@@ -35,7 +35,6 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
 }) => {
   const theme = useAppTheme();
   const { addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
-  const [activeTab, setActiveTab] = useState<'motion' | 'anatomy' | 'tips'>('motion');
   const [selectedArmPart, setSelectedArmPart] = useState<string | undefined>(initialHighlight);
 
   const muscleMeta =
@@ -76,157 +75,78 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
           <Text style={[styles.title, { color: theme.text }]}>{exercise.name}</Text>
           <Text style={[styles.description, { color: theme.muted }]}>{exercise.description}</Text>
 
-          {/* Tab Navigation */}
-          <View style={[styles.tabsRow, { backgroundColor: theme.surfaceAlt }]}>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'motion' && { backgroundColor: theme.primary }]}
-              onPress={() => setActiveTab('motion')}
-            >
-              <Text style={[styles.tabBtnText, { color: activeTab === 'motion' ? '#fff' : theme.muted }]}>
-                🎬 3D Human Animation
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'anatomy' && { backgroundColor: theme.primary }]}
-              onPress={() => setActiveTab('anatomy')}
-            >
-              <Text style={[styles.tabBtnText, { color: activeTab === 'anatomy' ? '#fff' : theme.muted }]}>
-                🔬 Muscle Anatomy
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'tips' && { backgroundColor: theme.primary }]}
-              onPress={() => setActiveTab('tips')}
-            >
-              <Text style={[styles.tabBtnText, { color: activeTab === 'tips' ? '#fff' : theme.muted }]}>
-                💡 Form Checklist
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-            {activeTab === 'motion' && (
-              <View>
-                {/* 3D Photorealistic Anatomical Human Video Player */}
-                <Exercise3DVideoPlayer
-                  exercise={exercise}
-                  highlightPart={selectedArmPart}
-                  onSelectPart={(partId) => setSelectedArmPart(partId)}
-                />
+            {/* Unified 3D Video Player & Scene Switcher */}
+            <Exercise3DVideoPlayer
+              exercise={exercise}
+              highlightPart={selectedArmPart}
+              onSelectPart={(partId) => setSelectedArmPart(partId)}
+            />
 
-                {/* Step-by-Step Biomechanical Execution Steps */}
-                <Text style={[styles.subHeading, { color: theme.text, marginTop: 14 }]}>BIOMECHANICAL EXECUTION GUIDE</Text>
-                {exercise.instructions.map((step, idx) => (
-                  <View key={idx} style={styles.stepRow}>
-                    <View style={[styles.stepNumBox, { backgroundColor: theme.primarySoft }]}>
-                      <Text style={[styles.stepNumText, { color: theme.primary }]}>{idx + 1}</Text>
-                    </View>
-                    <Text style={[styles.stepText, { color: theme.text }]}>{step}</Text>
+            {/* Biomechanical Execution Guide */}
+            <View style={{ paddingHorizontal: 4, marginTop: 16 }}>
+              <Text style={[styles.subHeading, { color: theme.text }]}>BIOMECHANICAL EXECUTION GUIDE</Text>
+              {exercise.instructions.map((step, idx) => (
+                <View key={idx} style={styles.stepRow}>
+                  <View style={[styles.stepNumBox, { backgroundColor: theme.primarySoft }]}>
+                    <Text style={[styles.stepNumText, { color: theme.primary }]}>{idx + 1}</Text>
                   </View>
-                ))}
-              </View>
-            )}
-
-            {activeTab === 'anatomy' && (
-              <View>
-                {/* 3D Anatomical Reference Graphic */}
-                <View
-                  style={{
-                    borderRadius: 14,
-                    overflow: 'hidden',
-                    marginBottom: 16,
-                    borderWidth: 1.5,
-                    borderColor: `${muscleMeta.color}88`,
-                    backgroundColor: '#05070D',
-                  }}
-                >
-                  <Image
-                    source={
-                      EXERCISE_3D_VIDEOS[exercise.id] ||
-                      MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] ||
-                      MUSCLE_ANATOMY_IMAGES.arms
-                    }
-                    style={{ width: '100%', height: 210, resizeMode: 'cover' }}
-                  />
-                  <View
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      padding: 10,
-                      backgroundColor: 'rgba(5, 7, 13, 0.85)',
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <Text style={{ color: muscleMeta.color, fontWeight: '800', fontSize: 12 }}>
-                      🔬 3D HYPERTROPHY FIBER ENGAGEMENT
-                    </Text>
-                    <Text style={{ color: '#00E5FF', fontWeight: '700', fontSize: 11 }}>
-                      {exercise.muscleGroup.toUpperCase()}
-                    </Text>
-                  </View>
+                  <Text style={[styles.stepText, { color: theme.text }]}>{step}</Text>
                 </View>
+              ))}
 
-                {/* Primary Targeted Muscles */}
-                <Text style={[styles.subHeading, { color: theme.text }]}>PRIMARY TARGET MUSCLE FIBERS</Text>
-                <View style={styles.tagsWrap}>
-                  {exercise.primaryMuscles.map((m, idx) => (
-                    <View key={idx} style={[styles.tag, { backgroundColor: `${muscleMeta.color}22`, borderColor: muscleMeta.color }]}>
-                      <Text style={[styles.tagText, { color: muscleMeta.color }]}>🔥 {m} (Major Contraction)</Text>
+              {/* Form Checklist Pro Tips */}
+              {exercise.tips && exercise.tips.length > 0 && (
+                <>
+                  <Text style={[styles.subHeading, { color: theme.accent, marginTop: 14 }]}>PRO FORM CHECKLIST</Text>
+                  {exercise.tips.map((tip, idx) => (
+                    <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.accent }]}>
+                      <Text style={styles.tipIcon}>💡</Text>
+                      <Text style={[styles.tipText, { color: theme.text }]}>{tip}</Text>
                     </View>
                   ))}
-                </View>
+                </>
+              )}
 
-                {/* Secondary Stabilizers */}
-                <Text style={[styles.subHeading, { color: theme.text, marginTop: 14 }]}>SECONDARY SYNERGISTS & STABILIZERS</Text>
-                <View style={styles.tagsWrap}>
-                  {exercise.secondaryMuscles.map((m, idx) => (
-                    <View key={idx} style={[styles.tag, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-                      <Text style={[styles.tagText, { color: theme.muted }]}>⚡ {m} (Assisting Tension)</Text>
+              {/* Mistakes to Avoid */}
+              {exercise.mistakes && exercise.mistakes.length > 0 && (
+                <>
+                  <Text style={[styles.subHeading, { color: theme.danger, marginTop: 14 }]}>CRITICAL MISTAKES TO AVOID</Text>
+                  {exercise.mistakes.map((mistake, idx) => (
+                    <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.danger }]}>
+                      <Text style={styles.tipIcon}>⚠️</Text>
+                      <Text style={[styles.tipText, { color: theme.text }]}>{mistake}</Text>
                     </View>
                   ))}
+                </>
+              )}
+
+              {/* Target Muscles Summary */}
+              <Text style={[styles.subHeading, { color: theme.text, marginTop: 14 }]}>TARGETED MUSCLE FIBERS</Text>
+              <View style={styles.tagsWrap}>
+                {exercise.primaryMuscles.map((m, idx) => (
+                  <View key={idx} style={[styles.tag, { backgroundColor: `${muscleMeta.color}22`, borderColor: muscleMeta.color }]}>
+                    <Text style={[styles.tagText, { color: muscleMeta.color }]}>🔥 {m} (Agonist)</Text>
+                  </View>
+                ))}
+                {exercise.secondaryMuscles.map((m, idx) => (
+                  <View key={idx} style={[styles.tag, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+                    <Text style={[styles.tagText, { color: theme.muted }]}>⚡ {m} (Synergist)</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Variations */}
+              {exercise.beginnerModifications && (
+                <View style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft, marginTop: 12 }]}>
+                  <Text style={styles.tipIcon}>🌱</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '700' }}>BEGINNER MODIFICATION</Text>
+                    <Text style={[styles.tipText, { color: theme.text, marginTop: 2 }]}>{exercise.beginnerModifications}</Text>
+                  </View>
                 </View>
-
-                {/* Arm Anatomy Breakdown Details if Arms */}
-                {exercise.muscleGroup === 'arms' && (
-                  <View style={[styles.anatomyBreakdownBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-                    <Text style={[styles.breakdownTitle, { color: theme.text }]}>ARM ANATOMICAL SPECIALIZATION</Text>
-                    {ARMS_PARTS_BREAKDOWN.map((p) => (
-                      <View key={p.id} style={styles.partItemRow}>
-                        <View style={[styles.partDot, { backgroundColor: p.color }]} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.partItemName, { color: theme.text }]}>{p.name}</Text>
-                          <Text style={[styles.partItemDesc, { color: theme.muted }]}>{p.target}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {activeTab === 'tips' && (
-              <View>
-                <Text style={[styles.subHeading, { color: theme.accent }]}>PRO FORM CHECKLIST</Text>
-                {exercise.tips.map((tip, idx) => (
-                  <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.accent }]}>
-                    <Text style={styles.tipIcon}>💡</Text>
-                    <Text style={[styles.tipText, { color: theme.text }]}>{tip}</Text>
-                  </View>
-                ))}
-
-                <Text style={[styles.subHeading, { color: theme.danger, marginTop: 14 }]}>CRITICAL MISTAKES TO AVOID</Text>
-                {exercise.mistakes.map((mistake, idx) => (
-                  <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.danger }]}>
-                    <Text style={styles.tipIcon}>⚠️</Text>
-                    <Text style={[styles.tipText, { color: theme.text }]}>{mistake}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+              )}
+            </View>
           </ScrollView>
 
           {/* Bottom Add to Workout Action */}
