@@ -1,0 +1,16 @@
+export const FITNESS_COLORS = {
+  bgDark: '#080B11',
+  surfaceDark: '#121724',
+  surfaceAltDark: '#1B2234',
+  cardDark: '#161E2E',
+  neonRed: '#FF4757',
+  neonOrange: '#FF7F50',
+  neonCyan: '#00E5FF',
+  neonGreen: '#2ED573',
+  neonGold: '#FFA502',
+  neonPurple: '#9B51E0',
+  textLight: '#F8FBFF',
+  textMuted: '#94A3B8',
+  textSubtle: '#64748B',
+  borderDark: 'rgba(255, 255, 255, 0.12)',
+};
