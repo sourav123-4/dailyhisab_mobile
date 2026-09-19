@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
+import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
 import { MuscleGroup, Equipment, Exercise } from '../types/fitness';
 import { MuscleAnatomyViewer } from '../components/MuscleAnatomyViewer';
@@ -30,6 +31,7 @@ const muscleCategories: { id: MuscleGroup; label: string; emoji: string }[] = [
 export const ExerciseExplorerScreen = () => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const { setAppMode } = useAppMode();
   const { exercises, addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
 
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup>('chest');
@@ -73,17 +75,41 @@ export const ExerciseExplorerScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Header */}
+      {/* Two-Tier Dashboard Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.headerSub, { color: theme.muted }]}>3D MUSCULOSKELETAL ATLAS</Text>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Anatomy & Biomechanics</Text>
+        {/* Tier 1: Brand & Top Actions */}
+        <View style={styles.headerTopRow}>
+          <View style={styles.brandRow}>
+            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
+            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
+            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
+              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
+            </View>
           </View>
-          <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.badgePillText, { color: theme.primary }]}>
-              {filteredExercises.length} Drills
-            </Text>
+
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
+              onPress={() => setAppMode('hisab')}
+            >
+              <Text style={{ fontSize: 13 }}>💰</Text>
+              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <Text style={[styles.badgePillText, { color: theme.primary }]}>
+                {filteredExercises.length} Drills
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Tier 2: Subtitle & Title */}
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>3D MUSCULOSKELETAL ATLAS</Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>Anatomy & Biomechanics</Text>
           </View>
         </View>
       </View>
@@ -320,35 +346,80 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
+    gap: 12,
   },
-  headerRow: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerSub: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  headerTitle: {
-    fontSize: 22,
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  brandTitle: {
+    fontSize: 16,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: 0.8,
+  },
+  proBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modeSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   badgePill: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
   },
   badgePillText: {
     fontSize: 11,
     fontWeight: '800',
+  },
+  headerBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  greetingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  mainHeading: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   listContent: {
     padding: 16,

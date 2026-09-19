@@ -91,12 +91,17 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-      {/* Header bar with Mode Switcher */}
+    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: `${activeMeta.color}44` }]}>
+      {/* Header bar with Mode Switcher & Active Muscle Indicator */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={[styles.pulseDot, { backgroundColor: activeMeta.color }]} />
-          <Text style={[styles.title, { color: theme.text }]}>3D Interactive Anatomy</Text>
+          <View>
+            <Text style={[styles.title, { color: theme.text }]}>3D Interactive Anatomy</Text>
+            <Text style={[styles.activeMuscleLabel, { color: activeMeta.color }]}>
+              {activeMeta.title.toUpperCase()} · ATLAS
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.modeToggle, { backgroundColor: theme.surfaceAlt }]}>
@@ -157,7 +162,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
             style={[
               styles.scanLine,
               {
-                borderColor: `${activeMeta.color}88`,
+                borderColor: `${activeMeta.color}AA`,
                 transform: [{ translateY: scanY }],
               },
             ]}
@@ -175,7 +180,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
           />
 
           {/* Target Overlay Badge */}
-          <View style={[styles.targetBadge, { borderColor: activeMeta.color, backgroundColor: 'rgba(10, 15, 29, 0.88)' }]}>
+          <View style={[styles.targetBadge, { borderColor: activeMeta.color, backgroundColor: 'rgba(10, 15, 29, 0.90)' }]}>
             <Text style={[styles.targetBadgeText, { color: activeMeta.color }]}>
               TARGET: {activeMeta.title.toUpperCase()}
             </Text>
@@ -183,42 +188,12 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
         </View>
       )}
 
-      {/* Interactive Muscle Group Selector Chips */}
-      <View style={styles.pillsContainer}>
-        {MUSCLE_GROUPS_META.map((meta) => {
-          const isSelected = selectedMuscle === meta.id;
-          return (
-            <TouchableOpacity
-              key={meta.id}
-              activeOpacity={0.75}
-              style={[
-                styles.pill,
-                {
-                  backgroundColor: isSelected ? meta.color : theme.surfaceAlt,
-                  borderColor: isSelected ? meta.color : theme.borderSoft,
-                },
-              ]}
-              onPress={() => handleSelect(meta.id)}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  { color: isSelected ? '#ffffff' : theme.text, fontWeight: isSelected ? '800' : '500' },
-                ]}
-              >
-                {meta.title.split(' ')[0]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Details Box */}
+      {/* Biomechanical Kinematics & Target Muscle Heads Details Box */}
       {showDetails && (
         <View style={[styles.detailsBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
           <View style={styles.detailsHeader}>
             <Text style={[styles.detailsTitle, { color: theme.text }]}>
-              {activeMeta.title} Anatomy & Kinematics
+              {activeMeta.title} Kinematics & Muscle Activation
             </Text>
             <Text style={[styles.detailsSubtitle, { color: theme.muted }]}>
               {activeMeta.subtitle}
@@ -230,11 +205,11 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
                 key={index}
                 style={[
                   styles.muscleTag,
-                  { backgroundColor: `${activeMeta.color}22`, borderColor: `${activeMeta.color}55` },
+                  { backgroundColor: `${activeMeta.color}1E`, borderColor: `${activeMeta.color}55` },
                 ]}
               >
                 <Text style={[styles.muscleTagText, { color: activeMeta.color }]}>
-                  🔥 {muscleName}
+                  ⚡ {muscleName}
                 </Text>
               </View>
             ))}
@@ -273,6 +248,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.3,
+  },
+  activeMuscleLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginTop: 1,
   },
   modeToggle: {
     flexDirection: 'row',
