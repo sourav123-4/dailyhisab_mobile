@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Image,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -17,7 +18,12 @@ import {
   MUSCLE_GROUPS_META,
   ARMS_PARTS_BREAKDOWN,
 } from '../data/exercisesData';
-import { EXERCISE_VIDEO_SOURCES } from '../data/exerciseVideoSources';
+import {
+  EXERCISE_VIDEO_SOURCES,
+  EXERCISE_YOUTUBE_IDS,
+  EXERCISE_THUMBNAILS,
+} from '../data/exerciseVideoSources';
+import { Biomechanical3DExerciseAnimator } from './Biomechanical3DExerciseAnimator';
 
 let WebView: any = null;
 if (Platform.OS !== 'web') {
@@ -28,7 +34,7 @@ if (Platform.OS !== 'web') {
   }
 }
 
-// Multi-phase photorealistic keyframe dictionary for all exercises and camera perspectives
+// Multi-phase photorealistic keyframe dictionary for fallback display
 const EXERCISE_KEYFRAMES: Record<
   string,
   {
@@ -107,163 +113,54 @@ const EXERCISE_KEYFRAMES: Record<
     back: require('../../assets/exercise_tricep_back.jpg'),
     side: require('../../assets/exercise_tricep_side.jpg'),
     iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_tricep_back.jpg'),
-  },
-  chest_barbell_bench_press: {
-    phase1: require('../../assets/exercise_chest_side.jpg'),
-    phase2: require('../../assets/exercise_chest_front.jpg'),
-    phase3: require('../../assets/exercise_chest_front.jpg'),
-    phase4: require('../../assets/exercise_chest_side.jpg'),
-    front: require('../../assets/exercise_chest_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_chest_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_chest_front.jpg'),
-  },
-  chest_incline_dumbbell_press: {
-    phase1: require('../../assets/exercise_chest_side.jpg'),
-    phase2: require('../../assets/exercise_chest_front.jpg'),
-    phase3: require('../../assets/exercise_chest_front.jpg'),
-    phase4: require('../../assets/exercise_chest_side.jpg'),
-    front: require('../../assets/exercise_chest_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_chest_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_chest_front.jpg'),
-  },
-  chest_cable_crossover: {
-    phase1: require('../../assets/exercise_chest_side.jpg'),
-    phase2: require('../../assets/exercise_chest_front.jpg'),
-    phase3: require('../../assets/exercise_chest_front.jpg'),
-    phase4: require('../../assets/exercise_chest_side.jpg'),
-    front: require('../../assets/exercise_chest_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_chest_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_chest_front.jpg'),
-  },
-  back_lat_pulldown: {
-    phase1: require('../../assets/exercise_back_side.jpg'),
-    phase2: require('../../assets/exercise_back_posterior.jpg'),
-    phase3: require('../../assets/exercise_back_posterior.jpg'),
-    phase4: require('../../assets/exercise_back_side.jpg'),
-    front: require('../../assets/exercise_back_side.jpg'),
-    back: require('../../assets/exercise_back_posterior.jpg'),
-    side: require('../../assets/exercise_back_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_back_posterior.jpg'),
-  },
-  back_barbell_deadlift: {
-    phase1: require('../../assets/exercise_back_side.jpg'),
-    phase2: require('../../assets/exercise_back_posterior.jpg'),
-    phase3: require('../../assets/exercise_back_side.jpg'),
-    phase4: require('../../assets/exercise_back_side.jpg'),
-    front: require('../../assets/exercise_back_side.jpg'),
-    back: require('../../assets/exercise_back_posterior.jpg'),
-    side: require('../../assets/exercise_back_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_back_side.jpg'),
-  },
-  back_bent_over_row: {
-    phase1: require('../../assets/exercise_back_side.jpg'),
-    phase2: require('../../assets/exercise_back_posterior.jpg'),
-    phase3: require('../../assets/exercise_back_posterior.jpg'),
-    phase4: require('../../assets/exercise_back_side.jpg'),
-    front: require('../../assets/exercise_back_side.jpg'),
-    back: require('../../assets/exercise_back_posterior.jpg'),
-    side: require('../../assets/exercise_back_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_back_posterior.jpg'),
-  },
-  shoulders_barbell_overhead_press: {
-    phase1: require('../../assets/exercise_shoulder_side.jpg'),
-    phase2: require('../../assets/exercise_shoulder_front.jpg'),
-    phase3: require('../../assets/exercise_shoulder_front.jpg'),
-    phase4: require('../../assets/exercise_shoulder_side.jpg'),
-    front: require('../../assets/exercise_shoulder_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_shoulder_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_shoulder_front.jpg'),
-  },
-  shoulders_dumbbell_lateral_raise: {
-    phase1: require('../../assets/exercise_shoulder_side.jpg'),
-    phase2: require('../../assets/exercise_shoulder_front.jpg'),
-    phase3: require('../../assets/exercise_shoulder_front.jpg'),
-    phase4: require('../../assets/exercise_shoulder_side.jpg'),
-    front: require('../../assets/exercise_shoulder_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_shoulder_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_shoulder_front.jpg'),
-  },
-  legs_barbell_squat: {
-    phase1: require('../../assets/exercise_squat_front.jpg'),
-    phase2: require('../../assets/exercise_squat_side.jpg'),
-    phase3: require('../../assets/exercise_squat_side.jpg'),
-    phase4: require('../../assets/exercise_squat_front.jpg'),
-    front: require('../../assets/exercise_squat_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_squat_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_squat_side.jpg'),
-  },
-  legs_leg_press: {
-    phase1: require('../../assets/exercise_squat_front.jpg'),
-    phase2: require('../../assets/exercise_squat_side.jpg'),
-    phase3: require('../../assets/exercise_squat_side.jpg'),
-    phase4: require('../../assets/exercise_squat_front.jpg'),
-    front: require('../../assets/exercise_squat_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_squat_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_squat_side.jpg'),
-  },
-  legs_romanian_deadlift: {
-    phase1: require('../../assets/exercise_back_side.jpg'),
-    phase2: require('../../assets/exercise_squat_side.jpg'),
-    phase3: require('../../assets/exercise_squat_side.jpg'),
-    phase4: require('../../assets/exercise_back_side.jpg'),
-    front: require('../../assets/exercise_squat_front.jpg'),
-    back: require('../../assets/exercise_back_posterior.jpg'),
-    side: require('../../assets/exercise_back_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_squat_side.jpg'),
-  },
-  abs_straight_arm_crunch: {
-    phase1: require('../../assets/exercise_crunch_front.jpg'),
-    phase2: require('../../assets/exercise_crunch_side.jpg'),
-    phase3: require('../../assets/exercise_crunch_side.jpg'),
-    phase4: require('../../assets/exercise_crunch_front.jpg'),
-    front: require('../../assets/exercise_crunch_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_crunch_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_crunch_side.jpg'),
-  },
-  abs_hanging_leg_raise: {
-    phase1: require('../../assets/exercise_crunch_front.jpg'),
-    phase2: require('../../assets/exercise_crunch_side.jpg'),
-    phase3: require('../../assets/exercise_crunch_side.jpg'),
-    phase4: require('../../assets/exercise_crunch_front.jpg'),
-    front: require('../../assets/exercise_crunch_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_crunch_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_crunch_front.jpg'),
-  },
-  abs_plank: {
-    phase1: require('../../assets/exercise_crunch_side.jpg'),
-    phase2: require('../../assets/exercise_crunch_front.jpg'),
-    phase3: require('../../assets/exercise_crunch_side.jpg'),
-    phase4: require('../../assets/exercise_crunch_front.jpg'),
-    front: require('../../assets/exercise_crunch_front.jpg'),
-    back: require('../../assets/exercise_arms_back.jpg'),
-    side: require('../../assets/exercise_crunch_side.jpg'),
-    iso: require('../../assets/exercise_fullbody_orbit.jpg'),
-    zoom: require('../../assets/exercise_crunch_side.jpg'),
+    zoom: require('../../assets/exercise_tricep_side.jpg'),
   },
 };
+
+function generateHtml5Player(url: string, speed: number, isPlaying: boolean): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body, html { width:100%; height:100%; background:#060913; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    video { width:100%; height:100%; object-fit:contain; background:#000; border-radius:12px; }
+  </style>
+</head>
+<body>
+  <video id="v" src="${url}" autoplay loop muted playsinline webkit-playsinline></video>
+  <script>
+    const v = document.getElementById('v');
+    v.playbackRate = ${speed};
+    ${isPlaying ? 'v.play().catch(function(e){ console.log(e); });' : 'v.pause();'}
+  </script>
+</body>
+</html>`;
+}
+
+function generateYouTubePlayer(videoId: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body, html { width:100%; height:100%; background:#000; overflow:hidden; }
+    iframe { width:100%; height:100%; border:none; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1"
+    allow="autoplay; encrypted-media; picture-in-picture"
+    allowfullscreen
+  ></iframe>
+</body>
+</html>`;
+}
+
+export type SceneMode = 'video' | 'biomechanics' | 'anatomy' | 'angles';
 
 interface Exercise3DVideoPlayerProps {
   exercise: Exercise;
@@ -282,22 +179,29 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState<0.5 | 1 | 1.5 | 2>(1);
   const [cameraView, setCameraView] = useState<'front' | 'back' | 'side' | 'iso' | 'zoom'>('front');
+  const [activeScene, setActiveScene] = useState<SceneMode>('video');
   const [currentPhaseIdx, setCurrentPhaseIdx] = useState(0);
   const [repCount, setRepCount] = useState(1);
   const [activeAngle, setActiveAngle] = useState(165);
   const [muscleTension, setMuscleTension] = useState(25);
 
+  const resolvedVideoUrl = exercise.videoUrl || EXERCISE_VIDEO_SOURCES[exercise.id] || '';
+  const resolvedYoutubeId = exercise.youtubeId || EXERCISE_YOUTUBE_IDS[exercise.id] || '';
+  const resolvedThumbnail = exercise.thumbnailUrl || EXERCISE_THUMBNAILS[exercise.id] || '';
+
+  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>(
+    resolvedVideoUrl ? 'cloud' : 'youtube'
+  );
+
   // Animated values for 60fps photorealistic motion
   const animPhase = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
   const camZoomAnim = useRef(new Animated.Value(1)).current;
   const recBlinkAnim = useRef(new Animated.Value(1)).current;
 
-  const videoSource = EXERCISE_VIDEO_SOURCES[exercise.id];
   const videoRef = useRef<any>(null);
 
-  // Sync HTML5 video playback rate and play/pause state
+  // Sync HTML5 video playback rate and play/pause state for Web
   useEffect(() => {
     if (Platform.OS === 'web' && videoRef.current) {
       videoRef.current.playbackRate = speed;
@@ -307,7 +211,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         videoRef.current.pause();
       }
     }
-  }, [isPlaying, speed, videoSource]);
+  }, [isPlaying, speed, resolvedVideoUrl]);
 
   // Keyframes configuration
   const defaultAsset =
@@ -365,28 +269,24 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
     const repLoop = Animated.loop(
       Animated.sequence([
-        // Phase 1 -> Phase 2 (Concentric Drive: 0% -> 33%)
         Animated.timing(animPhase, {
           toValue: 1,
           duration: repDuration * 0.35,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-        // Phase 2 -> Phase 3 (Peak Contraction Hold: 33% -> 50%)
         Animated.timing(animPhase, {
           toValue: 2,
           duration: repDuration * 0.2,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Phase 3 -> Phase 4 (Controlled Eccentric Descent: 50% -> 85%)
         Animated.timing(animPhase, {
           toValue: 3,
           duration: repDuration * 0.35,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        // Phase 4 -> Phase 1 (Reset / Pre-stretch: 85% -> 100%)
         Animated.timing(animPhase, {
           toValue: 0,
           duration: repDuration * 0.1,
@@ -398,7 +298,6 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
     repLoop.start();
 
-    // Listener for real-time telemetry updates
     const listenerId = animPhase.addListener(({ value }) => {
       let pIdx = 0;
       let ang = 165;
@@ -426,12 +325,11 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         pump = Math.round(40 - prog * 15);
       }
 
-      setCurrentPhaseIdx(Math.min(pIdx, 3));
+      setCurrentPhaseIdx(pIdx);
       setActiveAngle(ang);
       setMuscleTension(pump);
     });
 
-    // Hypertrophy pulse breathing loop
     const glowLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
@@ -450,7 +348,6 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     );
     glowLoop.start();
 
-    // Increment rep count periodically
     const repTimer = setInterval(() => {
       setRepCount((r) => (r >= 12 ? 1 : r + 1));
     }, repDuration);
@@ -463,7 +360,6 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     };
   }, [isPlaying, speed, animPhase, glowAnim]);
 
-  // Camera view angle switch handler
   const handleCameraChange = (cam: 'front' | 'back' | 'side' | 'iso' | 'zoom') => {
     setCameraView(cam);
     Animated.spring(camZoomAnim, {
@@ -474,7 +370,6 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     }).start();
   };
 
-  // Phase selector button click handler
   const handleSelectPhase = (idx: number) => {
     setIsPlaying(false);
     animPhase.stopAnimation();
@@ -498,22 +393,12 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     if (!isPlaying) setIsPlaying(true);
   };
 
-  // Compute active image source based on camera view and motion phase
   const getActiveImageSource = () => {
-    if (cameraView === 'back') {
-      return keyframes.back || defaultAsset;
-    }
-    if (cameraView === 'side') {
-      return keyframes.side || defaultAsset;
-    }
-    if (cameraView === 'iso') {
-      return keyframes.iso || defaultAsset;
-    }
-    if (cameraView === 'zoom') {
-      return keyframes.zoom || defaultAsset;
-    }
+    if (cameraView === 'back') return keyframes.back || defaultAsset;
+    if (cameraView === 'side') return keyframes.side || defaultAsset;
+    if (cameraView === 'iso') return keyframes.iso || defaultAsset;
+    if (cameraView === 'zoom') return keyframes.zoom || defaultAsset;
 
-    // Default Front 3D: Dynamic animated movement across phases
     if (currentPhaseIdx === 0) return keyframes.phase1 || keyframes.front || defaultAsset;
     if (currentPhaseIdx === 1) return keyframes.phase2 || keyframes.front || defaultAsset;
     if (currentPhaseIdx === 2) return keyframes.phase3 || keyframes.front || defaultAsset;
@@ -525,13 +410,13 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     return (
       <View style={styles.miniContainer}>
         <Image
-          source={keyframes.phase2 || defaultAsset}
+          source={resolvedThumbnail ? { uri: resolvedThumbnail } : (keyframes.phase2 || defaultAsset)}
           style={styles.miniImage}
           resizeMode="cover"
         />
         <View style={styles.miniLiveTag}>
           <View style={styles.miniDot} />
-          <Text style={styles.miniLiveText}>3D CGI</Text>
+          <Text style={styles.miniLiveText}>HD VIDEO</Text>
         </View>
       </View>
     );
@@ -544,7 +429,13 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         <View style={styles.liveIndicatorRow}>
           <Animated.View style={[styles.recBlinkDot, { opacity: recBlinkAnim }]} />
           <Text style={[styles.hudHeaderTitle, { color: '#FFFFFF' }]}>
-            3D HUMAN BIOMECHANICAL VIDEO
+            {activeScene === 'video'
+              ? 'HD VIDEO DEMONSTRATION'
+              : activeScene === 'biomechanics'
+              ? '3D SKELETAL BIOMECHANICS'
+              : activeScene === 'anatomy'
+              ? 'ANATOMICAL MUSCLE HEATMAP'
+              : 'MULTI-PERSPECTIVE 3D CAMERAS'}
           </Text>
         </View>
 
@@ -567,106 +458,241 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         </View>
       </View>
 
-      {/* Main 3D Continuous Animated Human Lifter Viewport */}
+      {/* Exact Scene Selector Tabs */}
+      <View style={styles.sceneTabsBar}>
+        {[
+          { id: 'video', label: '🎬 Video Demo' },
+          { id: 'biomechanics', label: '🦴 3D Biomechanics' },
+          { id: 'anatomy', label: '🧬 Muscle Anatomy' },
+          { id: 'angles', label: '📐 Angles' },
+        ].map((tab) => {
+          const isSelected = activeScene === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              activeOpacity={0.75}
+              style={[
+                styles.sceneTabBtn,
+                isSelected && { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
+              onPress={() => setActiveScene(tab.id as SceneMode)}
+            >
+              <Text
+                style={[
+                  styles.sceneTabText,
+                  { color: isSelected ? '#FFFFFF' : theme.muted, fontWeight: isSelected ? '800' : '600' },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Main Interactive Viewport based on selected scene */}
       <View style={styles.videoViewport}>
-        <Animated.View
-          style={[
-            styles.imageMotionContainer,
-            {
-              transform: [{ scale: camZoomAnim }],
-            },
-          ]}
-        >
-          {Platform.OS === 'web' && videoSource && cameraView === 'front' ? (
-            <video
-              ref={videoRef}
-              src={videoSource}
-              autoPlay
-              loop
-              muted
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
+        {activeScene === 'video' ? (
+          // ================= SCENE 1: REAL VIDEO DEMO =================
+          <View style={styles.videoContainerInner}>
+            {Platform.OS === 'web' ? (
+              videoPlayerType === 'youtube' && resolvedYoutubeId ? (
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1`}
+                  style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' } as any}
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : resolvedVideoUrl ? (
+                <video
+                  ref={videoRef}
+                  src={resolvedVideoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    backgroundColor: '#000',
+                  }}
+                />
+              ) : (
+                <Image
+                  source={resolvedThumbnail ? { uri: resolvedThumbnail } : defaultAsset}
+                  style={styles.fullHumanImage}
+                  resizeMode="contain"
+                />
+              )
+            ) : WebView && (resolvedVideoUrl || resolvedYoutubeId) ? (
+              <WebView
+                key={`${resolvedVideoUrl}-${videoPlayerType}-${speed}-${isPlaying ? '1' : '0'}`}
+                style={{ width: '100%', height: '100%', backgroundColor: '#000000' }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                originWhitelist={['*']}
+                source={
+                  videoPlayerType === 'youtube' && resolvedYoutubeId
+                    ? { html: generateYouTubePlayer(resolvedYoutubeId) }
+                    : { html: generateHtml5Player(resolvedVideoUrl, speed, isPlaying) }
+                }
+              />
+            ) : (
+              <Image
+                source={resolvedThumbnail ? { uri: resolvedThumbnail } : defaultAsset}
+                style={styles.fullHumanImage}
+                resizeMode="contain"
+              />
+            )}
+
+            {/* Video Source Switcher Pill Overlays */}
+            <View style={styles.videoFormatSwitcherRow}>
+              {resolvedVideoUrl ? (
+                <TouchableOpacity
+                  style={[
+                    styles.formatSwitchBtn,
+                    videoPlayerType === 'cloud' && { backgroundColor: theme.primary, borderColor: theme.primary },
+                  ]}
+                  onPress={() => setVideoPlayerType('cloud')}
+                >
+                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'cloud' ? '#FFF' : theme.muted }]}>
+                    HD Loop
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {resolvedYoutubeId ? (
+                <TouchableOpacity
+                  style={[
+                    styles.formatSwitchBtn,
+                    videoPlayerType === 'youtube' && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
+                  ]}
+                  onPress={() => setVideoPlayerType('youtube')}
+                >
+                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'youtube' ? '#FFF' : theme.muted }]}>
+                    YouTube Tutorial
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {resolvedYoutubeId ? (
+                <TouchableOpacity
+                  style={styles.externalYtBtn}
+                  onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${resolvedYoutubeId}`)}
+                >
+                  <Text style={styles.externalYtText}>↗ Open App</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        ) : activeScene === 'biomechanics' ? (
+          // ================= SCENE 2: 3D BIOMECHANICS SKELETAL MOTION =================
+          <View style={styles.biomechanicsContainerInner}>
+            <Biomechanical3DExerciseAnimator
+              exercise={exercise}
+              highlightPart={highlightPart}
             />
-          ) : (
+          </View>
+        ) : activeScene === 'anatomy' ? (
+          // ================= SCENE 3: MUSCLE ANATOMY HEATMAP =================
+          <View style={styles.anatomySceneContainer}>
+            <Image
+              source={MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] || MUSCLE_ANATOMY_IMAGES.arms}
+              style={styles.anatomySceneImage}
+              resizeMode="contain"
+            />
+            <View style={styles.anatomyInfoCard}>
+              <Text style={styles.anatomyCardTitle}>TARGETED MUSCLE GROUPS</Text>
+              <Text style={styles.anatomyCardPrimary}>
+                🔥 Primary: {exercise.primaryMuscles.join(', ')}
+              </Text>
+              {exercise.secondaryMuscles.length > 0 && (
+                <Text style={styles.anatomyCardSecondary}>
+                  ⚡ Synergists: {exercise.secondaryMuscles.join(', ')}
+                </Text>
+              )}
+              <View style={styles.anatomyMeterRow}>
+                <View style={[styles.anatomyMeterTrack, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                  <View style={[styles.anatomyMeterFill, { width: `${muscleTension}%`, backgroundColor: theme.primary }]} />
+                </View>
+                <Text style={styles.anatomyMeterText}>{muscleTension}% Tension</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          // ================= SCENE 4: MULTI-ANGLE PERSPECTIVES =================
+          <Animated.View
+            style={[
+              styles.imageMotionContainer,
+              {
+                transform: [{ scale: camZoomAnim }],
+              },
+            ]}
+          >
             <Image
               source={getActiveImageSource()}
               style={styles.fullHumanImage}
-              resizeMode="cover"
+              resizeMode="contain"
             />
-          )}
 
-          {/* Hypertrophy Glow Pulse Filter */}
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.hypertrophyGlowOverlay,
-              {
-                opacity: glowAnim,
-              },
-            ]}
-          />
-        </Animated.View>
+            {/* Hypertrophy Glow Pulse Filter */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.hypertrophyGlowOverlay,
+                {
+                  opacity: glowAnim,
+                },
+              ]}
+            />
 
-        {/* Biomechanical Trajectory & Kinematic Vector Badge */}
-        <View style={styles.trajectoryOverlayBadge}>
-          <View style={styles.vectorPointRow}>
-            <View style={[styles.vectorDot, { backgroundColor: theme.accent }]} />
-            <Text style={styles.vectorText}>
-              {currentPhaseIdx === 2 ? '⚡ PEAK ISOMETRIC TENSION' : '📐 KINETIC FORM TRAJECTORY: OK'}
-            </Text>
-          </View>
-        </View>
+            {/* Camera Perspective Angle Switcher Buttons */}
+            <View style={styles.cameraPillsOverlay}>
+              {(
+                [
+                  { id: 'front', label: 'Front 3D', icon: '👤' },
+                  { id: 'back', label: 'Back 3D', icon: '🔄' },
+                  { id: 'side', label: 'Side 3D', icon: '📐' },
+                  { id: 'iso', label: 'Orbit 3D', icon: '🌐' },
+                  { id: 'zoom', label: 'Muscle Zoom', icon: '🔬' },
+                ] as const
+              ).map((cam) => {
+                const isSel = cameraView === cam.id;
+                return (
+                  <TouchableOpacity
+                    key={cam.id}
+                    activeOpacity={0.75}
+                    style={[
+                      styles.camBtn,
+                      isSel && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
+                    ]}
+                    onPress={() => handleCameraChange(cam.id)}
+                  >
+                    <Text style={[styles.camBtnText, { color: isSel ? '#FFFFFF' : '#94A3B8' }]}>
+                      {cam.icon} {cam.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-        {/* Camera Perspective Angle Switcher */}
-        <View style={styles.cameraPillsOverlay}>
-          {(
-            [
-              { id: 'front', label: 'Front 3D', icon: '👤' },
-              { id: 'back', label: 'Back 3D', icon: '🔄' },
-              { id: 'side', label: 'Side 3D', icon: '📐' },
-              { id: 'iso', label: 'Orbit 3D', icon: '🌐' },
-              { id: 'zoom', label: 'Muscle Zoom', icon: '🔬' },
-            ] as const
-          ).map((cam) => {
-            const isSel = cameraView === cam.id;
-            return (
-              <TouchableOpacity
-                key={cam.id}
-                activeOpacity={0.75}
-                style={[
-                  styles.camBtn,
-                  isSel && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
-                ]}
-                onPress={() => handleCameraChange(cam.id)}
-              >
-                <Text style={[styles.camBtnText, { color: isSel ? '#FFFFFF' : '#94A3B8' }]}>
-                  {cam.icon} {cam.label}
+            {/* Biomechanical Trajectory & Kinematic Vector Badge */}
+            <View style={styles.trajectoryOverlayBadge}>
+              <View style={styles.vectorPointRow}>
+                <View style={[styles.vectorDot, { backgroundColor: theme.accent }]} />
+                <Text style={styles.vectorText}>
+                  {currentPhaseIdx === 2 ? '⚡ PEAK ISOMETRIC TENSION' : '📐 KINETIC FORM TRAJECTORY: OK'}
                 </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Real-Time Phase & Telemetry Banner */}
-        <View style={styles.phaseOverlayCard}>
-          <View style={styles.phaseBadgeRow}>
-            <View style={[styles.phaseDot, { backgroundColor: '#FF334B' }]} />
-            <Text style={[styles.phaseTitleText, { color: theme.accent }]}>
-              {phases[currentPhaseIdx].name}
-            </Text>
-          </View>
-          <Text style={styles.phaseDescText}>
-            Focus: {phases[currentPhaseIdx].focus} • {activeAngle}° Joint Angle • {muscleTension}% Muscle Activation
-          </Text>
-        </View>
+              </View>
+            </View>
+          </Animated.View>
+        )}
       </View>
 
-      {/* Arm Anatomical Muscle Head Selector Chips */}
+      {/* Arm Anatomical Muscle Head Selector Chips (when applicable) */}
       {exercise.muscleGroup === 'arms' && (
         <View style={styles.headsChipBar}>
           <Text style={[styles.headsLabel, { color: theme.muted }]}>ANATOMICAL HEADS:</Text>
@@ -738,37 +764,62 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
       <View style={styles.playbackControlsFooter}>
         <TouchableOpacity
           activeOpacity={0.8}
-          style={[styles.playPauseBtn, { backgroundColor: '#FF334B' }]}
+          style={[styles.playPauseBtn, { backgroundColor: isPlaying ? '#FF334B' : theme.primary }]}
           onPress={handleTogglePlay}
         >
           <Text style={styles.playPauseBtnText}>
-            {isPlaying ? '⏸ PAUSE VIDEO' : '▶ RESUME 3D VIDEO'}
+            {isPlaying ? '⏸ PAUSE' : '▶ PLAY'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={[styles.replayBtn, { borderColor: theme.borderSoft }]}
+          onPress={() => {
+            setIsPlaying(true);
+            animPhase.setValue(0);
+            if (videoRef.current) {
+              videoRef.current.currentTime = 0;
+              videoRef.current.play().catch(() => {});
+            }
+          }}
+        >
+          <Text style={[styles.replayBtnText, { color: theme.text }]}>🔄 REPLAY</Text>
         </TouchableOpacity>
 
         <View style={styles.speedPillsRow}>
           <Text style={[styles.speedLabel, { color: theme.muted }]}>SPEED:</Text>
-          {([0.5, 1, 1.5, 2] as const).map((s) => (
-            <TouchableOpacity
-              key={s}
-              activeOpacity={0.75}
-              style={[
-                styles.speedBtn,
-                speed === s && { backgroundColor: theme.accent },
-              ]}
-              onPress={() => handleSpeedChange(s)}
-            >
-              <Text
+          {([0.5, 1, 1.5, 2] as const).map((s) => {
+            const isSel = speed === s;
+            return (
+              <TouchableOpacity
+                key={s}
+                activeOpacity={0.75}
                 style={[
-                  styles.speedBtnText,
-                  { color: speed === s ? '#000000' : '#CBD5E1', fontWeight: speed === s ? '900' : '600' },
+                  styles.speedPillBtn,
+                  isSel && { backgroundColor: theme.primary, borderColor: theme.primary },
                 ]}
+                onPress={() => handleSpeedChange(s)}
               >
-                {s}x
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.speedPillText,
+                    { color: isSel ? '#FFFFFF' : theme.muted, fontWeight: isSel ? '900' : '600' },
+                  ]}
+                >
+                  {s}×
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
+      </View>
+
+      {/* VitalPath Video Attribution & Form Guidance Footer */}
+      <View style={styles.attributionFooter}>
+        <Text style={[styles.attributionText, { color: theme.muted }]}>
+          Demonstration verified with VitalPath & wger sports physiology guidelines (CC-BY-SA 4.0).
+        </Text>
       </View>
     </View>
   );
@@ -776,18 +827,18 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
-    marginVertical: 12,
+    marginBottom: 16,
   },
   hudTopHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#0a0f1d',
+    backgroundColor: '#0A0F1D',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
@@ -803,9 +854,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF334B',
   },
   hudHeaderTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
   },
   hudRightPills: {
     flexDirection: 'row',
@@ -823,12 +874,134 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  sceneTabsBar: {
+    flexDirection: 'row',
+    backgroundColor: '#080D1A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  sceneTabBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  sceneTabText: {
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
   videoViewport: {
     width: '100%',
     height: 340,
     backgroundColor: '#020409',
     position: 'relative',
     overflow: 'hidden',
+  },
+  videoContainerInner: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    backgroundColor: '#000',
+  },
+  biomechanicsContainerInner: {
+    width: '100%',
+    height: '100%',
+  },
+  anatomySceneContainer: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#070B16',
+    padding: 12,
+  },
+  anatomySceneImage: {
+    width: '100%',
+    height: '65%',
+  },
+  anatomyInfoCard: {
+    width: '100%',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  anatomyCardTitle: {
+    color: '#00E5FF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  anatomyCardPrimary: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  anatomyCardSecondary: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  anatomyMeterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  anatomyMeterTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  anatomyMeterFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  anatomyMeterText: {
+    color: '#FF334B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  videoFormatSwitcherRow: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    gap: 6,
+    zIndex: 10,
+  },
+  formatSwitchBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  formatSwitchText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  externalYtBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 0, 0, 0.85)',
+  },
+  externalYtText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   imageMotionContainer: {
     width: '100%',
@@ -889,47 +1062,17 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
-  phaseOverlayCard: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
-    backgroundColor: 'rgba(10, 15, 29, 0.88)',
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  phaseBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 3,
-  },
-  phaseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  phaseTitleText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  phaseDescText: {
-    color: '#94A3B8',
-    fontSize: 11,
-  },
   headsChipBar: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#0a0f1d',
+    paddingVertical: 8,
+    backgroundColor: '#0A0F1D',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
   headsLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
     marginBottom: 6,
   },
   headsChipList: {
@@ -938,80 +1081,105 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
   },
   headPillText: {
-    fontSize: 11,
+    fontSize: 10,
   },
   phaseTimelineRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#0a0f1d',
+    paddingVertical: 8,
+    backgroundColor: '#080C17',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
   timelineStepBlock: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   timelineStepText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
   playbackControlsFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#060913',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   playPauseBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   playPauseBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.8,
+  },
+  replayBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  replayBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   speedPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   speedLabel: {
     fontSize: 10,
     fontWeight: '800',
     marginRight: 2,
   },
-  speedBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  speedPillBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
-  speedBtnText: {
-    fontSize: 11,
+  speedPillText: {
+    fontSize: 10,
+  },
+  attributionFooter: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: '#04070E',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  attributionText: {
+    fontSize: 9,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   miniContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    borderRadius: 10,
+    width: 60,
+    height: 60,
+    borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#04070F',
   },
   miniImage: {
     width: '100%',
@@ -1023,9 +1191,9 @@ const styles = StyleSheet.create({
     left: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 5,
+    gap: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: 4,
   },
@@ -1033,11 +1201,11 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FF334B',
+    backgroundColor: '#00E5FF',
   },
   miniLiveText: {
     color: '#FFFFFF',
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: '900',
   },
 });

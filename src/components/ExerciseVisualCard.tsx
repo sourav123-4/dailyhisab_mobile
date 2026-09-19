@@ -29,6 +29,7 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
     MUSCLE_GROUPS_META.find((m) => m.id === exercise.muscleGroup) || MUSCLE_GROUPS_META[0];
 
   const exerciseImage =
+    (exercise.thumbnailUrl ? { uri: exercise.thumbnailUrl } : null) ||
     EXERCISE_3D_VIDEOS[exercise.id] ||
     MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] ||
     MUSCLE_ANATOMY_IMAGES.arms;
@@ -56,7 +57,9 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
 
           <View style={styles.playOverlayBadge}>
             <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
-            <Text style={styles.playOverlayText}>3D VIDEO</Text>
+            <Text style={styles.playOverlayText}>
+              {exercise.videoUrl || exercise.youtubeId ? 'HD VIDEO' : '3D VIDEO'}
+            </Text>
           </View>
         </View>
 
