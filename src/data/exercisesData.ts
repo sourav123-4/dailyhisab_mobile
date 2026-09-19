@@ -38,56 +38,250 @@ export const EXERCISE_3D_VIDEOS: Record<string, any> = {
   legs_romanian_deadlift: require('../../assets/exercise_deadlift_3d.jpg'),
 };
 
-export const ARMS_PARTS_BREAKDOWN = [
-  {
-    id: 'biceps_long_head',
-    name: 'Biceps (Long Head / Outer Peak)',
-    target: 'Builds vertical bicep peak height',
-    color: '#FF4757',
-    primaryExerciseId: 'arms_barbell_curl',
-    exercises: ['Barbell Bicep Curl', 'Incline Dumbbell Curl'],
-  },
-  {
-    id: 'biceps_short_head',
-    name: 'Biceps (Short Head / Inner Width)',
-    target: 'Adds thickness and bicep width',
-    color: '#FF6B81',
-    primaryExerciseId: 'arms_incline_dumbbell_curl',
-    exercises: ['Incline Dumbbell Curl', 'Barbell Bicep Curl'],
-  },
-  {
-    id: 'brachialis',
-    name: 'Brachialis (Under-Arm Muscle)',
-    target: 'Pushes bicep higher from underneath',
-    color: '#FFA502',
-    primaryExerciseId: 'arms_dumbbell_hammer_curl',
-    exercises: ['Dumbbell Hammer Curl'],
-  },
-  {
-    id: 'triceps_lateral_head',
-    name: 'Triceps (Lateral Head / Outer Horseshoe)',
-    target: 'Creates the signature 3D arm horseshoe curve',
-    color: '#00E5FF',
-    primaryExerciseId: 'arms_cable_tricep_pushdown',
-    exercises: ['Cable Rope Tricep Pushdown'],
-  },
-  {
-    id: 'triceps_long_head',
-    name: 'Triceps (Long Head / Inner Mass)',
-    target: 'Largest section of upper arm mass (60% volume)',
-    color: '#2ED573',
-    primaryExerciseId: 'arms_overhead_tricep_extension',
-    exercises: ['Overhead Dumbbell Triceps Extension', 'Barbell Skullcrushers'],
-  },
-  {
-    id: 'forearms',
-    name: 'Forearms & Grip (Brachioradialis & Flexors)',
-    target: 'Wrist stability, grip power & vascularity',
-    color: '#9B51E0',
-    primaryExerciseId: 'arms_dumbbell_hammer_curl',
-    exercises: ['Dumbbell Hammer Curl'],
-  },
-];
+export const ALL_MUSCLE_PARTS_BREAKDOWN: Record<
+  MuscleGroup,
+  Array<{
+    id: string;
+    name: string;
+    target: string;
+    color: string;
+    primaryExerciseId: string;
+    exercises: string[];
+  }>
+> = {
+  arms: [
+    {
+      id: 'biceps_long_head',
+      name: 'Biceps (Long Head / Outer Peak)',
+      target: 'Builds vertical bicep peak height & arm curvature',
+      color: '#FF4757',
+      primaryExerciseId: 'arms_barbell_curl',
+      exercises: ['Barbell Bicep Curl', 'Incline Dumbbell Curl'],
+    },
+    {
+      id: 'biceps_short_head',
+      name: 'Biceps (Short Head / Inner Width)',
+      target: 'Adds inner thickness and front double bicep density',
+      color: '#FF6B81',
+      primaryExerciseId: 'arms_incline_dumbbell_curl',
+      exercises: ['Incline Dumbbell Curl', 'Barbell Bicep Curl'],
+    },
+    {
+      id: 'brachialis',
+      name: 'Brachialis (Under-Arm Muscle)',
+      target: 'Pushes bicep higher from underneath and widens upper arm',
+      color: '#FFA502',
+      primaryExerciseId: 'arms_dumbbell_hammer_curl',
+      exercises: ['Dumbbell Hammer Curl'],
+    },
+    {
+      id: 'triceps_lateral_head',
+      name: 'Triceps (Lateral Head / Outer Horseshoe)',
+      target: 'Creates the signature 3D arm horseshoe sweep',
+      color: '#00E5FF',
+      primaryExerciseId: 'arms_cable_tricep_pushdown',
+      exercises: ['Cable Rope Tricep Pushdown'],
+    },
+    {
+      id: 'triceps_long_head',
+      name: 'Triceps (Long Head / Inner Mass)',
+      target: 'Largest portion of upper arm (60% total arm volume)',
+      color: '#2ED573',
+      primaryExerciseId: 'arms_overhead_tricep_extension',
+      exercises: ['Overhead Dumbbell Triceps Extension', 'Barbell Skullcrushers'],
+    },
+    {
+      id: 'forearms',
+      name: 'Forearms & Grip (Brachioradialis & Flexors)',
+      target: 'Wrist stability, grip power & lower arm vascularity',
+      color: '#9B51E0',
+      primaryExerciseId: 'arms_dumbbell_hammer_curl',
+      exercises: ['Dumbbell Hammer Curl'],
+    },
+  ],
+  chest: [
+    {
+      id: 'chest_upper',
+      name: 'Upper Chest (Clavicular Head)',
+      target: 'Shelf fullness under collarbones & upper torso armor',
+      color: '#FFA502',
+      primaryExerciseId: 'chest_incline_dumbbell_press',
+      exercises: ['Incline Dumbbell Press'],
+    },
+    {
+      id: 'chest_mid',
+      name: 'Mid Chest (Sternal Head)',
+      target: 'Massive overall chest thickness & pushing power',
+      color: '#FF4757',
+      primaryExerciseId: 'chest_barbell_bench_press',
+      exercises: ['Barbell Bench Press'],
+    },
+    {
+      id: 'chest_lower',
+      name: 'Lower Chest (Abdominal Head)',
+      target: 'Crisp underline separation from abdominal wall',
+      color: '#2ED573',
+      primaryExerciseId: 'chest_barbell_bench_press',
+      exercises: ['Barbell Bench Press', 'Parallel Bar Dips'],
+    },
+    {
+      id: 'chest_inner',
+      name: 'Inner Squeeze & Serratus Anterior',
+      target: 'Deep pectoral cleavage line & ribcage box cuts',
+      color: '#00E5FF',
+      primaryExerciseId: 'chest_cable_crossover',
+      exercises: ['Standing Cable Crossover'],
+    },
+  ],
+  back: [
+    {
+      id: 'back_lats',
+      name: 'Latissimus Dorsi (Lats / V-Taper)',
+      target: 'Creates wide wings, narrow waist illusion & pulling strength',
+      color: '#2ED573',
+      primaryExerciseId: 'back_lat_pulldown',
+      exercises: ['Lat Pulldown', 'Wide Grip Pull-Ups'],
+    },
+    {
+      id: 'back_mid',
+      name: 'Rhomboids & Mid-Back Thickness',
+      target: 'Dense 3D back ridges and scapular retraction',
+      color: '#00E5FF',
+      primaryExerciseId: 'back_bent_over_row',
+      exercises: ['Barbell Bent-Over Row'],
+    },
+    {
+      id: 'back_traps',
+      name: 'Upper & Mid Trapezius',
+      target: 'Neck armor, powerful frame & heavy lockouts',
+      color: '#FFA502',
+      primaryExerciseId: 'back_lat_pulldown',
+      exercises: ['Lat Pulldown', 'Barbell Shrugs'],
+    },
+    {
+      id: 'back_erectors',
+      name: 'Spinal Erectors (Lower Back Core)',
+      target: 'Posterior chain pillar, lumbar stability & deadlift power',
+      color: '#FF4757',
+      primaryExerciseId: 'back_barbell_deadlift',
+      exercises: ['Barbell Deadlift'],
+    },
+  ],
+  shoulders: [
+    {
+      id: 'delts_front',
+      name: 'Anterior Deltoid (Front Head)',
+      target: 'Overhead pressing power and chest-to-shoulder tie-in',
+      color: '#FF6B81',
+      primaryExerciseId: 'shoulders_barbell_overhead_press',
+      exercises: ['Barbell Overhead Press'],
+    },
+    {
+      id: 'delts_lateral',
+      name: 'Lateral Deltoid (Side Boulder Caps)',
+      target: 'Maximum shoulder width and broad aesthetic silhouette',
+      color: '#00E5FF',
+      primaryExerciseId: 'shoulders_dumbbell_lateral_raise',
+      exercises: ['Dumbbell Lateral Raise'],
+    },
+    {
+      id: 'delts_rear',
+      name: 'Posterior Deltoid (Rear 3D Cap)',
+      target: 'Balances rotator cuff, prevents rounding & creates 3D depth',
+      color: '#2ED573',
+      primaryExerciseId: 'shoulders_dumbbell_lateral_raise',
+      exercises: ['Dumbbell Lateral Raise', 'Rear Delt Flyes'],
+    },
+  ],
+  legs: [
+    {
+      id: 'legs_quads',
+      name: 'Quadriceps (Teardrop & Outer Sweep)',
+      target: 'Vastus medialis teardrop & front thigh mass',
+      color: '#9B51E0',
+      primaryExerciseId: 'legs_barbell_squat',
+      exercises: ['Barbell Back Squat', 'Leg Press'],
+    },
+    {
+      id: 'legs_hamstrings',
+      name: 'Hamstrings (Posterior Chain)',
+      target: 'Knee flexion, hip hinge strength & athletic speed',
+      color: '#FF4757',
+      primaryExerciseId: 'legs_romanian_deadlift',
+      exercises: ['Romanian Deadlift'],
+    },
+    {
+      id: 'legs_glutes',
+      name: 'Gluteus Maximus & Medius',
+      target: 'Pelvic power, sprint propulsion & posture foundation',
+      color: '#FFA502',
+      primaryExerciseId: 'legs_barbell_squat',
+      exercises: ['Barbell Back Squat'],
+    },
+    {
+      id: 'legs_calves',
+      name: 'Calves (Gastrocnemius & Soleus)',
+      target: 'Diamond calf definition & ankle spring resilience',
+      color: '#00E5FF',
+      primaryExerciseId: 'legs_leg_press',
+      exercises: ['Leg Press Calf Extension'],
+    },
+  ],
+  abs: [
+    {
+      id: 'abs_upper',
+      name: 'Upper Rectus Abdominis',
+      target: 'Defines top 4 abdominal bricks and torso flexion',
+      color: '#00E5FF',
+      primaryExerciseId: 'abs_straight_arm_crunch',
+      exercises: ['Straight Arm Crunch'],
+    },
+    {
+      id: 'abs_lower',
+      name: 'Lower Rectus Abdominis (V-Cut Base)',
+      target: 'Pelvic tilt control and lower ab separation',
+      color: '#2ED573',
+      primaryExerciseId: 'abs_hanging_leg_raise',
+      exercises: ['Hanging Leg Raise'],
+    },
+    {
+      id: 'abs_core',
+      name: 'Deep Core & Transverse Abdominis',
+      target: 'Internal corset, flat stomach vacuum & spine bracing',
+      color: '#FFA502',
+      primaryExerciseId: 'abs_plank',
+      exercises: ['Core Plank Hold'],
+    },
+  ],
+  fullbody: [
+    {
+      id: 'full_posterior',
+      name: 'Posterior Chain Kinetic Loop',
+      target: 'Integrated power: traps, lats, glutes, hamstrings',
+      color: '#FF4757',
+      primaryExerciseId: 'back_barbell_deadlift',
+      exercises: ['Barbell Deadlift'],
+    },
+    {
+      id: 'full_squat',
+      name: 'Squat Compound Synergy',
+      target: 'Total lower body + core axial loading',
+      color: '#9B51E0',
+      primaryExerciseId: 'legs_barbell_squat',
+      exercises: ['Barbell Back Squat'],
+    },
+    {
+      id: 'full_press',
+      name: 'Push / Press Kinetic Chain',
+      target: 'Chest, anterior deltoids & tricep extension sync',
+      color: '#00E5FF',
+      primaryExerciseId: 'chest_barbell_bench_press',
+      exercises: ['Barbell Bench Press'],
+    },
+  ],
+};
+
+export const ARMS_PARTS_BREAKDOWN = ALL_MUSCLE_PARTS_BREAKDOWN.arms;
 
 export const MUSCLE_GROUPS_META: {
   id: MuscleGroup;

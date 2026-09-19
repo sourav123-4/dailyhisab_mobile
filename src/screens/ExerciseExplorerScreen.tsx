@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -14,18 +15,38 @@ import { MuscleGroup, Equipment, Exercise } from '../types/fitness';
 import { MuscleAnatomyViewer } from '../components/MuscleAnatomyViewer';
 import { ExerciseVisualCard } from '../components/ExerciseVisualCard';
 import { ExerciseDetailModal } from './ExerciseDetailModal';
-import { ARMS_PARTS_BREAKDOWN } from '../data/exercisesData';
+import { ALL_MUSCLE_PARTS_BREAKDOWN } from '../data/exercisesData';
+
+const muscleCategories: { id: MuscleGroup; label: string; emoji: string }[] = [
+  { id: 'chest', label: 'Chest', emoji: '🏋️' },
+  { id: 'back', label: 'Back', emoji: '🦅' },
+  { id: 'arms', label: 'Arms', emoji: '💪' },
+  { id: 'shoulders', label: 'Shoulders', emoji: '🥥' },
+  { id: 'legs', label: 'Legs', emoji: '🦵' },
+  { id: 'abs', label: 'Core', emoji: '⚡' },
+  { id: 'fullbody', label: 'Full Body', emoji: '🌐' },
+];
 
 export const ExerciseExplorerScreen = () => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { exercises, addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
 
-  const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup>('arms');
+  const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup>('chest');
   const [selectedEquipment, setSelectedEquipment] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeExerciseModal, setActiveExerciseModal] = useState<Exercise | null>(null);
   const [activeHighlightPart, setActiveHighlightPart] = useState<string | undefined>(undefined);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const equipmentOptions = [
     { id: 'all', label: 'All Gear' },
@@ -47,13 +68,23 @@ export const ExerciseExplorerScreen = () => {
     return matchesMuscle && matchesEquip && matchesSearch;
   });
 
+  const currentBreakdownParts = ALL_MUSCLE_PARTS_BREAKDOWN[selectedMuscle] || [];
+  const currentCategory = muscleCategories.find((c) => c.id === selectedMuscle) || muscleCategories[0];
+
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        <View>
-          <Text style={[styles.headerSub, { color: theme.muted }]}>3D ANATOMY & WORKOUT DIRECTORY</Text>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Muscle Explorer</Text>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.headerSub, { color: theme.muted }]}>3D MUSCULOSKELETAL ATLAS</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Anatomy & Biomechanics</Text>
+          </View>
+          <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+            <Text style={[styles.badgePillText, { color: theme.primary }]}>
+              {filteredExercises.length} Drills
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -62,6 +93,14 @@ export const ExerciseExplorerScreen = () => {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
         ListHeaderComponent={
           <View>
             {/* Search Bar */}
@@ -79,6 +118,68 @@ export const ExerciseExplorerScreen = () => {
                   <Text style={[styles.clearSearch, { color: theme.muted }]}>✕</Text>
                 </TouchableOpacity>
               ) : null}
+            </View>
+
+            {/* Muscle Group Horizontal Selector Tabs */}
+            <View style={styles.muscleTabsSection}>
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={muscleCategories}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.muscleTabsList}
+                renderItem={({ item }) => {
+                  const isSelected = selectedMuscle === item.id;
+                  const countForMuscle =
+                    item.id === 'fullbody'
+                      ? exercises.length
+                      : exercises.filter((e) => e.muscleGroup === item.id).length;
+
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      style={[
+                        styles.muscleTabCard,
+                        {
+                          backgroundColor: isSelected ? theme.primary : theme.surface,
+                          borderColor: isSelected ? theme.primary : theme.borderSoft,
+                        },
+                      ]}
+                      onPress={() => setSelectedMuscle(item.id)}
+                    >
+                      <Text style={styles.muscleTabEmoji}>{item.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.muscleTabLabel,
+                          {
+                            color: isSelected ? '#FFFFFF' : theme.text,
+                            fontWeight: isSelected ? '900' : '600',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.muscleCountBadge,
+                          {
+                            backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : theme.surfaceAlt,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.muscleCountText,
+                            { color: isSelected ? '#FFFFFF' : theme.muted },
+                          ]}
+                        >
+                          {countForMuscle}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
             </View>
 
             {/* Interactive 3D Anatomy Model */}
@@ -125,27 +226,34 @@ export const ExerciseExplorerScreen = () => {
               />
             </View>
 
-            {/* ARMS ALL PARTS 3D BREAKDOWN (When Arms is selected) */}
-            {selectedMuscle === 'arms' && (
-              <View style={[styles.armsBreakdownBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-                <View style={styles.armsBreakdownHeader}>
-                  <Text style={styles.armsEmoji}>💪</Text>
+            {/* ANATOMICAL REGIONAL BREAKDOWN FOR SELECTED MUSCLE */}
+            {currentBreakdownParts.length > 0 && (
+              <View style={[styles.breakdownBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+                <View style={styles.breakdownHeader}>
+                  <Text style={styles.breakdownEmoji}>{currentCategory.emoji}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.armsTitle, { color: theme.text }]}>ARMS - ALL ANATOMICAL PARTS</Text>
-                    <Text style={[styles.armsSub, { color: theme.muted }]}>Tap any part to view 3D biomechanical motion animation</Text>
+                    <Text style={[styles.breakdownTitle, { color: theme.text }]}>
+                      {currentCategory.label.toUpperCase()} - ANATOMICAL REGIONS
+                    </Text>
+                    <Text style={[styles.breakdownSub, { color: theme.muted }]}>
+                      Tap any muscle head to launch 3D human biomechanical execution
+                    </Text>
                   </View>
                 </View>
 
-                <View style={styles.armsGrid}>
-                  {ARMS_PARTS_BREAKDOWN.map((part) => (
+                <View style={styles.partsGrid}>
+                  {currentBreakdownParts.map((part) => (
                     <TouchableOpacity
                       key={part.id}
                       activeOpacity={0.75}
-                      style={[styles.armPartCard, { backgroundColor: theme.surface, borderColor: `${part.color}66` }]}
+                      style={[styles.partCard, { backgroundColor: theme.surface, borderColor: `${part.color}55` }]}
                       onPress={() => {
-                        const matchedEx = exercises.find((e) => e.id === part.primaryExerciseId) ||
+                        const matchedEx =
+                          exercises.find((e) => e.id === part.primaryExerciseId) ||
                           exercises.find((e) =>
-                            part.exercises.some((targetName) => e.name.toLowerCase().includes(targetName.toLowerCase()))
+                            part.exercises.some((targetName) =>
+                              e.name.toLowerCase().includes(targetName.toLowerCase())
+                            )
                           );
                         if (matchedEx) {
                           setActiveHighlightPart(part.id);
@@ -158,7 +266,7 @@ export const ExerciseExplorerScreen = () => {
                         <Text style={[styles.partName, { color: theme.text }]}>{part.name}</Text>
                         <Text style={[styles.partTarget, { color: theme.muted }]}>{part.target}</Text>
                         <View style={styles.partTagRow}>
-                          <Text style={[styles.partTag, { color: part.color }]}>⚡ 3D Biomechanical Motion ➔</Text>
+                          <Text style={[styles.partTag, { color: part.color }]}>⚡ 3D Human Execution ➔</Text>
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -170,7 +278,7 @@ export const ExerciseExplorerScreen = () => {
             {/* Count indicator */}
             <View style={styles.countRow}>
               <Text style={[styles.countText, { color: theme.text }]}>
-                {filteredExercises.length} {selectedMuscle.toUpperCase()} EXERCISES
+                {filteredExercises.length} {selectedMuscle.toUpperCase()} EXERCISES AVAILABLE
               </Text>
             </View>
           </View>
@@ -217,6 +325,11 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerSub: {
     fontSize: 10,
     fontWeight: '800',
@@ -226,6 +339,16 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.5,
+  },
+  badgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  badgePillText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   listContent: {
     padding: 16,
@@ -238,7 +361,7 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 4,
+    marginBottom: 12,
   },
   searchIcon: {
     fontSize: 14,
@@ -251,6 +374,36 @@ const styles = StyleSheet.create({
   clearSearch: {
     fontSize: 14,
     padding: 4,
+  },
+  muscleTabsSection: {
+    marginBottom: 14,
+  },
+  muscleTabsList: {
+    gap: 8,
+  },
+  muscleTabCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+  },
+  muscleTabEmoji: {
+    fontSize: 15,
+  },
+  muscleTabLabel: {
+    fontSize: 12.5,
+  },
+  muscleCountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  muscleCountText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   filterSection: {
     marginVertical: 12,
@@ -281,34 +434,34 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.8,
   },
-  armsBreakdownBox: {
+  breakdownBox: {
     borderRadius: 18,
     borderWidth: 1,
     padding: 14,
     marginVertical: 12,
   },
-  armsBreakdownHeader: {
+  breakdownHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginBottom: 12,
   },
-  armsEmoji: {
+  breakdownEmoji: {
     fontSize: 22,
   },
-  armsTitle: {
+  breakdownTitle: {
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
-  armsSub: {
+  breakdownSub: {
     fontSize: 11,
     marginTop: 1,
   },
-  armsGrid: {
+  partsGrid: {
     gap: 8,
   },
-  armPartCard: {
+  partCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     padding: 12,
