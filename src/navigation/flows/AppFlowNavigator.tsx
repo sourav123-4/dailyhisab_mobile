@@ -28,6 +28,7 @@ function TitanFitTabsNavigator() {
       tabBar={(props) => <TitanFitBottomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <TabNav.Screen name="Today" component={TodayWorkoutScreen} />

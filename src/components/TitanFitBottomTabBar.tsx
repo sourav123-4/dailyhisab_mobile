@@ -26,7 +26,12 @@ export const TitanFitBottomTabBar: React.FC<BottomTabBarProps> = ({
     };
   }, []);
 
-  if (isKeyboardVisible) {
+  const currentRoute = state.routes[state.index];
+  const currentOptions = descriptors[currentRoute?.key]?.options;
+  const isTabBarHiddenByOptions =
+    (currentOptions?.tabBarStyle as any)?.display === 'none';
+
+  if (isKeyboardVisible || isTabBarHiddenByOptions) {
     return null;
   }
 
@@ -177,22 +182,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centerHaloRing: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -34,
+    marginTop: -8,
   },
   centerFloatingButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 8,
   },
 });

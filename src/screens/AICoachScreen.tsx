@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
@@ -84,6 +85,7 @@ function TypingBubble({ theme }: { theme: any }) {
 export const AICoachScreen = () => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const navigation = useNavigation<any>();
   const { setAppMode } = useAppMode();
   const { aiChatHistory, sendAICoachQuery, profile } = useFitnessApp();
   const [inputText, setInputText] = useState('');
@@ -107,6 +109,7 @@ export const AICoachScreen = () => {
     const showSub = Keyboard.addListener(showEvent, (e) => {
       setKeyboardHeight(e.endCoordinates.height);
       setKeyboardVisible(true);
+      navigation.setOptions({ tabBarStyle: { display: 'none' } });
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -115,13 +118,15 @@ export const AICoachScreen = () => {
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
       setKeyboardVisible(false);
+      navigation.setOptions({ tabBarStyle: undefined });
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
+      navigation.setOptions({ tabBarStyle: undefined });
     };
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
     if (aiChatHistory.length > 0) {
@@ -287,8 +292,8 @@ export const AICoachScreen = () => {
           {
             backgroundColor: theme.surface,
             borderTopColor: theme.borderSoft,
-            paddingBottom: isKeyboardVisible ? 10 : Math.max(insets.bottom, 10),
-            marginBottom: Platform.OS === 'android' && keyboardHeight > 0 ? keyboardHeight + 48 : 0,
+            paddingBottom: 12,
+            marginBottom: 0,
           },
         ]}
       >
@@ -298,6 +303,13 @@ export const AICoachScreen = () => {
           placeholderTextColor={theme.muted}
           value={inputText}
           onChangeText={setInputText}
+          onFocus={() => {
+            setKeyboardVisible(true);
+            navigation.setOptions({ tabBarStyle: { display: 'none' } });
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 120);
+          }}
           multiline
           maxLength={300}
         />
