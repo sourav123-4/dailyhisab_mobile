@@ -293,61 +293,94 @@ export async function analyzeFoodFromImage(
 
   // If Gemini API Key is configured and we have base64 data, use Gemini Vision
   if (apiKey && base64Data) {
-    try {
-      const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text:
-                      'Analyze this food image for a fitness and bodybuilding macro tracker app. ' +
-                      'Identify the dish, ingredients, and portion size. Output valid JSON ONLY with exact keys: ' +
-                      '{"name": string, "portion": string, "calories": number, "protein": number, "carbs": number, "fats": number, "confidenceScore": number, "detectedItems": string[], "healthNote": string}',
-                  },
-                  {
-                    inlineData: {
-                      mimeType: 'image/jpeg',
-                      data: cleanBase64,
-                    },
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.2,
-            },
-          }),
-        }
-      );
+    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const modelCandidates = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
 
-      if (response.ok) {
-        const json = await response.json();
-        const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          const parsed = JSON.parse(rawText);
-          return {
-            name: parsed.name || 'Scanned Fitness Meal',
-            portion: parsed.portion || '1 plate / 250g',
-            calories: Number(parsed.calories) || 450,
-            protein: Number(parsed.protein) || 35,
-            carbs: Number(parsed.carbs) || 40,
-            fats: Number(parsed.fats) || 12,
-            confidenceScore: Number(parsed.confidenceScore) || 94,
-            detectedItems: Array.isArray(parsed.detectedItems) ? parsed.detectedItems : [parsed.name],
-            imageUri,
-            healthNote: parsed.healthNote || 'AI Vision detected meal composition.',
-          };
+    for (const model of modelCandidates) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text:
+                        'You are an elite sports nutrition scientist and fitness AI analyzing a real meal photo clicked by an athlete.\n' +
+                        'Inspect the visual image thoroughly:\n' +
+                        '1. Identify all food items, dishes, meats, grains, vegetables, and drinks visible in the photo.\n' +
+                        '2. Estimate the realistic portion weight (e.g. "200g chicken + 150g rice + salad").\n' +
+                        '3. Calculate precise nutrition values:\n' +
+                        '   - calories (total energy in kcal)\n' +
+                        '   - protein (grams of protein)\n' +
+                        '   - carbs (grams of total carbohydrates)\n' +
+                        '   - fats (grams of total dietary fats)\n' +
+                        '   Ensure calories roughly match (protein * 4 + carbs * 4 + fats * 9).\n' +
+                        '4. Provide a confidence score (between 85 and 99).\n' +
+                        '5. Output STRICT JSON ONLY with exact keys:\n' +
+                        '{\n' +
+                        '  "name": "Title of the primary dish/meal",\n' +
+                        '  "portion": "Estimated portion (e.g. 1 bowl / 300g)",\n' +
+                        '  "calories": 485,\n' +
+                        '  "protein": 42,\n' +
+                        '  "carbs": 50,\n' +
+                        '  "fats": 12,\n' +
+                        '  "confidenceScore": 95,\n' +
+                        '  "detectedItems": ["Item 1", "Item 2", "Item 3"],\n' +
+                        '  "healthNote": "Sports nutrition summary (e.g. High protein meal ideal for muscle repair)"\n' +
+                        '}',
+                    },
+                    {
+                      inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64,
+                      },
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 0.2,
+              },
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const json = await response.json();
+          const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            const parsed = JSON.parse(rawText);
+            const cal = Math.round(Number(parsed.calories)) || 450;
+            const prot = Math.round(Number(parsed.protein)) || 35;
+            const carb = Math.round(Number(parsed.carbs)) || 40;
+            const fat = Math.round(Number(parsed.fats)) || 12;
+            return {
+              name: parsed.name || 'Scanned Meal',
+              portion: parsed.portion || '1 serving (~280g)',
+              calories: cal,
+              protein: prot,
+              carbs: carb,
+              fats: fat,
+              confidenceScore: Math.min(99, Math.max(82, Number(parsed.confidenceScore) || 94)),
+              detectedItems: Array.isArray(parsed.detectedItems) && parsed.detectedItems.length > 0
+                ? parsed.detectedItems
+                : [parsed.name || 'Macro-Balanced Meal'],
+              imageUri,
+              healthNote: parsed.healthNote || 'AI Vision analyzed photo and calculated caloric density.',
+            };
+          }
         }
+      } catch (err) {
+        console.warn(`Vision model ${model} attempt failed:`, err);
       }
-    } catch (err) {
-      console.warn('Gemini vision request failed, falling back to local nutrition engine:', err);
     }
   }
 

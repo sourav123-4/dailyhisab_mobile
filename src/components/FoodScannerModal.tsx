@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { MealType } from '../types/fitness';
 import {
@@ -40,52 +41,122 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<FoodAnalysisResult | null>(null);
   const [portionMultiplier, setPortionMultiplier] = useState(1);
-  const [customImageUrl, setCustomImageUrl] = useState('');
-  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [editableName, setEditableName] = useState('');
+  const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
 
   const resetState = () => {
+    setActiveTab('photo');
     setAnalysisResult(null);
     setInputText('');
     setIsScanning(false);
     setPortionMultiplier(1);
-    setShowUrlInput(false);
-    setCustomImageUrl('');
+    setEditableName('');
+    setCapturedPhotoUri(null);
   };
+
+  useEffect(() => {
+    if (visible) {
+      resetState();
+      setSelectedMealType(defaultMealType);
+    }
+  }, [visible, defaultMealType]);
 
   const handleClose = () => {
     resetState();
     onClose();
   };
 
-  // Analyze preset meal photo
-  const handleSelectPreset = async (preset: PresetFoodMeal) => {
+  // Launch device Camera to click a real food photo
+  const handleTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Camera Permission Required',
+          'Please allow camera permissions in your device settings to photograph your meals.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.75,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        await processRealFoodPhoto(asset.uri, asset.base64 || undefined);
+      }
+    } catch (e: any) {
+      console.warn('Camera error:', e);
+      Alert.alert('Camera Error', 'Could not open camera. Please try choosing from your gallery instead.');
+    }
+  };
+
+  // Pick an existing food photo from gallery
+  const handlePickFromGallery = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Gallery Permission Required',
+          'Please allow photo library access in your device settings to select food photos.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.75,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        await processRealFoodPhoto(asset.uri, asset.base64 || undefined);
+      }
+    } catch (e: any) {
+      console.warn('Gallery error:', e);
+      Alert.alert('Gallery Error', 'Could not open photo gallery. Please try again.');
+    }
+  };
+
+  // Analyze the real food image using AI Vision
+  const processRealFoodPhoto = async (uri: string, base64?: string) => {
     setIsScanning(true);
     setAnalysisResult(null);
+    setCapturedPhotoUri(uri);
     try {
-      // Simulate real-time computer vision scan
-      await new Promise((r) => setTimeout(r, 600));
-      const res = await analyzeFoodFromImage(preset.imageUri, undefined, preset.name);
+      const res = await analyzeFoodFromImage(uri, base64);
       setAnalysisResult(res);
-      setSelectedMealType(preset.mealType);
+      setEditableName(res.name);
       setPortionMultiplier(1);
     } catch (e) {
-      Alert.alert('Analysis Failed', 'Could not analyze food image. Please try again.');
+      Alert.alert('Scan Failed', 'Could not process photo. You can enter the meal name directly to calculate macros.');
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Analyze custom image url
-  const handleAnalyzeCustomUrl = async () => {
-    if (!customImageUrl.trim()) return;
+  // Analyze preset meal photo
+  const handleSelectPreset = async (preset: PresetFoodMeal) => {
     setIsScanning(true);
+    setAnalysisResult(null);
+    setCapturedPhotoUri(preset.imageUri);
     try {
-      const res = await analyzeFoodFromImage(customImageUrl.trim());
+      await new Promise((r) => setTimeout(r, 600));
+      const res = await analyzeFoodFromImage(preset.imageUri, undefined, preset.name);
       setAnalysisResult(res);
+      setEditableName(res.name);
+      setSelectedMealType(preset.mealType);
       setPortionMultiplier(1);
-      setShowUrlInput(false);
     } catch (e) {
-      Alert.alert('Analysis Failed', 'Could not analyze food image URL.');
+      Alert.alert('Analysis Failed', 'Could not analyze food image. Please try again.');
     } finally {
       setIsScanning(false);
     }
@@ -103,6 +174,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
       await new Promise((r) => setTimeout(r, 350));
       const res = analyzeFoodFromName(query);
       setAnalysisResult(res);
+      setEditableName(res.name);
       setPortionMultiplier(1);
     } catch (e) {
       Alert.alert('Analysis Failed', 'Could not compute nutrition for this meal.');
@@ -119,18 +191,19 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
     const calcProtein = Math.round(analysisResult.protein * portionMultiplier);
     const calcCarbs = Math.round(analysisResult.carbs * portionMultiplier);
     const calcFats = Math.round(analysisResult.fats * portionMultiplier);
+    const finalMealName = editableName.trim() || analysisResult.name;
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     await logMeal({
-      name: analysisResult.name,
+      name: finalMealName,
       mealType: selectedMealType,
       calories: calcCalories,
       protein: calcProtein,
       carbs: calcCarbs,
       fats: calcFats,
-      imageUri: analysisResult.imageUri,
+      imageUri: capturedPhotoUri || analysisResult.imageUri,
       portion: portionMultiplier === 1 ? analysisResult.portion : `${portionMultiplier}x (${analysisResult.portion})`,
       timestamp: timeStr,
       confidenceScore: analysisResult.confidenceScore,
@@ -140,7 +213,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 
     Alert.alert(
       'Meal Logged! 🥗',
-      `Added ${analysisResult.name} (${calcCalories} kcal, ${calcProtein}g P, ${calcCarbs}g C) to today's ${selectedMealType.toUpperCase()}.`,
+      `Added ${finalMealName} (${calcCalories} kcal, ${calcProtein}g P, ${calcCarbs}g C, ${calcFats}g F) to today's ${selectedMealType.toUpperCase()}.`,
       [{ text: 'Great!', onPress: handleClose }]
     );
   };
@@ -203,44 +276,53 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
             {/* PHOTO SCAN TAB */}
             {activeTab === 'photo' && !analysisResult && (
               <View>
-                <View style={styles.infoBox}>
-                  <Text style={styles.infoIcon}>🔬</Text>
-                  <Text style={styles.infoBoxText}>
-                    Select a meal photo below or enter an image URL to automatically detect foods and calculate calories, protein, carbs & fats with sports nutrition AI.
-                  </Text>
-                </View>
-
-                {/* Custom Image URL Option */}
-                <View style={styles.customUrlSection}>
-                  {showUrlInput ? (
-                    <View style={styles.urlInputRow}>
-                      <TextInput
-                        style={styles.urlInput}
-                        placeholder="Paste image URL (https://...)"
-                        placeholderTextColor="#64748B"
-                        value={customImageUrl}
-                        onChangeText={setCustomImageUrl}
-                        autoCapitalize="none"
-                      />
-                      <TouchableOpacity
-                        style={styles.scanUrlBtn}
-                        onPress={handleAnalyzeCustomUrl}
-                      >
-                        <Text style={styles.scanUrlBtnText}>Scan</Text>
-                      </TouchableOpacity>
+                {/* REAL CAMERA / GALLERY ACTION BUTTONS */}
+                <View style={styles.scanActionsContainer}>
+                  <TouchableOpacity
+                    style={styles.cameraPrimaryBtn}
+                    onPress={handleTakePhoto}
+                    activeOpacity={0.8}
+                    disabled={isScanning}
+                  >
+                    <View style={styles.cameraBtnIconBox}>
+                      <Text style={{ fontSize: 26 }}>📷</Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.openUrlBtn}
-                      onPress={() => setShowUrlInput(true)}
-                    >
-                      <Text style={styles.openUrlBtnText}>🔗 Enter custom image link or photo URL</Text>
-                    </TouchableOpacity>
-                  )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cameraBtnTitle}>Take Meal Photo (Camera)</Text>
+                      <Text style={styles.cameraBtnSubtitle}>
+                        Click a real photo of your food with camera to scan calories & macros
+                      </Text>
+                    </View>
+                    <Text style={styles.cameraBtnArrow}>➔</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gallerySecondaryBtn}
+                    onPress={handlePickFromGallery}
+                    activeOpacity={0.8}
+                    disabled={isScanning}
+                  >
+                    <View style={styles.galleryBtnIconBox}>
+                      <Text style={{ fontSize: 22 }}>🖼️</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.galleryBtnTitle}>Upload Photo from Gallery</Text>
+                      <Text style={styles.galleryBtnSubtitle}>
+                        Select an existing food photo from your photo library
+                      </Text>
+                    </View>
+                    <Text style={styles.galleryBtnArrow}>➔</Text>
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={styles.sectionHeading}>📸 Tap Any Meal Photo to Scan & Calculate:</Text>
+                {/* Section Separator */}
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR TEST WITH ATHLETE PRESET MEALS</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
+                {/* Preset Meal Photos */}
                 <View style={styles.presetsGrid}>
                   {PRESET_FITNESS_MEALS.map((preset) => (
                     <TouchableOpacity
@@ -332,10 +414,16 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
             {/* SCANNING RADAR LOADER */}
             {isScanning && (
               <View style={styles.scanningBox}>
-                <ActivityIndicator size="large" color="#00F0FF" />
-                <Text style={styles.scanningTitle}>Scanning Food & Calculating Macros...</Text>
+                {capturedPhotoUri && (
+                  <View style={styles.scanningImagePreviewBox}>
+                    <Image source={{ uri: capturedPhotoUri }} style={styles.scanningImagePreview} />
+                    <View style={styles.scanningLaserBeam} />
+                  </View>
+                )}
+                <ActivityIndicator size="large" color="#00F0FF" style={{ marginTop: 12 }} />
+                <Text style={styles.scanningTitle}>🔬 AI Vision Analyzing Real Photo...</Text>
                 <Text style={styles.scanningSubtitle}>
-                  Analyzing portion weight, caloric density & sports nutrition profile
+                  Detecting food components, portion volume & calculating Calories, Protein, Carbs and Fats
                 </Text>
               </View>
             )}
@@ -344,24 +432,54 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
             {analysisResult && (
               <View style={styles.resultContainer}>
                 {/* Image Preview if available */}
-                {analysisResult.imageUri && (
-                  <View style={styles.resultImageWrapper}>
-                    <Image
-                      source={{ uri: analysisResult.imageUri }}
-                      style={styles.resultImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.aiBadge}>
-                      <Text style={styles.aiBadgeText}>
-                        ✓ {analysisResult.confidenceScore}% AI Confidence
-                      </Text>
+                {(capturedPhotoUri || analysisResult.imageUri) && (
+                  <View>
+                    <View style={styles.resultImageWrapper}>
+                      <Image
+                        source={{ uri: capturedPhotoUri || analysisResult.imageUri }}
+                        style={styles.resultImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.aiBadge}>
+                        <Text style={styles.aiBadgeText}>
+                          ✓ {analysisResult.confidenceScore}% AI Confidence
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Quick Retake or Gallery Switch */}
+                    <View style={styles.quickPhotoSwitchRow}>
+                      <TouchableOpacity
+                        style={styles.quickPhotoSwitchBtn}
+                        onPress={handleTakePhoto}
+                        disabled={isScanning}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.quickPhotoSwitchBtnText}>📷 Click New Photo</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.quickPhotoSwitchBtn, { backgroundColor: '#1E293B', borderColor: '#475569' }]}
+                        onPress={handlePickFromGallery}
+                        disabled={isScanning}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.quickPhotoSwitchBtnText}>🖼️ Pick Gallery</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 )}
 
-                {/* Food Header */}
+                {/* Editable Food Title & Portion */}
                 <View style={styles.foodHeaderCard}>
-                  <Text style={styles.foodTitle}>{analysisResult.name}</Text>
+                  <Text style={styles.editTitleLabel}>DETECTED MEAL (TAP TO EDIT NAME):</Text>
+                  <TextInput
+                    style={styles.editableNameInput}
+                    value={editableName}
+                    onChangeText={setEditableName}
+                    placeholder="Meal Name"
+                    placeholderTextColor="#64748B"
+                  />
                   <Text style={styles.foodPortion}>
                     Portion: {analysisResult.portion}
                   </Text>
@@ -449,39 +567,32 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                   </View>
                 )}
 
-                {/* Meal Type Picker */}
+                {/* Meal Type Category Selector */}
                 <View style={styles.mealTypeSection}>
                   <Text style={styles.mealTypeLabel}>LOG TO MEAL CATEGORY:</Text>
                   <View style={styles.mealTypeRow}>
-                    {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((type) => {
-                      const icons: Record<MealType, string> = {
-                        breakfast: '🍳',
-                        lunch: '🥗',
-                        dinner: '🥩',
-                        snack: '🍎',
-                      };
-                      const isSelected = selectedMealType === type;
-                      return (
-                        <TouchableOpacity
-                          key={type}
+                    {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((type) => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.mealTypeBtn,
+                          selectedMealType === type && styles.mealTypeBtnSelected,
+                        ]}
+                        onPress={() => setSelectedMealType(type)}
+                      >
+                        <Text style={{ fontSize: 13, marginRight: 4 }}>
+                          {type === 'breakfast' ? '🍳' : type === 'lunch' ? '🥗' : type === 'dinner' ? '🥩' : '🍎'}
+                        </Text>
+                        <Text
                           style={[
-                            styles.mealTypeBtn,
-                            isSelected && styles.mealTypeBtnSelected,
+                            styles.mealTypeBtnText,
+                            selectedMealType === type && styles.mealTypeBtnTextSelected,
                           ]}
-                          onPress={() => setSelectedMealType(type)}
                         >
-                          <Text style={{ fontSize: 13, marginRight: 2 }}>{icons[type]}</Text>
-                          <Text
-                            style={[
-                              styles.mealTypeBtnText,
-                              isSelected && styles.mealTypeBtnTextSelected,
-                            ]}
-                          >
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </View>
 
@@ -510,34 +621,36 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(5, 8, 16, 0.85)',
     justifyContent: 'flex-end',
   },
   container: {
     backgroundColor: '#0F172A',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    height: '90%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '92%',
     paddingTop: 16,
+    paddingBottom: 28,
     borderWidth: 1,
     borderColor: '#1E293B',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#1E293B',
   },
   headerLeft: {
-    gap: 4,
+    flex: 1,
   },
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    marginBottom: 4,
   },
   headerBadgeIcon: {
     fontSize: 12,
@@ -558,18 +671,18 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: '#1E293B',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   closeButtonText: {
-    color: '#FFFFFF',
+    color: '#94A3B8',
     fontSize: 16,
     fontWeight: '700',
   },
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingVertical: 12,
     gap: 10,
   },
   tabButton: {
@@ -577,8 +690,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: '#1E293B',
     borderWidth: 1,
@@ -601,77 +714,107 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   scrollContent: {
-    flex: 1,
+    paddingHorizontal: 20,
   },
   scrollInner: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 30,
   },
-  infoBox: {
+  scanActionsContainer: {
+    gap: 12,
+    marginVertical: 14,
+  },
+  cameraPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(0, 240, 255, 0.08)',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.25)',
-    marginBottom: 16,
-  },
-  infoIcon: {
-    fontSize: 20,
-  },
-  infoBoxText: {
-    flex: 1,
-    color: '#E2E8F0',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  customUrlSection: {
-    marginBottom: 16,
-  },
-  openUrlBtn: {
-    paddingVertical: 6,
-  },
-  openUrlBtnText: {
-    color: '#00F0FF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  urlInputRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  urlInput: {
-    flex: 1,
     backgroundColor: '#1E293B',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#00F0FF',
+    shadowColor: '#00F0FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cameraBtnIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#00F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  cameraBtnTitle: {
     color: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    fontSize: 13,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  cameraBtnSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  cameraBtnArrow: {
+    color: '#00F0FF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginLeft: 8,
+  },
+  gallerySecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  scanUrlBtn: {
-    backgroundColor: '#00F0FF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+  galleryBtnIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
-  scanUrlBtnText: {
-    color: '#0A0E17',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  sectionHeading: {
-    color: '#94A3B8',
-    fontSize: 12,
+  galleryBtnTitle: {
+    color: '#E2E8F0',
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 12,
+    marginBottom: 2,
+  },
+  galleryBtnSubtitle: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  galleryBtnArrow: {
+    color: '#64748B',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 14,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#334155',
+  },
+  dividerText: {
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   presetsGrid: {
     flexDirection: 'row',
@@ -680,26 +823,25 @@ const styles = StyleSheet.create({
   },
   presetCard: {
     width: '48%',
-    backgroundColor: '#1E293B',
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: '#1E293B',
     borderWidth: 1,
     borderColor: '#334155',
   },
   presetImage: {
     width: '100%',
-    height: 110,
-    backgroundColor: '#0F172A',
+    height: 120,
   },
   presetOverlay: {
     padding: 10,
   },
   caloriePill: {
-    backgroundColor: 'rgba(255, 149, 0, 0.2)',
     alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255, 149, 0, 0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
     marginBottom: 6,
   },
   caloriePillText: {
@@ -711,8 +853,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+    lineHeight: 17,
     marginBottom: 6,
-    lineHeight: 18,
   },
   presetMacroRow: {
     flexDirection: 'row',
@@ -720,32 +862,32 @@ const styles = StyleSheet.create({
   },
   presetProtein: {
     color: '#00F0FF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   presetCarbs: {
     color: '#00FF87',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   presetFats: {
     color: '#FF0055',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   inputCard: {
     backgroundColor: '#1E293B',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: '#334155',
-    marginBottom: 20,
+    marginVertical: 12,
   },
   inputLabel: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: 10,
   },
   inputRow: {
@@ -754,7 +896,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
     borderWidth: 1,
     borderColor: '#334155',
     marginBottom: 14,
@@ -763,18 +904,25 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#FFFFFF',
     fontSize: 14,
+    paddingVertical: 12,
   },
   analyzeBtn: {
     backgroundColor: '#00F0FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
     borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
   analyzeBtnText: {
     color: '#0A0E17',
     fontSize: 14,
     fontWeight: '800',
+  },
+  sectionHeading: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+    marginBottom: 10,
   },
   chipsRow: {
     flexDirection: 'row',
@@ -785,7 +933,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#334155',
   },
@@ -795,33 +943,62 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   scanningBox: {
-    padding: 30,
-    alignItems: 'center',
     backgroundColor: '#1E293B',
-    borderRadius: 16,
-    gap: 12,
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
     marginVertical: 20,
     borderWidth: 1,
     borderColor: '#00F0FF',
   },
+  scanningImagePreviewBox: {
+    width: 180,
+    height: 130,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 2,
+    borderColor: '#00F0FF',
+  },
+  scanningImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  scanningLaserBeam: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#00FF87',
+    shadowColor: '#00FF87',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 6,
+  },
   scanningTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
+    marginTop: 14,
   },
   scanningSubtitle: {
     color: '#94A3B8',
     fontSize: 12,
     textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 16,
   },
   resultContainer: {
-    gap: 16,
+    gap: 14,
+    marginTop: 8,
   },
   resultImageWrapper: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    height: 180,
     position: 'relative',
+    borderRadius: 18,
+    overflow: 'hidden',
+    height: 190,
   },
   resultImage: {
     width: '100%',
@@ -831,10 +1008,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(10, 14, 23, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#00FF87',
   },
@@ -843,42 +1020,73 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  quickPhotoSwitchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  quickPhotoSwitchBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 240, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: '#00F0FF',
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickPhotoSwitchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   foodHeaderCard: {
     backgroundColor: '#1E293B',
+    borderRadius: 18,
     padding: 16,
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  foodTitle: {
+  editTitleLabel: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  editableNameInput: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    paddingVertical: 4,
+    marginBottom: 6,
   },
   foodPortion: {
     color: '#94A3B8',
     fontSize: 13,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   healthNoteText: {
-    color: '#38BDF8',
+    color: '#00F0FF',
     fontSize: 12,
-    fontStyle: 'italic',
-    marginBottom: 10,
+    lineHeight: 16,
+    marginTop: 4,
   },
   portionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#334155',
   },
   portionLabel: {
     color: '#E2E8F0',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   multiplierButtons: {
     flexDirection: 'row',
@@ -886,7 +1094,7 @@ const styles = StyleSheet.create({
   },
   multBtn: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: '#0F172A',
     borderWidth: 1,

@@ -47,7 +47,14 @@
       "@react-native-google-signin/google-signin",
       "expo-audio",
       "expo-asset",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TitanFit needs access to your photo library to select food and meal photos for macro calculation.",
+          "cameraPermission": "TitanFit needs access to your camera to take photos of your meals to calculate calories, protein, carbs and fats."
+        }
+      ]
     ]
   }
 }
