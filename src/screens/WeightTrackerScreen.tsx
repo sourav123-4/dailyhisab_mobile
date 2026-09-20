@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,7 +19,8 @@ import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
 import { WeightTrendChart } from '../components/WeightTrendChart';
 import { MacroPlanModal } from '../components/MacroPlanModal';
-import { WeightGoal } from '../types/fitness';
+import { FoodScannerModal } from '../components/FoodScannerModal';
+import { MealType, WeightGoal } from '../types/fitness';
 
 export const WeightTrackerScreen = () => {
   const insets = useSafeAreaInsets();
@@ -28,9 +30,15 @@ export const WeightTrackerScreen = () => {
     profile,
     weightHistory,
     bodyMeasurements,
+    mealsToday,
+    totalConsumedCalories,
+    totalConsumedProtein,
+    totalConsumedCarbs,
+    totalConsumedFats,
     logWeight,
     logMeasurement,
     logWater,
+    deleteMeal,
     updateProfile,
   } = useFitnessApp();
 
@@ -39,6 +47,7 @@ export const WeightTrackerScreen = () => {
   const [weightNotes, setWeightNotes] = useState('');
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [measureModalVisible, setMeasureModalVisible] = useState(false);
+  const [foodModalVisible, setFoodModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -91,6 +100,23 @@ export const WeightTrackerScreen = () => {
   const waterPercent = Math.min(
     100,
     Math.round(((profile.todayWaterMl || 0) / (profile.dailyWaterTargetMl || 3000)) * 100)
+  );
+
+  const caloriePercent = Math.min(
+    100,
+    Math.round((totalConsumedCalories / (profile.targetCalories || 2500)) * 100)
+  );
+  const proteinPercent = Math.min(
+    100,
+    Math.round((totalConsumedProtein / (profile.targetProteinGrams || 150)) * 100)
+  );
+  const carbsPercent = Math.min(
+    100,
+    Math.round((totalConsumedCarbs / (profile.targetCarbsGrams || 250)) * 100)
+  );
+  const fatsPercent = Math.min(
+    100,
+    Math.round((totalConsumedFats / (profile.targetFatsGrams || 70)) * 100)
   );
 
   const weightDelta = (profile.currentWeightKg - profile.targetWeightKg).toFixed(1);
@@ -217,6 +243,166 @@ export const WeightTrackerScreen = () => {
           </View>
           <Text style={[styles.macroBannerArrow, { color: theme.primary }]}>Customize ➔</Text>
         </TouchableOpacity>
+
+        {/* WHAT I EAT - TODAY'S MEAL & MACRO TRACKER */}
+        <View style={[styles.foodCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+          <View style={styles.foodCardHeader}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 16 }}>🍽️</Text>
+                <Text style={[styles.foodCardTitle, { color: theme.text }]}>What I Eat & Nutrition</Text>
+              </View>
+              <Text style={[styles.foodCardSubtitle, { color: theme.muted }]}>
+                AI vision & meal macro tracking for daily hypertrophy
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.addMealBtn, { backgroundColor: theme.primary }]}
+              onPress={() => setFoodModalVisible(true)}
+            >
+              <Text style={styles.addMealBtnText}>+ Log Meal / Scan</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Calorie Goal Progress Bar */}
+          <View style={[styles.calorieProgressBox, { backgroundColor: theme.surfaceAlt }]}>
+            <View style={styles.calorieProgressTop}>
+              <Text style={[styles.calorieProgressLabel, { color: theme.text }]}>
+                🔥 Consumed Calories Today
+              </Text>
+              <Text style={[styles.calorieProgressValues, { color: theme.primary }]}>
+                {totalConsumedCalories} <Text style={{ color: theme.muted, fontSize: 12 }}>/ {profile.targetCalories} kcal ({caloriePercent}%)</Text>
+              </Text>
+            </View>
+            <View style={[styles.progressBarTrack, { backgroundColor: theme.bg }]}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${caloriePercent}%`, backgroundColor: theme.primary },
+                ]}
+              />
+            </View>
+          </View>
+
+          {/* 3 Macro Gauges: Protein, Carbs, Fats */}
+          <View style={styles.macroMiniGauges}>
+            <View style={[styles.macroGaugeCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <Text style={[styles.macroGaugeTitle, { color: theme.accent }]}>🍗 PROTEIN</Text>
+              <Text style={[styles.macroGaugeVal, { color: theme.text }]}>
+                {totalConsumedProtein}g <Text style={{ color: theme.muted, fontSize: 10 }}>/ {profile.targetProteinGrams}g</Text>
+              </Text>
+              <View style={[styles.miniBarTrack, { backgroundColor: theme.bg }]}>
+                <View style={[styles.miniBarFill, { width: `${proteinPercent}%`, backgroundColor: theme.accent }]} />
+              </View>
+            </View>
+
+            <View style={[styles.macroGaugeCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <Text style={[styles.macroGaugeTitle, { color: theme.success }]}>🌾 CARBS</Text>
+              <Text style={[styles.macroGaugeVal, { color: theme.text }]}>
+                {totalConsumedCarbs}g <Text style={{ color: theme.muted, fontSize: 10 }}>/ {profile.targetCarbsGrams}g</Text>
+              </Text>
+              <View style={[styles.miniBarTrack, { backgroundColor: theme.bg }]}>
+                <View style={[styles.miniBarFill, { width: `${carbsPercent}%`, backgroundColor: theme.success }]} />
+              </View>
+            </View>
+
+            <View style={[styles.macroGaugeCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <Text style={[styles.macroGaugeTitle, { color: '#FF0055' }]}>🥑 FATS</Text>
+              <Text style={[styles.macroGaugeVal, { color: theme.text }]}>
+                {totalConsumedFats}g <Text style={{ color: theme.muted, fontSize: 10 }}>/ {profile.targetFatsGrams}g</Text>
+              </Text>
+              <View style={[styles.miniBarTrack, { backgroundColor: theme.bg }]}>
+                <View style={[styles.miniBarFill, { width: `${fatsPercent}%`, backgroundColor: '#FF0055' }]} />
+              </View>
+            </View>
+          </View>
+
+          {/* Meals List Header */}
+          <View style={styles.mealListHeader}>
+            <Text style={[styles.mealListTitle, { color: theme.muted }]}>TODAY'S LOGGED MEALS ({mealsToday.length})</Text>
+          </View>
+
+          {/* Meals items */}
+          {mealsToday.length === 0 ? (
+            <TouchableOpacity
+              style={[styles.emptyMealBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
+              onPress={() => setFoodModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 28, marginBottom: 6 }}>🥗</Text>
+              <Text style={[styles.emptyMealTitle, { color: theme.text }]}>No Meals Logged Today Yet</Text>
+              <Text style={[styles.emptyMealSub, { color: theme.muted }]}>
+                Tap here or "+ Log Meal / Scan" to calculate calories, protein & carbs from meal photos or food name!
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.mealsList}>
+              {mealsToday.map((meal) => {
+                const mealIcons: Record<string, string> = {
+                  breakfast: '🍳',
+                  lunch: '🥗',
+                  dinner: '🥩',
+                  snack: '🍎',
+                };
+                return (
+                  <View
+                    key={meal.id}
+                    style={[styles.mealItemRow, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
+                  >
+                    {meal.imageUri ? (
+                      <Image source={{ uri: meal.imageUri }} style={styles.mealItemThumb} />
+                    ) : (
+                      <View style={[styles.mealIconPlaceholder, { backgroundColor: theme.bg }]}>
+                        <Text style={{ fontSize: 20 }}>{mealIcons[meal.mealType] || '🍽️'}</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.mealItemDetails}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <Text style={[styles.mealCategoryTag, { color: theme.primary }]}>
+                          {mealIcons[meal.mealType] || ''} {meal.mealType.toUpperCase()}
+                        </Text>
+                        <Text style={[styles.mealTimeText, { color: theme.muted }]}>• {meal.timestamp}</Text>
+                      </View>
+                      <Text style={[styles.mealItemName, { color: theme.text }]} numberOfLines={1}>
+                        {meal.name}
+                      </Text>
+                      <Text style={[styles.mealItemPortion, { color: theme.muted }]} numberOfLines={1}>
+                        {meal.portion}
+                      </Text>
+                      <View style={styles.mealItemMacroRow}>
+                        <View style={styles.calorieBadge}>
+                          <Text style={styles.calorieBadgeText}>🔥 {meal.calories} kcal</Text>
+                        </View>
+                        <Text style={[styles.macroPillText, { color: theme.accent }]}>P: {meal.protein}g</Text>
+                        <Text style={[styles.macroPillText, { color: theme.success }]}>C: {meal.carbs}g</Text>
+                        <Text style={[styles.macroPillText, { color: '#FF0055' }]}>F: {meal.fats}g</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.deleteMealBtn}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Meal',
+                          `Remove "${meal.name}" from today's log?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Delete', style: 'destructive', onPress: () => deleteMeal(meal.id) },
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={{ color: theme.subtle, fontSize: 16 }}>🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
 
         {/* Water / Hydration Tracker */}
         <View style={[styles.waterCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
@@ -423,6 +609,12 @@ export const WeightTrackerScreen = () => {
             targetFatsGrams: targets.fats,
           });
         }}
+      />
+
+      {/* Food Scanner & Meal Logger Modal */}
+      <FoodScannerModal
+        visible={foodModalVisible}
+        onClose={() => setFoodModalVisible(false)}
       />
     </View>
   );
@@ -818,5 +1010,185 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     fontWeight: '700',
+  },
+  foodCard: {
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 14,
+  },
+  foodCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  foodCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  foodCardSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  addMealBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addMealBtnText: {
+    color: '#0A0E17',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  calorieProgressBox: {
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  calorieProgressTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  calorieProgressLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  calorieProgressValues: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  macroMiniGauges: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  macroGaugeCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+  },
+  macroGaugeTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  macroGaugeVal: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  miniBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 2,
+  },
+  miniBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  mealListHeader: {
+    marginTop: 4,
+  },
+  mealListTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  emptyMealBox: {
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    gap: 4,
+  },
+  emptyMealTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  emptyMealSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  mealsList: {
+    gap: 10,
+  },
+  mealItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  mealItemThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    backgroundColor: '#0F172A',
+  },
+  mealIconPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mealItemDetails: {
+    flex: 1,
+  },
+  mealCategoryTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  mealTimeText: {
+    fontSize: 10,
+  },
+  mealItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  mealItemPortion: {
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  mealItemMacroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  calorieBadge: {
+    backgroundColor: 'rgba(255, 149, 0, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  calorieBadgeText: {
+    color: '#FF9500',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  macroPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  deleteMealBtn: {
+    padding: 8,
   },
 });

@@ -218,7 +218,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     (exercise.muscleGroup === 'chest' ? EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'] : '') ||
     EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'];
 
-  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>('cloud');
+  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>('youtube');
 
   // Animated values for 60fps photorealistic motion
   const animPhase = useRef(new Animated.Value(0)).current;
@@ -260,10 +260,10 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   };
 
   const phases = [
-    { name: 'Phase 1: Starting Setup & Pre-Stretch', focus: 'Form Alignment', angle: 165, pump: 25 },
-    { name: 'Phase 2: Concentric Power Drive', focus: 'Maximum Acceleration', angle: 90, pump: 75 },
-    { name: 'Phase 3: Peak Hypertrophy Contraction', focus: '1s Peak Flexion', angle: 45, pump: 100 },
-    { name: 'Phase 4: Eccentric Negative Descent', focus: 'Controlled 3s Stretch', angle: 140, pump: 40 },
+    { name: 'Starting Setup & Pre-Stretch', focus: 'Deep Fiber Stretch', angle: 165, pump: 25 },
+    { name: 'Concentric Power Drive', focus: 'Maximum Acceleration', angle: 90, pump: 75 },
+    { name: 'Peak Hypertrophy Squeeze', focus: '1s Peak Contraction', angle: 45, pump: 100 },
+    { name: 'Eccentric Negative Descent', focus: 'Controlled 3s Tempo', angle: 140, pump: 40 },
   ];
 
   // REC Red Dot Blinker Loop
@@ -654,6 +654,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
             <Biomechanical3DExerciseAnimator
               exercise={exercise}
               highlightPart={highlightPart}
+              isEmbedded={true}
             />
           </View>
         ) : activeScene === 'anatomy' ? (
@@ -950,7 +951,7 @@ const styles = StyleSheet.create({
   },
   videoViewport: {
     width: '100%',
-    height: 255,
+    height: 315,
     backgroundColor: '#020409',
     position: 'relative',
     overflow: 'hidden',

@@ -54,7 +54,7 @@ export const EXERCISE_YOUTUBE_IDS: Record<string, string> = {
   shoulders_dumbbell_lateral_raise: "3VcKaXpzqRo",
   shoulders_face_pulls: "9v_aDcAszDU",
   shoulders_arnold_press: "6Z15_WdXmVw",
-  chest_barbell_bench_press: "rT7DgCr-3pg",
+  chest_barbell_bench_press: "dGqI0Z5ul4k",
   chest_incline_dumbbell_press: "8iPEnn-ltC8",
   chest_cable_crossover_fly: "taI4XduLpTk",
   chest_push_up: "WDIpL0pjun0",

@@ -159,3 +159,22 @@ export interface DailyWorkoutSummary {
   volumeKg: number;
   durationMinutes: number;
 }
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface FoodMealLog {
+  id: string;
+  name: string;
+  mealType: MealType;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  imageUri?: string;
+  portion: string;
+  timestamp: number | string;
+  date: string; // YYYY-MM-DD
+  confidenceScore?: number;
+  detectedItems?: string[];
+  source?: 'ai_vision' | 'ai_text' | 'preset' | 'manual';
+}

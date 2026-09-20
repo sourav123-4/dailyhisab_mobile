@@ -22,12 +22,14 @@ interface BiomechanicalAnimatorProps {
   exercise: Exercise;
   highlightPart?: string;
   isMiniPreview?: boolean;
+  isEmbedded?: boolean;
 }
 
 export const Biomechanical3DExerciseAnimator: React.FC<BiomechanicalAnimatorProps> = ({
   exercise,
   highlightPart,
   isMiniPreview = false,
+  isEmbedded = false,
 }) => {
   const theme = useAppTheme();
   const [isPlaying, setIsPlaying] = useState(true);
@@ -47,10 +49,10 @@ export const Biomechanical3DExerciseAnimator: React.FC<BiomechanicalAnimatorProp
   const exerciseType = getExerciseType(exercise.id, exercise.muscleGroup);
 
   const phases = [
-    { name: '1. Setup & Pre-Stretch', time: '0.0s', desc: 'Joint alignment & scapular stability' },
-    { name: '2. Concentric Explosive Drive', time: '1.1s', desc: 'Explosive muscle shortening & drive' },
-    { name: '3. Peak Isometric Contraction', time: '1.6s', desc: 'Maximal hypertrophic squeeze' },
-    { name: '4. Controlled Eccentric Negative', time: '3.4s', desc: '3-second deep fiber stretch' },
+    { name: 'Setup & Pre-Stretch', time: '0.0s', desc: 'Joint alignment & deep fiber stretch', label: 'Stretch' },
+    { name: 'Concentric Power Drive', time: '1.1s', desc: 'Explosive muscle shortening & drive', label: 'Drive' },
+    { name: 'Peak Hypertrophic Squeeze', time: '1.6s', desc: 'Maximal fiber tension & squeeze', label: 'Peak Squeeze' },
+    { name: 'Controlled Eccentric Negative', time: '3.4s', desc: '3-second controlled muscle stretch', label: 'Negative' },
   ];
 
   // WEB RENDERING LOOP (Direct DOM Canvas on Web)
@@ -240,6 +242,81 @@ export const Biomechanical3DExerciseAnimator: React.FC<BiomechanicalAnimatorProp
     );
   }
 
+  if (isEmbedded) {
+    return (
+      <View style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#070A12' }}>
+        {Platform.OS === 'web' ? (
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'block',
+            }}
+          />
+        ) : WebView ? (
+          <WebView
+            ref={webViewRef}
+            originWhitelist={['*']}
+            source={{ html: webViewHTML }}
+            style={{ width: '100%', height: '100%', backgroundColor: '#070A12' }}
+            scrollEnabled={false}
+            overScrollMode="never"
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            androidHardwareAccelerationDisabled={false}
+            androidLayerType="hardware"
+            onMessage={(event: any) => {
+              try {
+                const data = JSON.parse(event.nativeEvent.data);
+                if (data.type === 'TELEMETRY') {
+                  if (data.phaseIdx !== undefined) setCurrentPhaseIdx(data.phaseIdx);
+                  if (data.angle !== undefined) setCurrentAngle(data.angle);
+                  if (data.pump !== undefined) setMuscleTension(data.pump);
+                  if (data.rep !== undefined) setRepCount(data.rep);
+                }
+              } catch (e) {}
+            }}
+          />
+        ) : (
+          <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontWeight: '800' }}>3D Biomechanics</Text>
+          </View>
+        )}
+
+        {/* Floating Camera Pills at top */}
+        <View style={styles.floatingCameraPillsRow}>
+          {(
+            [
+              { id: 'side', label: 'Side 3D', icon: '📐' },
+              { id: 'front', label: 'Front 3D', icon: '👤' },
+              { id: 'iso', label: 'Orbit 3D', icon: '🌐' },
+              { id: 'zoom', label: 'Muscle Zoom', icon: '🔬' },
+            ] as const
+          ).map((cam) => {
+            const isSel = cameraView === cam.id;
+            return (
+              <TouchableOpacity
+                key={cam.id}
+                activeOpacity={0.75}
+                style={[
+                  styles.camBtn,
+                  isSel && { backgroundColor: '#FF3B30', borderColor: '#FF3B30' },
+                ]}
+                onPress={() => handleCameraChange(cam.id)}
+              >
+                <Text style={[styles.camBtnText, { color: isSel ? '#fff' : '#94A3B8' }]}>
+                  {cam.icon} {cam.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.cardContainer, { backgroundColor: '#13171D', borderColor: theme.borderSoft }]}>
       {/* Telemetry Bar */}
@@ -379,10 +456,10 @@ export const Biomechanical3DExerciseAnimator: React.FC<BiomechanicalAnimatorProp
                 <Text
                   style={[
                     styles.scrubBlockLabel,
-                    { color: isCurrent ? '#fff' : idx < currentPhaseIdx ? '#0F172A' : 'rgba(255,255,255,0.5)' },
+                    { color: isCurrent ? '#fff' : idx < currentPhaseIdx ? '#0F172A' : 'rgba(255,255,255,0.7)' },
                   ]}
                 >
-                  Phase {idx + 1}
+                  {p.label}
                 </Text>
               </TouchableOpacity>
             );
@@ -458,28 +535,6 @@ function renderMuscleWikiStyleLifter(ctx, w, h, exercise, type, prog, view, high
 
   if (!isMini) {
     ctx.save();
-    ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Impact", "Outfit", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'rgba(0,0,0,0.7)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 2;
-
-    var name = (exercise && exercise.name) ? exercise.name : 'Exercise';
-    var words = name.split(' ');
-    if (words.length > 2) {
-      var line1 = words.slice(0, 2).join(' ');
-      var line2 = words.slice(2).join(' ');
-      ctx.fillText(line1, w * 0.5, 36);
-      ctx.fillText(line2, w * 0.5, 64);
-    } else {
-      ctx.fillText(name, w * 0.5, 44);
-    }
-    ctx.restore();
-  }
-
-  if (!isMini) {
-    ctx.save();
     ctx.beginPath();
     ctx.ellipse(w * 0.5, h * 0.90, w * 0.32, 12, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -488,16 +543,14 @@ function renderMuscleWikiStyleLifter(ctx, w, h, exercise, type, prog, view, high
   }
 
   var exId = (exercise && exercise.id) ? exercise.id : '';
-  if (type === 'abs_crunch' || exId.indexOf('crunch') !== -1 || exId.indexOf('leg_raise') !== -1 || exId.indexOf('plank') !== -1) {
+  if (type === 'bench_press' || type === 'incline_press' || type === 'chest_fly' || exId.indexOf('bench') !== -1 || exId.indexOf('chest') !== -1) {
+    drawAnatomicalBenchPress(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
+  } else if (type === 'abs_crunch' || exId.indexOf('crunch') !== -1 || exId.indexOf('leg_raise') !== -1 || exId.indexOf('plank') !== -1) {
     drawAnatomicalStraightArmCrunch(ctx, w, h, prog, view, highlightPart, isMini, deg, tension);
-  } else if (view === 'front') {
-    drawAnatomicalFrontalView(ctx, w, h, prog, highlightPart, type, isMini, deg, tension);
   } else if (type === 'bicep_curl' || type === 'incline_curl' || type === 'preacher_curl' || type === 'hammer_curl') {
     drawAnatomicalBicepCurl(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
   } else if (type === 'tricep_pushdown' || type === 'skullcrushers' || type === 'overhead_tricep') {
     drawAnatomicalTricepPushdown(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
-  } else if (type === 'bench_press' || type === 'incline_press' || type === 'chest_fly') {
-    drawAnatomicalBenchPress(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
   } else if (type === 'deadlift') {
     drawAnatomicalDeadlift(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
   } else if (type === 'overhead_press') {
@@ -508,6 +561,8 @@ function renderMuscleWikiStyleLifter(ctx, w, h, exercise, type, prog, view, high
     drawAnatomicalLatPulldown(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
   } else if (type === 'squat' || type === 'leg_extension' || type === 'calf_raise') {
     drawAnatomicalSquat(ctx, w, h, prog, view, highlightPart, type, isMini, deg, tension);
+  } else if (view === 'front') {
+    drawAnatomicalFrontalView(ctx, w, h, prog, highlightPart, type, isMini, deg, tension);
   } else {
     drawAnatomicalBicepCurl(ctx, w, h, prog, view, highlightPart, 'bicep_curl', isMini, deg, tension);
   }
@@ -1078,49 +1133,331 @@ function drawAnatomicalFrontalView(ctx, w, h, prog, highlightPart, type, isMini,
   ctx.lineWidth = 12 * scale;
   ctx.stroke();
 
-  ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(centerX - 100 * scale, handY - 4 * scale, 200 * scale, 8 * scale);
-  ctx.fillStyle = '#0F172A';
-  ctx.beginPath();
-  ctx.roundRect(centerX - 95 * scale, handY - 22 * scale, 14 * scale, 44 * scale, 3);
-  ctx.roundRect(centerX + 81 * scale, handY - 22 * scale, 14 * scale, 44 * scale, 3);
-  ctx.fill();
+  drawHexDumbbell(ctx, leftHandX, handY, 28 * scale, 0);
+  drawHexDumbbell(ctx, rightHandX, handY, 28 * scale, 0);
 
   ctx.restore();
 }
 
 function drawAnatomicalBenchPress(ctx, w, h, prog, view, highlight, type, isMini, deg, tension) {
   ctx.save();
-  var scale = isMini ? 0.38 : 1.2;
+  var scale = isMini ? 0.38 : view === 'zoom' ? 1.5 : 1.15;
   var centerX = w * 0.5;
-  var centerY = isMini ? h * 0.5 : h * 0.55;
+  var centerY = isMini ? h * 0.5 : view === 'zoom' ? h * 0.45 : h * 0.52;
 
-  ctx.fillStyle = '#0F172A';
-  ctx.beginPath();
-  ctx.roundRect(centerX - 140 * scale, centerY + 28 * scale, 280 * scale, 18 * scale, 4);
-  ctx.fill();
+  var silverBase = '#CBD5E1';
+  var silverHighlight = '#F8FAFC';
+  var silverShadow = '#475569';
+  var silverDeep = '#1E293B';
+  var activeRed = '#FF3B30';
+  var redHighlight = '#FFA39E';
+  var redDeep = '#990000';
+  var neonCyan = '#00F0FF';
 
+  // 1. WORKOUT BENCH (Steel frame + padded leather pad)
+  if (!isMini) {
+    // Bench shadow on gym floor
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY + 130 * scale, 170 * scale, 14 * scale, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fill();
+
+    // Steel support legs
+    ctx.fillStyle = '#1E293B';
+    ctx.fillRect(centerX - 110 * scale, centerY + 30 * scale, 16 * scale, 95 * scale);
+    ctx.fillRect(centerX + 94 * scale, centerY + 30 * scale, 16 * scale, 95 * scale);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(centerX - 120 * scale, centerY + 120 * scale, 36 * scale, 10 * scale);
+    ctx.fillRect(centerX + 84 * scale, centerY + 120 * scale, 36 * scale, 10 * scale);
+
+    // Bench main pad
+    var benchGrad = ctx.createLinearGradient(centerX - 130 * scale, 0, centerX + 130 * scale, 0);
+    benchGrad.addColorStop(0, '#0B0F17');
+    benchGrad.addColorStop(0.5, '#1E293B');
+    benchGrad.addColorStop(1, '#0B0F17');
+
+    ctx.beginPath();
+    ctx.roundRect(centerX - 135 * scale, centerY + 16 * scale, 270 * scale, 18 * scale, 6);
+    ctx.fillStyle = benchGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#FF3B30';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // 2. SIDE PROFILE VIEW OR FRONT/ISO/ZOOM VIEW
+  if (view === 'side') {
+    // Lifter lying flat in profile (Head left, legs right)
+    var headX = centerX - 90 * scale;
+    var headY = centerY + 12 * scale;
+    var shoulderX = centerX - 25 * scale;
+    var shoulderY = centerY + 14 * scale;
+
+    // Torso lying flat with athletic lumbar arch
+    ctx.beginPath();
+    ctx.moveTo(centerX - 95 * scale, centerY + 16 * scale);
+    ctx.lineTo(centerX - 50 * scale, centerY + 16 * scale);
+    ctx.quadraticCurveTo(centerX - 10 * scale, centerY + 6 * scale, centerX + 25 * scale, centerY + 16 * scale);
+    ctx.lineTo(centerX + 55 * scale, centerY + 16 * scale);
+    ctx.lineTo(centerX + 55 * scale, centerY - 8 * scale);
+    ctx.quadraticCurveTo(centerX, centerY - 14 * scale - prog * 6 * scale, centerX - 50 * scale, centerY - 10 * scale);
+    ctx.closePath();
+
+    var torsoGrad = ctx.createLinearGradient(0, centerY - 15 * scale, 0, centerY + 20 * scale);
+    torsoGrad.addColorStop(0, silverHighlight);
+    torsoGrad.addColorStop(0.5, silverBase);
+    torsoGrad.addColorStop(1, silverDeep);
+    ctx.fillStyle = torsoGrad;
+    ctx.fill();
+
+    // Pectoralis major muscle profile (bulges red under concentric contraction)
+    ctx.beginPath();
+    ctx.ellipse(centerX - 20 * scale, centerY - 4 * scale, 28 * scale, (14 + prog * 10) * scale, 0.1, 0, Math.PI * 2);
+    var pecGrad = ctx.createRadialGradient(centerX - 20 * scale, centerY - 4 * scale, 4 * scale, centerX - 20 * scale, centerY - 4 * scale, 28 * scale);
+    pecGrad.addColorStop(0, redHighlight);
+    pecGrad.addColorStop(0.6, activeRed);
+    pecGrad.addColorStop(1, redDeep);
+    ctx.fillStyle = pecGrad;
+    ctx.shadowColor = activeRed;
+    ctx.shadowBlur = 12 * prog;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Head
+    ctx.beginPath();
+    ctx.ellipse(headX, headY - 4 * scale, 16 * scale, 13 * scale, 0, 0, Math.PI * 2);
+    ctx.fillStyle = silverBase;
+    ctx.fill();
+
+    // Legs / Feet planted firmly
+    if (!isMini) {
+      ctx.beginPath();
+      ctx.moveTo(centerX + 55 * scale, centerY + 16 * scale);
+      ctx.quadraticCurveTo(centerX + 85 * scale, centerY + 25 * scale, centerX + 95 * scale, centerY + 65 * scale);
+      ctx.lineTo(centerX + 85 * scale, centerY + 125 * scale);
+      ctx.lineTo(centerX + 115 * scale, centerY + 125 * scale);
+      ctx.lineTo(centerX + 110 * scale, centerY + 60 * scale);
+      ctx.quadraticCurveTo(centerX + 95 * scale, centerY + 18 * scale, centerX + 55 * scale, centerY + 12 * scale);
+      ctx.fillStyle = silverShadow;
+      ctx.fill();
+    }
+
+    // Arm Mechanics in Press:
+    // prog = 0 (bottom chest level), prog = 1 (top lockout)
+    var elbowX = shoulderX + (prog * 12 - 6) * scale;
+    var elbowY = (centerY + 36 * scale) - prog * 70 * scale;
+
+    var handX = shoulderX + (prog * 4 - 2) * scale;
+    var handY = elbowY - 55 * scale;
+
+    // Upper Arm
+    ctx.beginPath();
+    ctx.moveTo(shoulderX, shoulderY);
+    ctx.lineTo(elbowX, elbowY);
+    ctx.strokeStyle = silverBase;
+    ctx.lineWidth = 14 * scale;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Elbow Joint Node
+    ctx.beginPath();
+    ctx.arc(elbowX, elbowY, 9 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = silverHighlight;
+    ctx.fill();
+    ctx.strokeStyle = neonCyan;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Forearm
+    ctx.beginPath();
+    ctx.moveTo(elbowX, elbowY);
+    ctx.lineTo(handX, handY);
+    ctx.strokeStyle = silverHighlight;
+    ctx.lineWidth = 12 * scale;
+    ctx.stroke();
+
+    // Hand gripping dumbbell handle
+    ctx.beginPath();
+    ctx.arc(handX, handY, 7 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = '#CBD5E1';
+    ctx.fill();
+
+    // 3D Hexagonal Dumbbell in Lifter's Hand
+    drawHexDumbbell(ctx, handX, handY, 32 * scale, 0);
+
+    // Force Vector Arrow pointing UPWARD
+    if (!isMini) {
+      drawForceVector(ctx, handX, handY - 26 * scale, 34 * scale, '280 N');
+      // Joint Degree Arc
+      var angleDeg = Math.round(90 + prog * 75);
+      ctx.font = '800 12px sans-serif';
+      ctx.fillStyle = neonCyan;
+      ctx.fillText(angleDeg + '°', elbowX + 16 * scale, elbowY);
+    }
+  } else {
+    // FRONTAL / ISOMETRIC / ZOOM VIEW (Bilateral chest press)
+    var leftPecX = centerX - 36 * scale;
+    var rightPecX = centerX + 36 * scale;
+    var pecY = centerY - 10 * scale;
+
+    // Bench underlying pad
+    ctx.fillStyle = '#0F172A';
+    ctx.beginPath();
+    ctx.roundRect(centerX - 42 * scale, centerY - 65 * scale, 84 * scale, 175 * scale, 12);
+    ctx.fill();
+
+    // Lifter Head
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY - 68 * scale, 18 * scale, 22 * scale, 0, 0, Math.PI * 2);
+    ctx.fillStyle = silverBase;
+    ctx.fill();
+
+    // Left Pec
+    ctx.beginPath();
+    ctx.ellipse(leftPecX, pecY, (34 + prog * 6) * scale, (26 + prog * 6) * scale, -0.15, 0, Math.PI * 2);
+    var leftPecGrad = ctx.createRadialGradient(leftPecX, pecY, 4 * scale, leftPecX, pecY, 34 * scale);
+    leftPecGrad.addColorStop(0, redHighlight);
+    leftPecGrad.addColorStop(0.6, activeRed);
+    leftPecGrad.addColorStop(1, redDeep);
+    ctx.fillStyle = leftPecGrad;
+    ctx.shadowColor = activeRed;
+    ctx.shadowBlur = 14 * prog;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Right Pec
+    ctx.beginPath();
+    ctx.ellipse(rightPecX, pecY, (34 + prog * 6) * scale, (26 + prog * 6) * scale, 0.15, 0, Math.PI * 2);
+    var rightPecGrad = ctx.createRadialGradient(rightPecX, pecY, 4 * scale, rightPecX, pecY, 34 * scale);
+    rightPecGrad.addColorStop(0, redHighlight);
+    rightPecGrad.addColorStop(0.6, activeRed);
+    rightPecGrad.addColorStop(1, redDeep);
+    ctx.fillStyle = rightPecGrad;
+    ctx.shadowColor = activeRed;
+    ctx.shadowBlur = 14 * prog;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Anatomical striations across pecs
+    drawAnatomicalStriations(ctx, leftPecX, pecY, 24 * scale, -0.4, redHighlight, redDeep);
+    drawAnatomicalStriations(ctx, rightPecX, pecY, 24 * scale, 0.4, redHighlight, redDeep);
+
+    // Shoulders
+    var shLX = centerX - 62 * scale;
+    var shRX = centerX + 62 * scale;
+    var shY = centerY - 28 * scale;
+
+    // Elbows: wide at bottom, rising and tucking inward at top
+    var elbLX = shLX - (40 - prog * 28) * scale;
+    var elbRX = shRX + (40 - prog * 28) * scale;
+    var elbY = (centerY + 18 * scale) - prog * 55 * scale;
+
+    // Dumbbells / Hands: Wide at bottom, converging at peak
+    var handLX = (centerX - 68 * scale) + prog * 38 * scale;
+    var handRX = (centerX + 68 * scale) - prog * 38 * scale;
+    var handY = (centerY - 10 * scale) - prog * 78 * scale;
+
+    // Left Arm
+    ctx.beginPath();
+    ctx.moveTo(shLX, shY);
+    ctx.lineTo(elbLX, elbY);
+    ctx.lineTo(handLX, handY);
+    ctx.strokeStyle = silverBase;
+    ctx.lineWidth = 14 * scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Right Arm
+    ctx.beginPath();
+    ctx.moveTo(shRX, shY);
+    ctx.lineTo(elbRX, elbY);
+    ctx.lineTo(handRX, handY);
+    ctx.strokeStyle = silverBase;
+    ctx.lineWidth = 14 * scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Elbow Hinge Nodes
+    ctx.beginPath();
+    ctx.arc(elbLX, elbY, 8 * scale, 0, Math.PI * 2);
+    ctx.arc(elbRX, elbY, 8 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = neonCyan;
+    ctx.fill();
+
+    // Left & Right 3D Hex Dumbbells
+    drawHexDumbbell(ctx, handLX, handY, 32 * scale, -0.1);
+    drawHexDumbbell(ctx, handRX, handY, 32 * scale, 0.1);
+
+    // Dynamic Force Vectors
+    if (!isMini) {
+      drawForceVector(ctx, handLX, handY - 22 * scale, 30 * scale, 'F_L');
+      drawForceVector(ctx, handRX, handY - 22 * scale, 30 * scale, 'F_R');
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawHexDumbbell(ctx, x, y, size, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  // Chrome Handle
   ctx.fillStyle = '#CBD5E1';
+  ctx.fillRect(-size * 0.45, -3, size * 0.9, 6);
+
+  // Left & Right Hexagonal Heads
+  [-size * 0.45, size * 0.45].forEach(function(offset) {
+    ctx.beginPath();
+    var r = size * 0.32;
+    for (var i = 0; i < 6; i++) {
+      var a = (i * Math.PI) / 3;
+      var hx = offset + Math.cos(a) * r;
+      var hy = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(hx, hy);
+      else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    var hexGrad = ctx.createLinearGradient(offset - r, -r, offset + r, r);
+    hexGrad.addColorStop(0, '#334155');
+    hexGrad.addColorStop(0.5, '#0F172A');
+    hexGrad.addColorStop(1, '#1E293B');
+    ctx.fillStyle = hexGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#64748B';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+function drawForceVector(ctx, x, y, length, label) {
+  ctx.save();
+  ctx.strokeStyle = '#00F0FF';
+  ctx.fillStyle = '#00F0FF';
+  ctx.lineWidth = 2.5;
+
   ctx.beginPath();
-  ctx.roundRect(centerX - 100 * scale, centerY + 2 * scale, 200 * scale, 28 * scale, 8);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - length);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x, y - length - 6);
+  ctx.lineTo(x - 5, y - length + 2);
+  ctx.lineTo(x + 5, y - length + 2);
+  ctx.closePath();
   ctx.fill();
 
-  var barY = centerY + 10 * scale - prog * 85 * scale;
-  ctx.beginPath();
-  ctx.ellipse(centerX, centerY + 8 * scale, 52 * scale * (1 + prog * 0.4), 20 * scale, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#FF3B30';
-  ctx.shadowColor = '#FF3B30';
-  ctx.shadowBlur = 16 * prog;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(centerX - 130 * scale, barY - 4 * scale, 260 * scale, 8 * scale);
-  ctx.fillStyle = '#0F172A';
-  ctx.beginPath();
-  ctx.roundRect(centerX - 125 * scale, barY - 26 * scale, 16 * scale, 52 * scale, 4);
-  ctx.roundRect(centerX + 109 * scale, barY - 26 * scale, 16 * scale, 52 * scale, 4);
-  ctx.fill();
+  if (label) {
+    ctx.font = '800 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - length - 8);
+  }
   ctx.restore();
 }
 
@@ -1704,5 +2041,21 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  floatingCameraPillsRow: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(10, 15, 26, 0.85)',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    zIndex: 15,
   },
 });

@@ -5,6 +5,7 @@ import {
   AIChatMessage,
   BodyMeasurement,
   Exercise,
+  FoodMealLog,
   MuscleGroup,
   UserProfile,
   WeightEntry,
@@ -31,6 +32,12 @@ interface FitnessContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   activeRestTimer: number | null;
+  meals: FoodMealLog[];
+  mealsToday: FoodMealLog[];
+  totalConsumedCalories: number;
+  totalConsumedProtein: number;
+  totalConsumedCarbs: number;
+  totalConsumedFats: number;
 
   // Actions
   setThemeName: (theme: AppThemeName) => void;
@@ -44,6 +51,8 @@ interface FitnessContextType {
   logWeight: (weightKg: number, notes?: string) => Promise<void>;
   logMeasurement: (data: Omit<BodyMeasurement, 'id' | 'date'>) => Promise<void>;
   logWater: (amountMl: number) => Promise<void>;
+  logMeal: (meal: Omit<FoodMealLog, 'id' | 'date'> & { date?: string }) => Promise<void>;
+  deleteMeal: (mealId: string) => Promise<void>;
   updateSplitDay: (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => Promise<void>;
   sendAICoachQuery: (prompt: string) => Promise<string>;
   triggerRestTimer: (seconds?: number) => void;
@@ -143,6 +152,37 @@ const DEFAULT_AI_MESSAGES: AIChatMessage[] = [
   },
 ];
 
+const DEFAULT_TODAY_MEALS: FoodMealLog[] = [
+  {
+    id: 'meal_def_1',
+    name: 'Oatmeal & Whey Protein Bowl with Berries',
+    mealType: 'breakfast',
+    calories: 520,
+    protein: 42,
+    carbs: 65,
+    fats: 10,
+    portion: '1 large bowl (350g)',
+    date: new Date().toISOString().split('T')[0],
+    timestamp: '08:30 AM',
+    imageUri: 'https://images.unsplash.com/photo-1517673400267-0251440c45dc?w=800&q=80',
+    source: 'preset',
+  },
+  {
+    id: 'meal_def_2',
+    name: 'Grilled Chicken Breast, Brown Rice & Broccoli',
+    mealType: 'lunch',
+    calories: 680,
+    protein: 58,
+    carbs: 72,
+    fats: 12,
+    portion: '220g chicken + 1.5 cup rice',
+    date: new Date().toISOString().split('T')[0],
+    timestamp: '01:15 PM',
+    imageUri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=80',
+    source: 'preset',
+  },
+];
+
 const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
@@ -155,6 +195,7 @@ const STORAGE_KEYS = {
   AI_CHAT: '@titanfit_ai_chat',
   THEME: '@titanfit_theme',
   AUTH: '@titanfit_auth',
+  MEALS: '@titanfit_meals',
 };
 
 export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -165,6 +206,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [bodyMeasurements, setBodyMeasurements] = useState<BodyMeasurement[]>(DEFAULT_MEASUREMENTS);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [aiChatHistory, setAiChatHistory] = useState<AIChatMessage[]>(DEFAULT_AI_MESSAGES);
+  const [meals, setMeals] = useState<FoodMealLog[]>(DEFAULT_TODAY_MEALS);
   const [themeName, setThemeNameState] = useState<AppThemeName>('cyber');
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -187,6 +229,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         savedActive,
         savedChat,
         savedTheme,
+        savedMeals,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.PROFILE),
         AsyncStorage.getItem(STORAGE_KEYS.SPLIT),
@@ -196,6 +239,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_WORKOUT),
         AsyncStorage.getItem(STORAGE_KEYS.AI_CHAT),
         AsyncStorage.getItem(STORAGE_KEYS.THEME),
+        AsyncStorage.getItem(STORAGE_KEYS.MEALS),
       ]);
 
       if (savedProf) {
@@ -225,6 +269,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (savedActive) setActiveWorkout(JSON.parse(savedActive));
       if (savedChat) setAiChatHistory(JSON.parse(savedChat));
       if (savedTheme) setThemeNameState(savedTheme as AppThemeName);
+      if (savedMeals) setMeals(JSON.parse(savedMeals));
     } catch (err) {
       console.warn('Error loading TitanFit local data:', err);
     } finally {
@@ -482,6 +527,32 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const mealsToday = meals.filter((m) => m.date === todayStr);
+
+  const totalConsumedCalories = mealsToday.reduce((sum, m) => sum + (m.calories || 0), 0);
+  const totalConsumedProtein = mealsToday.reduce((sum, m) => sum + (m.protein || 0), 0);
+  const totalConsumedCarbs = mealsToday.reduce((sum, m) => sum + (m.carbs || 0), 0);
+  const totalConsumedFats = mealsToday.reduce((sum, m) => sum + (m.fats || 0), 0);
+
+  const logMeal = async (mealData: Omit<FoodMealLog, 'id' | 'date'> & { date?: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newMeal: FoodMealLog = {
+      id: `meal_${Date.now()}`,
+      date: mealData.date || today,
+      ...mealData,
+    };
+    const nextList = [newMeal, ...meals];
+    setMeals(nextList);
+    await AsyncStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(nextList));
+  };
+
+  const deleteMeal = async (mealId: string) => {
+    const nextList = meals.filter((m) => m.id !== mealId);
+    setMeals(nextList);
+    await AsyncStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(nextList));
+  };
+
   const updateSplitDay = async (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => {
     const nextSplit = weeklySplit.map((d) => (d.dayIndex === dayIndex ? { ...d, ...updatedDay } : d));
     setWeeklySplit(nextSplit);
@@ -564,6 +635,12 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isLoading,
         isAuthenticated,
         activeRestTimer,
+        meals,
+        mealsToday,
+        totalConsumedCalories,
+        totalConsumedProtein,
+        totalConsumedCarbs,
+        totalConsumedFats,
         setThemeName,
         updateProfile,
         startWorkout,
@@ -575,6 +652,8 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         logWeight,
         logMeasurement,
         logWater,
+        logMeal,
+        deleteMeal,
         updateSplitDay,
         sendAICoachQuery,
         triggerRestTimer,
