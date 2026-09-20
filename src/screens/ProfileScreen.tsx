@@ -111,28 +111,15 @@ export const ProfileScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Two-Tier Dashboard Header */}
+      {/* Clean Screen Header without Daily Hisab top row */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        {/* Tier 1: Brand & Top Actions */}
-        <View style={styles.headerTopRow}>
-          <View style={styles.brandRow}>
-            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
-            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
-              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
-            </View>
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>ATHLETE & ACCOUNT SETTINGS</Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>Profile & Security</Text>
           </View>
 
-          <View style={styles.topActions}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
-              onPress={() => setAppMode('hisab')}
-            >
-              <Text style={{ fontSize: 13 }}>💰</Text>
-              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
-            </TouchableOpacity>
-
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
               style={[styles.editBtn, { backgroundColor: isEditing ? theme.primary : theme.surfaceAlt }]}
               onPress={isEditing ? handleSaveProfile : () => setIsEditing(true)}
@@ -141,18 +128,10 @@ export const ProfileScreen = () => {
                 {isEditing ? 'SAVE' : 'EDIT'}
               </Text>
             </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Tier 2: Subtitle & Title */}
-        <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>ATHLETE & ACCOUNT SETTINGS</Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>Profile & Security</Text>
-          </View>
-
-          <View style={[styles.proAthletePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.proAthleteText, { color: theme.primary }]}>PRO Athlete</Text>
+            <View style={[styles.proAthletePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <Text style={[styles.proAthleteText, { color: theme.primary }]}>PRO Athlete</Text>
+            </View>
           </View>
         </View>
       </View>

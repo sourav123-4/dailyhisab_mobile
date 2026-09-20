@@ -639,23 +639,23 @@ const RAW_EXERCISES_DATABASE: Omit<Exercise, 'videoUrl' | 'youtubeId' | 'thumbna
   // ================= CHEST =================
   {
     id: 'chest_barbell_bench_press',
-    name: 'Barbell Flat Bench Press',
+    name: 'Flat Dumbbell Bench Press',
     muscleGroup: 'chest',
     primaryMuscles: ['Pectoralis Major (Mid & Lower)'],
     secondaryMuscles: ['Anterior Deltoid', 'Triceps Brachii'],
-    equipment: 'barbell',
+    equipment: 'dumbbell',
     difficulty: 'intermediate',
     mechanics: 'compound',
     imageKey: 'chest',
-    description: 'The undisputed gold standard for overall chest mass, upper body pushing power, and raw strength.',
+    description: 'The premier compound dumbbell movement for balanced pectoral hypertrophy, stabilization, and maximum chest stretch.',
     instructions: [
-      'Lie flat on the bench with eyes directly under the racked barbell, feet planted firmly into the floor.',
-      'Grip the bar slightly wider than shoulder width, retract shoulder blades, and unrack with straight arms.',
-      'Inhale, lower the bar smoothly to your mid-sternum with elbows tucked at roughly a 45-degree angle.',
-      'Drive the bar explosively back upward to full lockout by pressing through your chest and feet.'
+      'Sit on flat bench with a pair of dumbbells resting upright on thighs, feet firmly planted into the floor.',
+      'Kick the dumbbells up using your knees and lie back, retracting and pinching your shoulder blades.',
+      'Lower dumbbells smoothly until dumbbells reach outer chest level with elbows tucked at roughly 45 degrees.',
+      'Press dumbbells explosively upward in a converging arc, squeezing pectorals at peak lockout.'
     ],
-    tips: ['Maintain a slight natural arch in your lower back with shoulder blades pinched into the bench.'],
-    mistakes: ['Bouncing the bar off the chest.', 'Flaring elbows at 90 degrees putting stress on shoulders.'],
+    tips: ['Maintain a slight natural arch in lower back and keep shoulder blades firmly glued to bench.'],
+    mistakes: ['Clanking dumbbells together at the top.', 'Flaring elbows out at 90 degrees putting stress on rotators.'],
     animationFrames: [
       'Phase 1: Bar un-racked over sternum, lats engaged.',
       'Phase 2: 3-second descent with elbows tucked 45°.',

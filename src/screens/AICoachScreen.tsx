@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -92,11 +93,34 @@ export const AICoachScreen = () => {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [hasConfiguredKey, setHasConfiguredKey] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     checkActiveKey();
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      setKeyboardVisible(true);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -127,15 +151,15 @@ export const AICoachScreen = () => {
     Alert.alert('AI Engine Connected', 'TitanAI Engine API key saved. Real-time sports science intelligence is active!');
   };
 
-  const handleSend = async (textToSend?: string) => {
-    const msg = (textToSend || inputText).trim();
-    if (!msg || isTyping) return;
+  const handleSend = async (customText?: string) => {
+    const messageToSend = customText || inputText;
+    if (!messageToSend.trim() || isTyping) return;
 
     setInputText('');
     setIsTyping(true);
 
     try {
-      await sendAICoachQuery(msg);
+      await sendAICoachQuery(messageToSend.trim());
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -149,18 +173,12 @@ export const AICoachScreen = () => {
   const promptSuggestions = [
     'Generate full Bulking weekly split',
     'High protein meal ideas for 80kg',
-    'How to grow long head bicep',
-    'Best warm-up for Heavy Bench',
-    'Calculate my daily deficit macros',
+    'How to break Bench Press plateau',
+    'Pre-workout creatine & hydration protocol',
   ];
 
   const renderMessage = ({ item }: { item: AIChatMessage }) => {
     const isUser = item.sender === 'user';
-    const timeStr = new Date(item.timestamp).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
     return (
       <View style={[styles.msgWrapper, isUser ? styles.userMsgWrapper : styles.aiMsgWrapper]}>
         {!isUser && (
@@ -179,8 +197,8 @@ export const AICoachScreen = () => {
           <Text style={[styles.msgText, { color: isUser ? '#FFFFFF' : theme.text }]}>
             {item.text}
           </Text>
-          <Text style={[styles.msgTime, { color: isUser ? 'rgba(255, 255, 255, 0.7)' : theme.subtle }]}>
-            {timeStr}
+          <Text style={[styles.msgTime, { color: isUser ? 'rgba(255,255,255,0.7)' : theme.muted }]}>
+            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
       </View>
@@ -193,28 +211,17 @@ export const AICoachScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Two-Tier Dashboard-Quality Header */}
+      {/* Clean Screen Header without Daily Hisab top row */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        {/* Tier 1: Brand & Top Actions */}
-        <View style={styles.headerTopRow}>
-          <View style={styles.brandRow}>
-            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
-            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
-              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
-            </View>
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.greetingText, { color: theme.muted }]}>
+              SPORTS SCIENCE & HYPERTROPHY
+            </Text>
+            <Text style={[styles.mainHeading, { color: theme.text }]}>TitanAI Coach</Text>
           </View>
 
-          <View style={styles.topActions}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
-              onPress={() => setAppMode('hisab')}
-            >
-              <Text style={{ fontSize: 13 }}>💰</Text>
-              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
-            </TouchableOpacity>
-
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
               activeOpacity={0.75}
               style={[
@@ -227,21 +234,11 @@ export const AICoachScreen = () => {
                 {hasConfiguredKey ? '✨ PRO AI' : '⚙️ AI KEY'}
               </Text>
             </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Tier 2: Subtitle & Title */}
-        <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>
-              SPORTS SCIENCE & HYPERTROPHY
-            </Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>TitanAI Coach</Text>
-          </View>
-
-          <View style={[styles.aiStatusBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-            <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
-            <Text style={[styles.aiStatusText, { color: theme.text }]}>AI Active</Text>
+            <View style={[styles.aiStatusBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+              <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
+              <Text style={[styles.aiStatusText, { color: theme.text }]}>AI Active</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -252,6 +249,7 @@ export const AICoachScreen = () => {
         data={aiChatHistory}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.chatListContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         ListFooterComponent={
@@ -259,28 +257,41 @@ export const AICoachScreen = () => {
         }
       />
 
-      {/* Suggested Prompts Pills */}
-      <View style={styles.suggestionsContainer}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={promptSuggestions}
-          keyExtractor={(_, i) => i.toString()}
-          contentContainerStyle={styles.promptsList}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.75}
-              style={[styles.promptPill, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}
-              onPress={() => handleSend(item)}
-            >
-              <Text style={[styles.promptPillText, { color: theme.text }]}>⚡ {item}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
+      {/* Suggested Prompts Pills (compact when typing) */}
+      {!isKeyboardVisible && (
+        <View style={styles.suggestionsContainer}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            data={promptSuggestions}
+            keyExtractor={(_, i) => i.toString()}
+            contentContainerStyle={styles.promptsList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.75}
+                style={[styles.promptPill, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}
+                onPress={() => handleSend(item)}
+              >
+                <Text style={[styles.promptPillText, { color: theme.text }]}>⚡ {item}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {/* Input Bar */}
-      <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.borderSoft, paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View
+        style={[
+          styles.inputBar,
+          {
+            backgroundColor: theme.surface,
+            borderTopColor: theme.borderSoft,
+            paddingBottom: isKeyboardVisible ? 10 : Math.max(insets.bottom, 10),
+            marginBottom: Platform.OS === 'android' && keyboardHeight > 0 ? keyboardHeight + 48 : 0,
+          },
+        ]}
+      >
         <TextInput
           style={[styles.input, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
           placeholder="Ask TitanAI about workout splits, form, or macros..."

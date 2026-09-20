@@ -23,6 +23,7 @@ import {
   EXERCISE_YOUTUBE_IDS,
   EXERCISE_THUMBNAILS,
 } from '../data/exerciseVideoSources';
+import { EXERCISE_MP4_DATA_URIS } from '../data/exerciseVideoDataUris';
 import { getExerciseLocalMedia } from '../data/exerciseLocalMedia';
 import { Biomechanical3DExerciseAnimator } from './Biomechanical3DExerciseAnimator';
 
@@ -125,16 +126,36 @@ function generateHtml5Player(url: string, speed: number, isPlaying: boolean, pos
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body, html { width:100%; height:100%; background:#060913; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    body, html { width:100%; height:100%; background:#02050E; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    .video-wrapper { width:100%; height:100%; display:flex; align-items:center; justify-content:center; position:relative; }
     video { width:100%; height:100%; object-fit:contain; background:#000; border-radius:12px; }
   </style>
 </head>
 <body>
-  <video id="v" src="${url}" poster="${posterUrl || ''}" autoplay loop muted playsinline webkit-playsinline controls></video>
+  <div class="video-wrapper">
+    <video id="v" src="${url}" poster="${posterUrl || ''}" autoplay loop muted playsinline webkit-playsinline></video>
+  </div>
   <script>
-    const v = document.getElementById('v');
-    v.playbackRate = ${speed};
-    ${isPlaying ? 'v.play().catch(function(e){ console.log(e); });' : 'v.pause();'}
+    var v = document.getElementById('v');
+    if (v) {
+      v.playbackRate = ${speed};
+      ${isPlaying ? 'v.play().catch(function(e){});' : 'v.pause();'}
+    }
+    window.setSpeed = function(rate) {
+      if (v) v.playbackRate = rate;
+    };
+    window.togglePlay = function(playing) {
+      if (v) {
+        if (playing) { v.play().catch(function(){}); }
+        else { v.pause(); }
+      }
+    };
+    window.replay = function() {
+      if (v) {
+        v.currentTime = 0;
+        v.play().catch(function(){});
+      }
+    };
   </script>
 </body>
 </html>`;
@@ -191,9 +212,13 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   const resolvedThumbnail = exercise.thumbnailUrl || EXERCISE_THUMBNAILS[exercise.id] || '';
   const localMedia = getExerciseLocalMedia(exercise.id);
 
-  const [videoPlayerType, setVideoPlayerType] = useState<'human_demo' | 'cloud' | 'youtube'>(
-    localMedia ? 'human_demo' : resolvedYoutubeId ? 'youtube' : 'cloud'
-  );
+  // High definition offline MP4 video URI
+  const resolvedMp4Video =
+    EXERCISE_MP4_DATA_URIS[exercise.id] ||
+    (exercise.muscleGroup === 'chest' ? EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'] : '') ||
+    EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'];
+
+  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>('cloud');
 
   // Animated values for 60fps photorealistic motion
   const animPhase = useRef(new Animated.Value(0)).current;
@@ -202,6 +227,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   const recBlinkAnim = useRef(new Animated.Value(1)).current;
 
   const videoRef = useRef<any>(null);
+  const webViewRef = useRef<any>(null);
 
   // Sync HTML5 video playback rate and play/pause state for Web
   useEffect(() => {
@@ -213,7 +239,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         videoRef.current.pause();
       }
     }
-  }, [isPlaying, speed, resolvedVideoUrl]);
+  }, [isPlaying, speed, resolvedMp4Video]);
 
   // Keyframes configuration
   const defaultAsset =
@@ -387,12 +413,36 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
   };
 
   const handleTogglePlay = () => {
-    setIsPlaying(!isPlaying);
+    const next = !isPlaying;
+    setIsPlaying(next);
+    if (Platform.OS === 'web' && videoRef.current) {
+      if (next) videoRef.current.play().catch(() => {});
+      else videoRef.current.pause();
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.togglePlay && window.togglePlay(${next}); true;`);
+    }
   };
 
   const handleSpeedChange = (s: 0.5 | 1 | 1.5 | 2) => {
     setSpeed(s);
     if (!isPlaying) setIsPlaying(true);
+    if (Platform.OS === 'web' && videoRef.current) {
+      videoRef.current.playbackRate = s;
+      videoRef.current.play().catch(() => {});
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.setSpeed && window.setSpeed(${s}); window.togglePlay && window.togglePlay(true); true;`);
+    }
+  };
+
+  const handleReplay = () => {
+    setIsPlaying(true);
+    animPhase.setValue(0);
+    if (Platform.OS === 'web' && videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.replay && window.replay(); true;`);
+    }
   };
 
   const getActiveImageSource = () => {
@@ -495,16 +545,9 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
       {/* Main Interactive Viewport based on selected scene */}
       <View style={styles.videoViewport}>
         {activeScene === 'video' ? (
-          // ================= SCENE 1: REAL VIDEO DEMO =================
+          // ================= SCENE 1: REAL HD MP4 VIDEO =================
           <View style={styles.videoContainerInner}>
-            {videoPlayerType === 'human_demo' && localMedia ? (
-              <Image
-                source={localMedia.animationGif}
-                defaultSource={localMedia.posterJpg as any}
-                style={styles.fullHumanImage}
-                resizeMode="contain"
-              />
-            ) : Platform.OS === 'web' ? (
+            {Platform.OS === 'web' ? (
               videoPlayerType === 'youtube' && resolvedYoutubeId ? (
                 <iframe
                   src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1`}
@@ -512,10 +555,10 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                   allow="autoplay; encrypted-media; picture-in-picture"
                   allowFullScreen
                 />
-              ) : resolvedVideoUrl ? (
+              ) : (
                 <video
                   ref={videoRef}
-                  src={resolvedVideoUrl}
+                  src={resolvedMp4Video}
                   autoPlay
                   loop
                   muted
@@ -527,16 +570,10 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                     backgroundColor: '#000',
                   }}
                 />
-              ) : (
-                <Image
-                  source={resolvedThumbnail ? { uri: resolvedThumbnail } : defaultAsset}
-                  style={styles.fullHumanImage}
-                  resizeMode="contain"
-                />
               )
-            ) : WebView && (resolvedVideoUrl || resolvedYoutubeId) ? (
+            ) : WebView && (videoPlayerType === 'youtube' && resolvedYoutubeId) ? (
               <WebView
-                key={`${resolvedVideoUrl}-${videoPlayerType}-${speed}-${isPlaying ? '1' : '0'}`}
+                key={`yt-${resolvedYoutubeId}`}
                 style={{ width: '100%', height: '100%', backgroundColor: '#000000' }}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
@@ -544,18 +581,27 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                 mediaPlaybackRequiresUserAction={false}
                 originWhitelist={['*']}
                 userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-                source={
-                  videoPlayerType === 'youtube' && resolvedYoutubeId
-                    ? {
-                        html: generateYouTubePlayer(resolvedYoutubeId),
-                        baseUrl: 'https://dailyhisab.app',
-                        headers: { Referer: 'https://dailyhisab.app' },
-                      }
-                    : {
-                        html: generateHtml5Player(resolvedVideoUrl, speed, isPlaying, resolvedThumbnail),
-                        baseUrl: 'https://res.cloudinary.com',
-                      }
-                }
+                source={{
+                  html: generateYouTubePlayer(resolvedYoutubeId),
+                  baseUrl: 'https://dailyhisab.app',
+                  headers: { Referer: 'https://dailyhisab.app' },
+                }}
+              />
+            ) : WebView ? (
+              <WebView
+                ref={webViewRef}
+                key={`mp4-${exercise.id}`}
+                style={{ width: '100%', height: '100%', backgroundColor: '#000000' }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                originWhitelist={['*']}
+                mixedContentMode="always"
+                source={{
+                  html: generateHtml5Player(resolvedMp4Video, speed, isPlaying, resolvedThumbnail),
+                  baseUrl: 'https://dailyhisab.app',
+                }}
               />
             ) : (
               <Image
@@ -567,19 +613,16 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
             {/* Video Source Switcher Pill Overlays */}
             <View style={styles.videoFormatSwitcherRow}>
-              {localMedia ? (
-                <TouchableOpacity
-                  style={[
-                    styles.formatSwitchBtn,
-                    videoPlayerType === 'human_demo' && { backgroundColor: theme.primary, borderColor: theme.primary },
-                  ]}
-                  onPress={() => setVideoPlayerType('human_demo')}
-                >
-                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'human_demo' ? '#FFF' : theme.muted }]}>
-                    ⚡ Human Demo
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+              <View
+                style={[
+                  styles.formatSwitchBtn,
+                  { backgroundColor: 'rgba(0, 229, 255, 0.2)', borderColor: '#00E5FF' },
+                ]}
+              >
+                <Text style={[styles.formatSwitchText, { color: '#00E5FF' }]}>
+                  ⚡ HD 60FPS MP4
+                </Text>
+              </View>
 
               {resolvedYoutubeId ? (
                 <TouchableOpacity
@@ -587,24 +630,10 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                     styles.formatSwitchBtn,
                     videoPlayerType === 'youtube' && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
                   ]}
-                  onPress={() => setVideoPlayerType('youtube')}
+                  onPress={() => setVideoPlayerType(videoPlayerType === 'youtube' ? 'cloud' : 'youtube')}
                 >
                   <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'youtube' ? '#FFF' : theme.muted }]}>
-                    YouTube Tutorial
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {resolvedVideoUrl ? (
-                <TouchableOpacity
-                  style={[
-                    styles.formatSwitchBtn,
-                    videoPlayerType === 'cloud' && { backgroundColor: theme.primary, borderColor: theme.primary },
-                  ]}
-                  onPress={() => setVideoPlayerType('cloud')}
-                >
-                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'cloud' ? '#FFF' : theme.muted }]}>
-                    HD Loop
+                    {videoPlayerType === 'youtube' ? '✕ Close YT' : '▶ Coach YT'}
                   </Text>
                 </TouchableOpacity>
               ) : null}
@@ -758,37 +787,35 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         </View>
       )}
 
-      {/* Interactive Phase Scrubber Timeline */}
-      <View style={styles.phaseTimelineRow}>
-        {phases.map((p, idx) => {
-          const isCurrent = currentPhaseIdx === idx;
-          return (
-            <TouchableOpacity
-              key={idx}
-              activeOpacity={0.75}
-              style={[
-                styles.timelineStepBlock,
-                {
-                  backgroundColor: isCurrent
-                    ? '#FF334B'
-                    : idx < currentPhaseIdx
-                    ? theme.accent
-                    : 'rgba(255,255,255,0.12)',
-                },
-              ]}
-              onPress={() => handleSelectPhase(idx)}
-            >
-              <Text
-                style={[
-                  styles.timelineStepText,
-                  { color: isCurrent ? '#FFFFFF' : idx < currentPhaseIdx ? '#000000' : 'rgba(255,255,255,0.6)' },
-                ]}
-              >
-                Phase {idx + 1}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Bio-Kinematic Movement Scrubber & Progress Bar */}
+      <View style={styles.hudTelemetryScrubberBar}>
+        <View style={styles.telemetryScrubberTop}>
+          <View style={styles.kineticPhaseInfo}>
+            <View style={[styles.kineticPhaseDot, { backgroundColor: currentPhaseIdx === 2 ? '#FF334B' : theme.accent }]} />
+            <Text style={[styles.kineticPhaseTitle, { color: '#FFFFFF' }]}>
+              {phases[currentPhaseIdx].name.split(':')[1] || phases[currentPhaseIdx].name}
+            </Text>
+          </View>
+          <Text style={[styles.kineticFocusBadge, { color: theme.accent }]}>
+            {phases[currentPhaseIdx].focus}
+          </Text>
+        </View>
+
+        {/* Dynamic Glowing Rep Scrubber Track */}
+        <View style={styles.scrubberTrack}>
+          <Animated.View
+            style={[
+              styles.scrubberProgressFill,
+              {
+                width: animPhase.interpolate({
+                  inputRange: [0, 1, 2, 3],
+                  outputRange: ['25%', '50%', '85%', '100%'],
+                }),
+                backgroundColor: theme.primary,
+              },
+            ]}
+          />
+        </View>
       </View>
 
       {/* Playback Controls & Speed Multipliers */}
@@ -806,14 +833,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.replayBtn, { borderColor: theme.borderSoft }]}
-          onPress={() => {
-            setIsPlaying(true);
-            animPhase.setValue(0);
-            if (videoRef.current) {
-              videoRef.current.currentTime = 0;
-              videoRef.current.play().catch(() => {});
-            }
-          }}
+          onPress={handleReplay}
         >
           <Text style={[styles.replayBtnText, { color: theme.text }]}>🔄 REPLAY</Text>
         </TouchableOpacity>
@@ -1120,26 +1140,51 @@ const styles = StyleSheet.create({
   headPillText: {
     fontSize: 10,
   },
-  phaseTimelineRow: {
-    flexDirection: 'row',
-    gap: 4,
+  hudTelemetryScrubberBar: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: '#080C17',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
-  timelineStepBlock: {
-    flex: 1,
-    paddingVertical: 5,
-    borderRadius: 6,
+  telemetryScrubberTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  timelineStepText: {
-    fontSize: 9,
+  kineticPhaseInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  kineticPhaseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  kineticPhaseTitle: {
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+  },
+  kineticFocusBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  scrubberTrack: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  scrubberProgressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   playbackControlsFooter: {
     flexDirection: 'row',

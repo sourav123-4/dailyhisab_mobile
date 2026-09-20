@@ -77,39 +77,16 @@ export const ExerciseExplorerScreen = () => {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Two-Tier Dashboard Header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        {/* Tier 1: Brand & Top Actions */}
-        <View style={styles.headerTopRow}>
-          <View style={styles.brandRow}>
-            <View style={[styles.pulseDot, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.brandTitle, { color: theme.text }]}>TITANFIT</Text>
-            <View style={[styles.proBadge, { backgroundColor: theme.primarySoft }]}>
-              <Text style={[styles.proBadgeText, { color: theme.primary }]}>PRO</Text>
-            </View>
-          </View>
-
-          <View style={styles.topActions}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[styles.modeSwitchBtn, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}
-              onPress={() => setAppMode('hisab')}
-            >
-              <Text style={{ fontSize: 13 }}>💰</Text>
-              <Text style={{ color: '#14B8A6', fontWeight: '800', fontSize: 11.5 }}>Daily Hisab</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-              <Text style={[styles.badgePillText, { color: theme.primary }]}>
-                {filteredExercises.length} Drills
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Tier 2: Subtitle & Title */}
+        {/* Clean Screen Header without Daily Hisab top row */}
         <View style={styles.headerBottomRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.greetingText, { color: theme.muted }]}>3D MUSCULOSKELETAL ATLAS</Text>
             <Text style={[styles.mainHeading, { color: theme.text }]}>Anatomy & Biomechanics</Text>
+          </View>
+          <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+            <Text style={[styles.badgePillText, { color: theme.primary }]}>
+              {filteredExercises.length} Drills
+            </Text>
           </View>
         </View>
       </View>
