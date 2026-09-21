@@ -477,27 +477,45 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     setToast(null);
   }, []);
 
-  const withActionLoader = useCallback((message: string, action: () => void | Promise<void>, toastOnComplete?: ToastConfig) => {
-    setActionLoading({ visible: true, message });
-    Promise.resolve()
-      .then(() => action())
-      .then(() => {
+  const withActionLoader = useCallback((_message: string, action: () => void | Promise<void>, toastOnComplete?: ToastConfig) => {
+    try {
+      const result = action();
+      if (result instanceof Promise) {
+        result
+          .then(() => {
+            if (toastOnComplete) {
+              showToast(toastOnComplete);
+            }
+          })
+          .catch((err) => {
+            console.warn('ActionLoader async error:', err);
+          });
+      } else {
         if (toastOnComplete) {
           showToast(toastOnComplete);
         }
-      })
-      .catch((err) => {
-        console.warn('ActionLoader error:', err);
-      })
-      .finally(() => {
-        setActionLoading({ visible: false, message: '' });
-      });
+      }
+    } catch (err) {
+      console.warn('ActionLoader error:', err);
+    }
   }, [showToast]);
 
-  const triggerImmediateSync = useCallback((targetState: HisabState) => {
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerImmediateSync = useCallback((targetState: HisabState, immediate = false) => {
+    // 1. Immediately persist to local AsyncStorage in the background without blocking UI
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(targetState)).catch(() => undefined);
-    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
-      setSyncStatus('Syncing');
+
+    // 2. Debounce cloud/Firebase sync so multiple rapid adds/edits are batched together cleanly
+    if (!canUseCloudSync() || localOnly || !networkOnline || !user || user.isAnonymous) {
+      return;
+    }
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    const doSync = () => {
       syncStateToCloud(targetState, lastSyncedIdsRef.current)
         .then(() => {
           lastCloudSyncHashRef.current = cloudStateFingerprint(targetState);
@@ -505,6 +523,12 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
           setSyncStatus('Cloud Synced');
         })
         .catch(() => setSyncStatus('Local'));
+    };
+
+    if (immediate) {
+      doSync();
+    } else {
+      syncTimeoutRef.current = setTimeout(doSync, 600);
     }
   }, [localOnly, networkOnline, user]);
 
@@ -832,29 +856,28 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     if (!items || items.length === 0) return;
     setState(current => {
       const next = { ...current, transactions: [...items, ...current.transactions] };
-      setTimeout(() => triggerImmediateSync(next), 0);
+      triggerImmediateSync(next);
       return next;
     });
-    if (!actionLoading.visible) {
-      showToast({
-        title: 'Added Successfully',
-        message: toastMsg || `${items.length} hisab ${items.length > 1 ? 'entries' : 'entry'} added`,
-        type: 'success',
-      });
-    }
+    showToast({
+      title: 'Added Successfully',
+      message: toastMsg || `${items.length} hisab ${items.length > 1 ? 'entries' : 'entry'} added`,
+      type: 'success',
+      duration: 1500,
+    });
   }
 
   function removeTransaction(id: string) {
-    withActionLoader('Deleting entry...', () => {
-      setState(current => {
-        const next = { ...current, transactions: current.transactions.filter(tx => tx.id !== id) };
-        setTimeout(() => triggerImmediateSync(next), 0);
-        return next;
-      });
-    }, {
+    setState(current => {
+      const next = { ...current, transactions: current.transactions.filter(tx => tx.id !== id) };
+      triggerImmediateSync(next);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Hisab entry removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -875,6 +898,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       title: 'Editing Entry',
       message: `Loaded "${tx.title}" for editing`,
       type: 'info',
+      duration: 1500,
     });
   }
 
@@ -884,9 +908,8 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       .reduce((sum, tx) => sum + tx.amount, 0);
   }
 
-  function saveSmartEntry() {
-    Keyboard.dismiss();
-    const textToParse = quickText.trim();
+  function saveSmartEntry(overrideText?: string) {
+    const textToParse = (overrideText !== undefined ? overrideText : quickText).trim();
     if (!textToParse) return;
     const entries = parseHisab(textToParse);
     if (!entries.length) {
@@ -894,17 +917,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       return;
     }
     setQuickText('');
-    withActionLoader('Saving hisab...', () => {
-      addTransactions(entries, `${entries.length} hisab ${entries.length > 1 ? 'entries' : 'entry'} saved`);
-    }, {
-      title: 'Hisab Saved',
-      message: `${entries.length} hisab ${entries.length > 1 ? 'entries' : 'entry'} recorded`,
-      type: 'success',
-    });
+    addTransactions(entries, `${entries.length} hisab ${entries.length > 1 ? 'entries' : 'entry'} saved`);
   }
 
   function saveManual() {
-    Keyboard.dismiss();
     const amount = numeric(manual.amount);
     if (!amount || !manual.title.trim()) return Alert.alert('Missing details', 'Add a title and amount.');
     const nextTx: Transaction = {
@@ -920,31 +936,25 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     };
     if (form.editingTxId) {
       const editId = form.editingTxId;
-      withActionLoader('Saving changes...', () => {
-        setState(current => {
-          const next = {
-            ...current,
-            transactions: current.transactions.map(tx =>
-              tx.id === editId ? { ...tx, ...nextTx, id: tx.id } : tx
-            ),
-          };
-          setTimeout(() => triggerImmediateSync(next), 0);
-          return next;
-        });
-        setForm(current => ({ ...current, editingTxId: '' }));
-      }, {
+      setState(current => {
+        const next = {
+          ...current,
+          transactions: current.transactions.map(tx =>
+            tx.id === editId ? { ...tx, ...nextTx, id: tx.id } : tx
+          ),
+        };
+        triggerImmediateSync(next);
+        return next;
+      });
+      setForm(current => ({ ...current, editingTxId: '' }));
+      showToast({
         title: 'Updated',
         message: `Updated "${nextTx.title}"`,
         type: 'success',
+        duration: 1500,
       });
     } else {
-      withActionLoader('Adding entry...', () => {
-        addTransactions([nextTx], `${money(amount, state.currency)} ${nextTx.title} added`);
-      }, {
-        title: 'Entry Added',
-        message: `${money(amount, state.currency)} ${nextTx.title} added`,
-        type: 'success',
-      });
+      addTransactions([nextTx], `${money(amount, state.currency)} ${nextTx.title} added`);
     }
     setManual({ ...manual, title: '', amount: '', cardId: '', date: today(), notes: '' });
   }
@@ -2268,14 +2278,41 @@ type HisabScreenFrameNavigation = {
   openDrawer?: () => void;
 };
 
-const MemoizedScreenContent = React.memo(function MemoizedScreenContent({
-  tab,
+const CachedScreenContainer = React.memo(function CachedScreenContainer({
+  activeTab,
   renderScreen,
 }: {
-  tab: Tab;
+  activeTab: Tab;
   renderScreen: (t: Tab) => ReactNode;
 }) {
-  return <>{renderScreen(tab)}</>;
+  const [visitedTabs, setVisitedTabs] = useState<Tab[]>(() => {
+    const initial: Tab[] = ['dashboard', 'hisab'];
+    if (!initial.includes(activeTab)) {
+      initial.push(activeTab);
+    }
+    return initial;
+  });
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.includes(activeTab)) return prev;
+      return [...prev, activeTab];
+    });
+  }, [activeTab]);
+
+  return (
+    <>
+      {visitedTabs.map((t) => (
+        <View
+          key={t}
+          style={t === activeTab ? styles.visibleTabContainer : styles.hiddenTabContainer}
+          pointerEvents={t === activeTab ? 'auto' : 'none'}
+        >
+          {renderScreen(t)}
+        </View>
+      ))}
+    </>
+  );
 });
 
 export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenFrameNavigation; tab: Tab }) {
@@ -2397,8 +2434,8 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
           }
         >
           {app.isLocked ? null : (
-            <MemoizedScreenContent
-              tab={tab}
+            <CachedScreenContainer
+              activeTab={tab}
               renderScreen={app.renderScreen}
             />
           )}
@@ -2457,5 +2494,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  visibleTabContainer: {
+    display: 'flex',
+    width: '100%',
+  },
+  hiddenTabContainer: {
+    display: 'none',
   },
 });

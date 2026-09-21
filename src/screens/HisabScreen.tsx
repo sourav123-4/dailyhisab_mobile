@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -51,6 +51,309 @@ function formatRelativeDateBadge(dateStr?: string): { label: string; isToday: bo
   return { label: dateStr, isToday: false, isYesterday: false };
 }
 
+function getCategoryVisual(category: string, type: string, isDark: boolean) {
+  const isIncome =
+    type === 'income' ||
+    category?.toLowerCase() === 'income' ||
+    category?.toLowerCase() === 'salary';
+
+  if (isIncome) {
+    return {
+      icon: 'income',
+      emoji: '💰',
+      bg: isDark ? '#062d1f' : '#dcfce7',
+      color: isDark ? '#34d399' : '#15803d',
+      border: isDark ? '#047857' : '#bbf7d0',
+      pillBg: isDark ? '#064e3b' : '#dcfce7',
+      pillColor: isDark ? '#a7f3d0' : '#15803d',
+      amountColor: isDark ? '#34d399' : '#16a34a',
+    };
+  }
+
+  switch (category?.toLowerCase()) {
+    case 'bills':
+    case 'rent':
+    case 'utilities':
+    case 'emi':
+      return {
+        icon: 'bills',
+        emoji: '⚡',
+        bg: isDark ? '#2a0c04' : '#fff7ed',
+        color: isDark ? '#fb923c' : '#ea580c',
+        border: isDark ? '#7c2d12' : '#fed7aa',
+        pillBg: isDark ? '#431407' : '#ffedd5',
+        pillColor: isDark ? '#fdba74' : '#c2410c',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+    case 'food':
+    case 'dining':
+    case 'grocery':
+    case 'lunch':
+    case 'tea':
+      return {
+        icon: 'food',
+        emoji: '🍽',
+        bg: isDark ? '#3b0716' : '#fff1f2',
+        color: isDark ? '#fb7185' : '#e11d48',
+        border: isDark ? '#881337' : '#fecdd3',
+        pillBg: isDark ? '#4c0519' : '#ffe4e6',
+        pillColor: isDark ? '#fda4af' : '#be123c',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+    case 'transport':
+    case 'fuel':
+    case 'travel':
+    case 'auto':
+    case 'bus':
+      return {
+        icon: 'transport',
+        emoji: '⛽',
+        bg: isDark ? '#0c2233' : '#e0f2fe',
+        color: isDark ? '#38bdf8' : '#0284c7',
+        border: isDark ? '#0369a1' : '#bae6fd',
+        pillBg: isDark ? '#082f49' : '#e0f2fe',
+        pillColor: isDark ? '#7dd3fc' : '#0369a1',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+    case 'shopping':
+    case 'clothes':
+    case 'mart':
+      return {
+        icon: 'shopping',
+        emoji: '🛍',
+        bg: isDark ? '#280d38' : '#fae8ff',
+        color: isDark ? '#c084fc' : '#9333ea',
+        border: isDark ? '#6b21a8' : '#f5d0fe',
+        pillBg: isDark ? '#3b0764' : '#fdf4ff',
+        pillColor: isDark ? '#e9d5ff' : '#9333ea',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+    case 'health':
+    case 'medical':
+    case 'medicine':
+      return {
+        icon: 'health',
+        emoji: '✚',
+        bg: isDark ? '#250e38' : '#f3e8ff',
+        color: isDark ? '#c084fc' : '#7e22ce',
+        border: isDark ? '#581c87' : '#e9d5ff',
+        pillBg: isDark ? '#3b0764' : '#f3e8ff',
+        pillColor: isDark ? '#d8b4fe' : '#7e22ce',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+    case 'invest':
+    case 'stocks':
+    case 'trading':
+      return {
+        icon: 'invest',
+        emoji: '📈',
+        bg: isDark ? '#110e38' : '#eef2ff',
+        color: isDark ? '#818cf8' : '#4f46e5',
+        border: isDark ? '#312e81' : '#c7d2fe',
+        pillBg: isDark ? '#1e1b4b' : '#e0e7ff',
+        pillColor: isDark ? '#a5b4fc' : '#3730a3',
+        amountColor: isDark ? '#a5b4fc' : '#6366f1',
+      };
+    default:
+      return {
+        icon: 'general',
+        emoji: '🏷',
+        bg: isDark ? '#0f172a' : '#f8fafc',
+        color: isDark ? '#94a3b8' : '#64748b',
+        border: isDark ? '#334155' : '#e2e8f0',
+        pillBg: isDark ? '#1e293b' : '#f1f5f9',
+        pillColor: isDark ? '#cbd5e1' : '#475569',
+        amountColor: isDark ? '#fb7185' : '#e11d48',
+      };
+  }
+}
+
+const TransactionRowCard = React.memo(function TransactionRowCard({
+  tx,
+  currency,
+  theme,
+  onEdit,
+  onDelete,
+}: {
+  tx: Transaction;
+  currency: string;
+  theme: any;
+  onEdit: (tx: Transaction) => void;
+  onDelete: (tx: Transaction) => void;
+}) {
+  const visual = getCategoryVisual(tx.category, tx.type, !!theme.dark);
+  const isIncome = tx.type === 'income';
+  const dateInfo = formatRelativeDateBadge(tx.date);
+
+  return (
+    <View
+      style={[
+        styles.ledgerRowCard,
+        {
+          backgroundColor: theme.surface,
+          borderColor: theme.borderSoft || theme.border,
+        },
+      ]}
+    >
+      <View style={styles.ledgerRowMain}>
+        <View
+          style={[
+            styles.txAvatarCircle,
+            {
+              backgroundColor: visual.bg,
+              borderColor: visual.border,
+            },
+          ]}
+        >
+          <Text style={styles.txAvatarEmoji}>{visual.emoji}</Text>
+        </View>
+
+        <View style={styles.ledgerTitleBlock}>
+          <Text
+            style={[styles.ledgerTitleText, { color: theme.text }]}
+            numberOfLines={1}
+          >
+            {tx.title}
+          </Text>
+
+          <View style={styles.ledgerMetaRow}>
+            <View
+              style={[
+                styles.categoryPill,
+                {
+                  backgroundColor: visual.pillBg,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  {
+                    color: visual.pillColor,
+                  },
+                ]}
+              >
+                {tx.category}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.methodPill,
+                {
+                  backgroundColor: theme.dark ? '#1e293b' : '#f1f5f9',
+                },
+              ]}
+            >
+              <Text style={[styles.methodPillText, { color: theme.subtle }]}>
+                {tx.paymentMethod}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.datePill,
+                {
+                  backgroundColor: dateInfo.isToday
+                    ? (theme.dark ? '#064e3b' : '#dcfce7')
+                    : dateInfo.isYesterday
+                    ? (theme.dark ? '#1e1b4b' : '#ede9fe')
+                    : (theme.dark ? '#1e293b' : '#f1f5f9'),
+                  borderColor: dateInfo.isToday
+                    ? (theme.dark ? '#059669' : '#86efac')
+                    : dateInfo.isYesterday
+                    ? (theme.dark ? '#4338ca' : '#c7d2fe')
+                    : (theme.dark ? '#334155' : '#e2e8f0'),
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.datePillText,
+                  {
+                    color: dateInfo.isToday
+                      ? (theme.dark ? '#6ee7b7' : '#15803d')
+                      : dateInfo.isYesterday
+                      ? (theme.dark ? '#a5b4fc' : '#4338ca')
+                      : (theme.dark ? '#94a3b8' : '#64748b'),
+                    fontWeight: dateInfo.isToday || dateInfo.isYesterday ? '800' : '600',
+                  },
+                ]}
+              >
+                {dateInfo.label}
+              </Text>
+            </View>
+          </View>
+
+          {tx.notes ? (
+            <Text
+              style={[
+                styles.ledgerNotesText,
+                { color: theme.subtle },
+              ]}
+              numberOfLines={1}
+            >
+              AI Smart Entry: "{tx.notes}"
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.ledgerRightBlock}>
+          <Text
+            style={[
+              styles.ledgerAmountText,
+              {
+                color: visual.amountColor,
+              },
+            ]}
+          >
+            {isIncome ? '+' : '-'}
+            {money(tx.amount, currency)}
+          </Text>
+
+          <View style={styles.ledgerMicroActionsRow}>
+            <TouchableOpacity
+              onPress={() => onEdit(tx)}
+              style={[
+                styles.iconOnlyMicroActionBtn,
+                {
+                  backgroundColor: theme.dark ? '#1e1b4b' : '#ede9fe',
+                  borderColor: theme.dark ? '#3730a3' : '#ddd6fe',
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <AppIcon
+                name="edit"
+                size={12}
+                color={theme.dark ? '#a5b4fc' : '#6366f1'}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => onDelete(tx)}
+              style={[
+                styles.iconOnlyMicroActionBtn,
+                {
+                  backgroundColor: theme.dark ? '#3b0716' : '#ffe4e6',
+                  borderColor: theme.dark ? '#881337' : '#fecdd3',
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <AppIcon
+                name="trash"
+                size={12}
+                color={theme.dark ? '#fb7185' : '#e11d48'}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 export const HisabScreen = React.memo(function HisabScreen({
   state,
   txs,
@@ -87,7 +390,7 @@ export const HisabScreen = React.memo(function HisabScreen({
   paymentMethods: string[];
   isRecording: boolean;
   isTranscribing?: boolean;
-  saveSmartEntry: () => void;
+  saveSmartEntry: (text?: string) => void;
   startRecording: () => void;
   stopRecording: () => void;
   saveManual: () => void;
@@ -117,7 +420,6 @@ export const HisabScreen = React.memo(function HisabScreen({
 
   // Manual Entry Modal Visibility
   const [manualModalVisible, setManualModalVisible] = useState(false);
-  const [isSavingEntry, setIsSavingEntry] = useState(false);
 
   useEffect(() => {
     setActiveModalOpen(filterModalVisible || manualModalVisible);
@@ -126,14 +428,11 @@ export const HisabScreen = React.memo(function HisabScreen({
     };
   }, [filterModalVisible, manualModalVisible, setActiveModalOpen]);
 
-  const handleSaveEntry = async () => {
-    if (quickText.trim().length === 0 || isSavingEntry) return;
-    setIsSavingEntry(true);
-    try {
-      await saveSmartEntry();
-    } finally {
-      setIsSavingEntry(false);
-    }
+  const handleSaveEntry = () => {
+    const textToSave = quickText.trim();
+    if (!textToSave) return;
+    setQuickText('');
+    saveSmartEntry(textToSave);
   };
 
   useEffect(() => {
@@ -151,125 +450,6 @@ export const HisabScreen = React.memo(function HisabScreen({
       return String(b.id || '').localeCompare(String(a.id || ''));
     });
   }, [txs]);
-
-  // Category Visual Helper (Identical to DashboardScreen)
-  const getCategoryVisual = (category: string, type: string, isDark: boolean) => {
-    const isIncome =
-      type === 'income' ||
-      category?.toLowerCase() === 'income' ||
-      category?.toLowerCase() === 'salary';
-
-    if (isIncome) {
-      return {
-        icon: 'income',
-        emoji: '💰',
-        bg: isDark ? '#062d1f' : '#dcfce7',
-        color: isDark ? '#34d399' : '#15803d',
-        border: isDark ? '#047857' : '#bbf7d0',
-        pillBg: isDark ? '#064e3b' : '#dcfce7',
-        pillColor: isDark ? '#a7f3d0' : '#15803d',
-        amountColor: isDark ? '#34d399' : '#16a34a',
-      };
-    }
-
-    switch (category?.toLowerCase()) {
-      case 'bills':
-      case 'rent':
-      case 'utilities':
-      case 'emi':
-        return {
-          icon: 'bills',
-          emoji: '⚡',
-          bg: isDark ? '#2a0c04' : '#fff7ed',
-          color: isDark ? '#fb923c' : '#ea580c',
-          border: isDark ? '#7c2d12' : '#fed7aa',
-          pillBg: isDark ? '#431407' : '#ffedd5',
-          pillColor: isDark ? '#fdba74' : '#c2410c',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-      case 'food':
-      case 'dining':
-      case 'grocery':
-      case 'lunch':
-      case 'tea':
-        return {
-          icon: 'food',
-          emoji: '🍽',
-          bg: isDark ? '#3b0716' : '#fff1f2',
-          color: isDark ? '#fb7185' : '#e11d48',
-          border: isDark ? '#881337' : '#fecdd3',
-          pillBg: isDark ? '#4c0519' : '#ffe4e6',
-          pillColor: isDark ? '#fda4af' : '#be123c',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-      case 'transport':
-      case 'fuel':
-      case 'travel':
-      case 'auto':
-      case 'bus':
-        return {
-          icon: 'transport',
-          emoji: '⛽',
-          bg: isDark ? '#0c2233' : '#e0f2fe',
-          color: isDark ? '#38bdf8' : '#0284c7',
-          border: isDark ? '#0369a1' : '#bae6fd',
-          pillBg: isDark ? '#082f49' : '#e0f2fe',
-          pillColor: isDark ? '#7dd3fc' : '#0369a1',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-      case 'shopping':
-      case 'clothes':
-      case 'mart':
-        return {
-          icon: 'shopping',
-          emoji: '🛍',
-          bg: isDark ? '#280d38' : '#fae8ff',
-          color: isDark ? '#c084fc' : '#9333ea',
-          border: isDark ? '#6b21a8' : '#f5d0fe',
-          pillBg: isDark ? '#3b0764' : '#fdf4ff',
-          pillColor: isDark ? '#e9d5ff' : '#9333ea',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-      case 'health':
-      case 'medical':
-      case 'medicine':
-        return {
-          icon: 'health',
-          emoji: '✚',
-          bg: isDark ? '#250e38' : '#f3e8ff',
-          color: isDark ? '#c084fc' : '#7e22ce',
-          border: isDark ? '#581c87' : '#e9d5ff',
-          pillBg: isDark ? '#3b0764' : '#f3e8ff',
-          pillColor: isDark ? '#d8b4fe' : '#7e22ce',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-      case 'invest':
-      case 'stocks':
-      case 'trading':
-        return {
-          icon: 'invest',
-          emoji: '📈',
-          bg: isDark ? '#110e38' : '#eef2ff',
-          color: isDark ? '#818cf8' : '#4f46e5',
-          border: isDark ? '#312e81' : '#c7d2fe',
-          pillBg: isDark ? '#1e1b4b' : '#e0e7ff',
-          pillColor: isDark ? '#a5b4fc' : '#3730a3',
-          amountColor: isDark ? '#a5b4fc' : '#6366f1',
-        };
-      default:
-        return {
-          icon: 'general',
-          emoji: '🏷',
-          bg: isDark ? '#0f172a' : '#f8fafc',
-          color: isDark ? '#94a3b8' : '#64748b',
-          border: isDark ? '#334155' : '#e2e8f0',
-          pillBg: isDark ? '#1e293b' : '#f1f5f9',
-          pillColor: isDark ? '#cbd5e1' : '#475569',
-          amountColor: isDark ? '#fb7185' : '#e11d48',
-        };
-    }
-  };
-
   // Top 3 KPI metrics
   const stats = useMemo(() => {
     let monthlyExpenses = 0;
@@ -364,13 +544,8 @@ export const HisabScreen = React.memo(function HisabScreen({
       );
     }
 
-    // Always sort descending: latest/recent dates first (Today -> Yesterday -> older dates)
-    return [...list].sort((a, b) => {
-      const dateA = a.date || '';
-      const dateB = b.date || '';
-      if (dateB !== dateA) return dateB.localeCompare(dateA);
-      return String(b.id || '').localeCompare(String(a.id || ''));
-    });
+    // List is already sorted by date descending in displayList
+    return list;
   }, [
     displayList,
     selectedType,
@@ -383,8 +558,16 @@ export const HisabScreen = React.memo(function HisabScreen({
     searchQuery,
   ]);
 
-  // Display all filtered records directly for seamless native mobile scrolling
-  const displayedTxs = filteredTxs;
+  // Windowed rendering with instant 30-item chunking for 0ms render latency
+  const [displayLimit, setDisplayLimit] = useState(30);
+
+  useEffect(() => {
+    setDisplayLimit(30);
+  }, [selectedCategory, selectedType, selectedPayment, startDate, endDate, minAmount, maxAmount, searchQuery]);
+
+  const displayedTxs = useMemo(() => {
+    return filteredTxs.slice(0, displayLimit);
+  }, [filteredTxs, displayLimit]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -426,12 +609,12 @@ export const HisabScreen = React.memo(function HisabScreen({
     setManualModalVisible(true);
   };
 
-  const handleEditEntry = (tx: Transaction) => {
+  const handleEditEntry = useCallback((tx: Transaction) => {
     editTransaction(tx);
     setManualModalVisible(true);
-  };
+  }, [editTransaction]);
 
-  const handleDeleteEntry = (tx: Transaction) => {
+  const handleDeleteEntry = useCallback((tx: Transaction) => {
     Alert.alert(
       'Delete Transaction',
       `Delete "${tx.title}" (${money(tx.amount, state.currency)})?`,
@@ -444,7 +627,7 @@ export const HisabScreen = React.memo(function HisabScreen({
         },
       ]
     );
-  };
+  }, [state.currency, removeTransaction]);
 
   const currentMonthYear = new Date().toISOString().slice(0, 7) || '2026-09';
 
@@ -555,19 +738,14 @@ export const HisabScreen = React.memo(function HisabScreen({
               styles.saveEntryBtn,
               {
                 backgroundColor: quickText.trim().length > 0 ? '#6366f1' : '#7c3aed',
-                opacity: isSavingEntry ? 0.75 : 1,
               },
             ]}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.8}
-            disabled={quickText.trim().length === 0 || isSavingEntry}
+            disabled={quickText.trim().length === 0}
           >
-            {isSavingEntry ? (
-              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 4 }} />
-            ) : (
-              <Text style={styles.saveEntryBtnSparkle}>✨</Text>
-            )}
-            <Text style={styles.saveEntryBtnText}>{isSavingEntry ? 'Saving...' : 'Save Entry'}</Text>
+            <Text style={styles.saveEntryBtnSparkle}>✨</Text>
+            <Text style={styles.saveEntryBtnText}>Save Entry</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -844,197 +1022,38 @@ export const HisabScreen = React.memo(function HisabScreen({
       <View style={styles.transactionsListContainer}>
         {displayedTxs.length > 0 ? (
           <>
-            {displayedTxs.map((tx, idx) => {
-              const visual = getCategoryVisual(tx.category, tx.type, !!theme.dark);
-              const isIncome = tx.type === 'income';
+            {displayedTxs.map((tx, idx) => (
+              <TransactionRowCard
+                key={tx.id || idx}
+                tx={tx}
+                currency={state.currency}
+                theme={theme}
+                onEdit={handleEditEntry}
+                onDelete={handleDeleteEntry}
+              />
+            ))}
 
-              return (
-                <View
-                  key={tx.id || idx}
-                  style={[
-                    styles.ledgerRowCard,
-                    {
-                      backgroundColor: theme.surface,
-                      borderColor: theme.borderSoft || theme.border,
-                    },
-                  ]}
-                >
-                  {/* Main Content Row */}
-                  <View style={styles.ledgerRowMain}>
-                    {/* Left: Category Icon Avatar (Matching Dashboard) */}
-                    <View
-                      style={[
-                        styles.txAvatarCircle,
-                        {
-                          backgroundColor: visual.bg,
-                          borderColor: visual.border,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.txAvatarEmoji}>{visual.emoji}</Text>
-                    </View>
+            {/* Load More Button when records exceed window */}
+            {filteredTxs.length > displayedTxs.length && (
+              <TouchableOpacity
+                onPress={() => setDisplayLimit((prev) => prev + 30)}
+                style={[
+                  styles.loadMoreBtn,
+                  {
+                    backgroundColor: theme.dark ? '#1e293b' : '#f1f5f9',
+                    borderColor: theme.dark ? '#334155' : '#cbd5e1',
+                  },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.loadMoreBtnText, { color: theme.primary }]}>
+                  Load More ({filteredTxs.length - displayedTxs.length} remaining) ↓
+                </Text>
+              </TouchableOpacity>
+            )}
 
-                    {/* Middle: Title, Category pill, Payment pill, Date, Notes */}
-                    <View style={styles.ledgerTitleBlock}>
-                      <Text
-                        style={[styles.ledgerTitleText, { color: theme.text }]}
-                        numberOfLines={1}
-                      >
-                        {tx.title}
-                      </Text>
-
-                      <View style={styles.ledgerMetaRow}>
-                        <View
-                          style={[
-                            styles.categoryPill,
-                            {
-                              backgroundColor: visual.pillBg,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.categoryPillText,
-                              {
-                                color: visual.pillColor,
-                              },
-                            ]}
-                          >
-                            {tx.category}
-                          </Text>
-                        </View>
-
-                        <View
-                          style={[
-                            styles.methodPill,
-                            {
-                              backgroundColor: theme.dark ? '#1e293b' : '#f1f5f9',
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[styles.methodPillText, { color: theme.subtle }]}
-                          >
-                            {tx.paymentMethod}
-                          </Text>
-                        </View>
-
-                        {/* Recent Date Badge (Today, Yesterday, or formatted date) */}
-                        {(() => {
-                          const dateInfo = formatRelativeDateBadge(tx.date);
-                          return (
-                            <View
-                              style={[
-                                styles.datePill,
-                                {
-                                  backgroundColor: dateInfo.isToday
-                                    ? (theme.dark ? '#064e3b' : '#dcfce7')
-                                    : dateInfo.isYesterday
-                                    ? (theme.dark ? '#1e1b4b' : '#ede9fe')
-                                    : (theme.dark ? '#1e293b' : '#f1f5f9'),
-                                  borderColor: dateInfo.isToday
-                                    ? (theme.dark ? '#059669' : '#86efac')
-                                    : dateInfo.isYesterday
-                                    ? (theme.dark ? '#4338ca' : '#c7d2fe')
-                                    : (theme.dark ? '#334155' : '#e2e8f0'),
-                                },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.datePillText,
-                                  {
-                                    color: dateInfo.isToday
-                                      ? (theme.dark ? '#6ee7b7' : '#15803d')
-                                      : dateInfo.isYesterday
-                                      ? (theme.dark ? '#a5b4fc' : '#4338ca')
-                                      : (theme.dark ? '#94a3b8' : '#64748b'),
-                                    fontWeight: dateInfo.isToday || dateInfo.isYesterday ? '800' : '600',
-                                  },
-                                ]}
-                              >
-                                {dateInfo.label}
-                              </Text>
-                            </View>
-                          );
-                        })()}
-                      </View>
-
-                      {tx.notes ? (
-                        <Text
-                          style={[
-                            styles.ledgerNotesText,
-                            { color: theme.subtle },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          AI Smart Entry: "{tx.notes}"
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    {/* Right: Amount & Compact Icon-Only Actions */}
-                    <View style={styles.ledgerRightBlock}>
-                      <Text
-                        style={[
-                          styles.ledgerAmountText,
-                          {
-                            color: visual.amountColor,
-                          },
-                        ]}
-                      >
-                        {isIncome ? '+' : '-'}
-                        {money(tx.amount, state.currency)}
-                      </Text>
-
-                      {/* MICRO ACTION BUTTONS: ONLY ICON, NO TEXT */}
-                      <View style={styles.ledgerMicroActionsRow}>
-                        {/* Edit (Icon only) */}
-                        <TouchableOpacity
-                          onPress={() => handleEditEntry(tx)}
-                          style={[
-                            styles.iconOnlyMicroActionBtn,
-                            {
-                              backgroundColor: theme.dark ? '#1e1b4b' : '#ede9fe',
-                              borderColor: theme.dark ? '#3730a3' : '#ddd6fe',
-                            },
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          <AppIcon
-                            name="edit"
-                            size={12}
-                            color={theme.dark ? '#a5b4fc' : '#6366f1'}
-                          />
-                        </TouchableOpacity>
-
-                        {/* Delete (Icon only) */}
-                        <TouchableOpacity
-                          onPress={() => handleDeleteEntry(tx)}
-                          style={[
-                            styles.iconOnlyMicroActionBtn,
-                            {
-                              backgroundColor: theme.dark ? '#3b0716' : '#ffe4e6',
-                              borderColor: theme.dark ? '#881337' : '#fecdd3',
-                            },
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          <AppIcon
-                            name="trash"
-                            size={12}
-                            color={theme.dark ? '#fb7185' : '#e11d48'}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-
-            {/* Clean List Ending when records exist */}
-            {filteredTxs.length > 0 ? (
+            {/* Clean List Ending when all records loaded */}
+            {displayedTxs.length >= filteredTxs.length && filteredTxs.length > 0 ? (
               <View style={styles.listEndContainer}>
                 <View style={[styles.listEndDivider, { backgroundColor: theme.dark ? '#1e293b' : '#e2e8f0' }]} />
                 <View
@@ -2383,6 +2402,19 @@ const styles = StyleSheet.create({
   },
   quickAmountChipText: {
     fontSize: 11,
+    fontWeight: '700',
+  },
+  loadMoreBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  loadMoreBtnText: {
+    fontSize: 13,
     fontWeight: '700',
   },
 });
