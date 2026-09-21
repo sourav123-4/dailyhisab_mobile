@@ -170,7 +170,10 @@ type HisabAppContextValue = {
   setQuickText: (text: string) => void;
   categoryFilter: string;
   setCategoryFilter: (category: string) => void;
-  openCategoryInHisab: (category: string) => void;
+  openCategoryInHisab: (category: string, type?: string) => void;
+  typeFilter: string;
+  setTypeFilter: (type: string) => void;
+  filterTrigger: number;
 };
 
 const HisabAppContext = createContext<HisabAppContextValue | null>(null);
@@ -455,9 +458,13 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [filterTrigger, setFilterTrigger] = useState<number>(0);
 
-  const openCategoryInHisab = useCallback((categoryName: string) => {
+  const openCategoryInHisab = useCallback((categoryName: string, typeName: string = 'all') => {
     setCategoryFilter(categoryName || 'all');
+    setTypeFilter(typeName || 'all');
+    setFilterTrigger(Date.now());
     setActiveTab('hisab');
   }, []);
 
@@ -1973,6 +1980,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
             isRecording={recorderState.isRecording}
             isTranscribing={isTranscribing}
             categoryFilter={categoryFilter}
+            typeFilter={typeFilter}
+            filterTrigger={filterTrigger}
             onSelectCategory={openCategoryInHisab}
             saveSmartEntry={saveSmartEntry}
             startRecording={startRecording}
@@ -2115,6 +2124,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     form,
     manual,
     categoryFilter,
+    typeFilter,
+    filterTrigger,
     billCalendarEvents,
     localOnly,
     user,
@@ -2217,6 +2228,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     categoryFilter,
     setCategoryFilter,
     openCategoryInHisab,
+    typeFilter,
+    setTypeFilter,
+    filterTrigger,
   }), [
     activeTab,
     syncStatus,
@@ -2263,6 +2277,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     unreadNotifCount,
     categoryFilter,
     openCategoryInHisab,
+    typeFilter,
+    filterTrigger,
   ]);
 
   return (

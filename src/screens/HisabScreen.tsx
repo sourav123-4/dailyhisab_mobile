@@ -376,6 +376,8 @@ export const HisabScreen = React.memo(function HisabScreen({
   removeTransaction,
   parseHisab,
   categoryFilter = 'all',
+  typeFilter = 'all',
+  filterTrigger = 0,
   onSelectCategory,
 }: {
   state: HisabState;
@@ -399,6 +401,8 @@ export const HisabScreen = React.memo(function HisabScreen({
   removeTransaction: (id: string) => void;
   parseHisab: (input: string) => any[];
   categoryFilter?: string;
+  typeFilter?: string;
+  filterTrigger?: number;
   onSelectCategory?: (category: string) => void;
 }) {
   const theme = useAppTheme();
@@ -407,12 +411,29 @@ export const HisabScreen = React.memo(function HisabScreen({
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryFilter || 'all');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>(typeFilter || 'all');
   const [selectedPayment, setSelectedPayment] = useState<string>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
+
+  // Sync state whenever external filter props or filterTrigger changes
+  useEffect(() => {
+    if (categoryFilter !== undefined) {
+      setSelectedCategory(categoryFilter || 'all');
+    }
+    if (typeFilter !== undefined) {
+      setSelectedType(typeFilter || 'all');
+    }
+    if ((categoryFilter && categoryFilter !== 'all') || (typeFilter && typeFilter !== 'all')) {
+      setSearchQuery('');
+      setStartDate('');
+      setEndDate('');
+      setMinAmount('');
+      setMaxAmount('');
+    }
+  }, [categoryFilter, typeFilter, filterTrigger]);
 
   // Main Filter Modal Visibility & Active Dropdown state within the modal
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -500,7 +521,8 @@ export const HisabScreen = React.memo(function HisabScreen({
 
     // Category Filter
     if (selectedCategory !== 'all') {
-      list = list.filter(t => t.category?.toLowerCase() === selectedCategory.toLowerCase());
+      const targetCat = selectedCategory.trim().toLowerCase();
+      list = list.filter(t => (t.category || 'Others').trim().toLowerCase() === targetCat);
     }
 
     // Payment Filter
@@ -593,6 +615,7 @@ export const HisabScreen = React.memo(function HisabScreen({
     setMinAmount('');
     setMaxAmount('');
     setOpenDropdown(null);
+    onSelectCategory?.('all');
   };
 
   const handleOpenNewEntry = () => {
@@ -753,12 +776,15 @@ export const HisabScreen = React.memo(function HisabScreen({
       {/* 2. TOP 3 KPI SUMMARY CARDS - CLEAN VERTICAL STACK & NO OVERLAP */}
       <View style={styles.kpiCardsRow}>
         {/* TOTAL MONTHLY EXPENSES */}
-        <View
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setSelectedType(selectedType === 'expense' ? 'all' : 'expense')}
           style={[
             styles.kpiCard,
             {
               backgroundColor: theme.surface,
-              borderColor: theme.borderSoft || theme.border,
+              borderColor: selectedType === 'expense' ? (theme.dark ? '#f43f5e' : '#e11d48') : (theme.borderSoft || theme.border),
+              borderWidth: selectedType === 'expense' ? 1.5 : 1,
             },
           ]}
         >
@@ -782,15 +808,18 @@ export const HisabScreen = React.memo(function HisabScreen({
           <Text style={[styles.kpiSubText, { color: theme.subtle }]} numberOfLines={1}>
             {stats.expenseCount} records
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {/* TOTAL EXTRA INCOME */}
-        <View
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setSelectedType(selectedType === 'income' ? 'all' : 'income')}
           style={[
             styles.kpiCard,
             {
               backgroundColor: theme.surface,
-              borderColor: theme.borderSoft || theme.border,
+              borderColor: selectedType === 'income' ? (theme.dark ? '#10b981' : '#059669') : (theme.borderSoft || theme.border),
+              borderWidth: selectedType === 'income' ? 1.5 : 1,
             },
           ]}
         >
@@ -814,15 +843,18 @@ export const HisabScreen = React.memo(function HisabScreen({
           <Text style={[styles.kpiSubText, { color: theme.subtle }]} numberOfLines={1}>
             {stats.incomeCount} records
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {/* EMI & LOAN OUTFLOWS */}
-        <View
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setSelectedType(selectedType === 'emi' ? 'all' : 'emi')}
           style={[
             styles.kpiCard,
             {
               backgroundColor: theme.surface,
-              borderColor: theme.borderSoft || theme.border,
+              borderColor: selectedType === 'emi' ? (theme.dark ? '#f59e0b' : '#d97706') : (theme.borderSoft || theme.border),
+              borderWidth: selectedType === 'emi' ? 1.5 : 1,
             },
           ]}
         >
@@ -846,7 +878,7 @@ export const HisabScreen = React.memo(function HisabScreen({
           <Text style={[styles.kpiSubText, { color: theme.subtle }]} numberOfLines={1}>
             Auto-debit
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 3. SECTION HEADER & SEARCH + MODAL FILTER TRIGGER (CLEAN & CONCISE) */}
@@ -962,7 +994,10 @@ export const HisabScreen = React.memo(function HisabScreen({
 
               {selectedCategory !== 'all' && (
                 <TouchableOpacity
-                  onPress={() => setSelectedCategory('all')}
+                  onPress={() => {
+                    setSelectedCategory('all');
+                    onSelectCategory?.('all');
+                  }}
                   style={[styles.filterChipPill, { backgroundColor: theme.dark ? '#0c4a6e' : '#e0f2fe' }]}
                 >
                   <Text style={[styles.filterChipPillText, { color: '#0284c7' }]}>
@@ -1299,7 +1334,9 @@ export const HisabScreen = React.memo(function HisabScreen({
                           <TouchableOpacity
                             key={c}
                             onPress={() => {
-                              setSelectedCategory(isAll ? 'all' : c);
+                              const nextCat = isAll ? 'all' : c;
+                              setSelectedCategory(nextCat);
+                              onSelectCategory?.(nextCat);
                               setOpenDropdown(null);
                             }}
                             style={[
