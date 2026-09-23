@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Exercise } from '../types/fitness';
 import { EXERCISE_3D_VIDEOS, MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META } from '../data/exercisesData';
+import { getExerciseLocalMedia } from '../data/exerciseLocalMedia';
 import { useAppTheme } from '../theme/appTheme';
 
 interface ExerciseVisualCardProps {
@@ -28,9 +29,11 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
   const muscleMeta =
     MUSCLE_GROUPS_META.find((m) => m.id === exercise.muscleGroup) || MUSCLE_GROUPS_META[0];
 
+  const localMedia = getExerciseLocalMedia(exercise.id);
   const exerciseImage =
-    (exercise.thumbnailUrl ? { uri: exercise.thumbnailUrl } : null) ||
+    localMedia?.posterJpg ||
     EXERCISE_3D_VIDEOS[exercise.id] ||
+    (exercise.thumbnailUrl ? { uri: exercise.thumbnailUrl } : null) ||
     MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] ||
     MUSCLE_ANATOMY_IMAGES.arms;
 

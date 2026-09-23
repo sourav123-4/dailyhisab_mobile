@@ -117,6 +117,17 @@ const EXERCISE_KEYFRAMES: Record<
     iso: require('../../assets/exercise_fullbody_orbit.jpg'),
     zoom: require('../../assets/exercise_tricep_side.jpg'),
   },
+  chest_push_up: {
+    phase1: require('../../assets/exercise_pushup_phase1_top.jpg'),
+    phase2: require('../../assets/exercise_pushup_phase2_descent.jpg'),
+    phase3: require('../../assets/exercise_pushup_phase3_bottom.jpg'),
+    phase4: require('../../assets/exercise_pushup_phase4_ascent.jpg'),
+    front: require('../../assets/exercise_pushup_phase1_top.jpg'),
+    back: require('../../assets/exercise_pushup_phase3_bottom.jpg'),
+    side: require('../../assets/exercise_pushup_phase2_descent.jpg'),
+    iso: require('../../assets/exercise_pushup_phase1_top.jpg'),
+    zoom: require('../../assets/exercise_pushup_phase3_bottom.jpg'),
+  },
 };
 
 function generateHtml5Player(url: string, speed: number, isPlaying: boolean, posterUrl?: string): string {
@@ -218,7 +229,9 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
     (exercise.muscleGroup === 'chest' ? EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'] : '') ||
     EXERCISE_MP4_DATA_URIS['chest_barbell_bench_press'];
 
-  const [videoPlayerType, setVideoPlayerType] = useState<'cloud' | 'youtube'>('youtube');
+  const [videoPlayerType, setVideoPlayerType] = useState<'3d_anim' | 'cloud' | 'youtube'>(
+    localMedia?.animationGif ? '3d_anim' : (resolvedYoutubeId ? 'youtube' : 'cloud')
+  );
 
   // Animated values for 60fps photorealistic motion
   const animPhase = useRef(new Animated.Value(0)).current;
@@ -547,7 +560,13 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
         {activeScene === 'video' ? (
           // ================= SCENE 1: REAL HD MP4 VIDEO =================
           <View style={styles.videoContainerInner}>
-            {Platform.OS === 'web' ? (
+            {videoPlayerType === '3d_anim' && localMedia?.animationGif ? (
+              <Image
+                source={localMedia.animationGif}
+                style={styles.fullHumanImage}
+                resizeMode="contain"
+              />
+            ) : Platform.OS === 'web' ? (
               videoPlayerType === 'youtube' && resolvedYoutubeId ? (
                 <iframe
                   src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&loop=1&playsinline=1&modestbranding=1&rel=0&controls=1`}
@@ -613,16 +632,31 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
 
             {/* Video Source Switcher Pill Overlays */}
             <View style={styles.videoFormatSwitcherRow}>
-              <View
+              {localMedia?.animationGif ? (
+                <TouchableOpacity
+                  style={[
+                    styles.formatSwitchBtn,
+                    videoPlayerType === '3d_anim' && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
+                  ]}
+                  onPress={() => setVideoPlayerType('3d_anim')}
+                >
+                  <Text style={[styles.formatSwitchText, { color: videoPlayerType === '3d_anim' ? '#FFF' : '#00E5FF' }]}>
+                    🧬 3D Animation
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
                 style={[
                   styles.formatSwitchBtn,
-                  { backgroundColor: 'rgba(0, 229, 255, 0.2)', borderColor: '#00E5FF' },
+                  videoPlayerType === 'cloud' && { backgroundColor: 'rgba(0, 229, 255, 0.25)', borderColor: '#00E5FF' },
                 ]}
+                onPress={() => setVideoPlayerType('cloud')}
               >
-                <Text style={[styles.formatSwitchText, { color: '#00E5FF' }]}>
-                  ⚡ HD 60FPS MP4
+                <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'cloud' ? '#00E5FF' : theme.muted }]}>
+                  ⚡ HD MP4
                 </Text>
-              </View>
+              </TouchableOpacity>
 
               {resolvedYoutubeId ? (
                 <TouchableOpacity
@@ -630,7 +664,7 @@ export const Exercise3DVideoPlayer: React.FC<Exercise3DVideoPlayerProps> = ({
                     styles.formatSwitchBtn,
                     videoPlayerType === 'youtube' && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
                   ]}
-                  onPress={() => setVideoPlayerType(videoPlayerType === 'youtube' ? 'cloud' : 'youtube')}
+                  onPress={() => setVideoPlayerType(videoPlayerType === 'youtube' ? (localMedia?.animationGif ? '3d_anim' : 'cloud') : 'youtube')}
                 >
                   <Text style={[styles.formatSwitchText, { color: videoPlayerType === 'youtube' ? '#FFF' : theme.muted }]}>
                     {videoPlayerType === 'youtube' ? '✕ Close YT' : '▶ Coach YT'}
