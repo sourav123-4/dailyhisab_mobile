@@ -190,6 +190,18 @@ export function useHisabApp() {
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const monthNow = () => new Date().toISOString().slice(0, 7);
+function normalizeDateToISO(dateStr?: string): string {
+  if (!dateStr) return today();
+  const trimmed = dateStr.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return today();
+}
 const numeric = (value: string | number | undefined) => Number(String(value || '').replace(/[^0-9.]/g, '')) || 0;
 const clampDay = (value: number) => Math.min(31, Math.max(1, Math.round(value || 1)));
 const money = (value: number, currency = '₹') => `${currency} ${Math.round(value || 0).toLocaleString('en-IN')}`;
@@ -267,67 +279,76 @@ function parseHisab(text: string): Transaction[] {
 
 function migrateState(raw: any): HisabState {
   if (!raw) return defaultState;
-  if (raw.schemaVersion === 2) return { ...defaultState, ...raw, budgets: { ...defaultState.budgets, ...(raw.budgets || {}) } };
-  return {
-    ...defaultState,
-    groqKey: raw.groqKey || '',
-    transactions: Array.isArray(raw.transactions) ? raw.transactions.map((tx: any) => ({
-      id: tx.id || uid(),
-      date: tx.date || today(),
-      title: tx.title || 'Hisab entry',
-      amount: numeric(tx.amount),
-      category: tx.category === 'Salary' ? 'Income' : tx.category === 'Investments' ? 'Investment' : tx.category || 'Others',
-      type: tx.type === 'income' ? 'income' : 'expense',
-      paymentMethod: tx.paymentMethod || 'UPI',
-      notes: tx.notes,
-    })) : [],
-    debts: Array.isArray(raw.debts) ? raw.debts.map((d: any) => ({
-      id: d.id || uid(),
-      personName: d.personName || 'Person',
-      type: d.type || 'lent',
-      amount: numeric(d.amount),
-      settledAmount: d.settled ? numeric(d.amount) : 0,
-      date: d.date || today(),
-      status: d.settled ? 'settled' : 'pending',
-    })) : [],
-    investments: Array.isArray(raw.holdings) ? raw.holdings.map((h: any) => ({
-      id: h.id || uid(),
-      name: h.name || 'Investment',
-      category: h.kind || 'Investment',
-      type: h.kind || 'SIP',
-      monthlySip: 0,
-      totalInvested: numeric(h.amount),
-      currentValue: numeric(h.amount),
-      platform: '',
-      startDate: today(),
-    })) : [],
-    loans: Array.isArray(raw.loans) ? raw.loans.map((l: any) => ({
-      id: l.id || uid(),
-      name: l.name || 'Loan',
-      lender: l.lender || '',
-      totalPrincipal: numeric(l.totalPrincipal || l.principal || l.remainingAmount),
-      remainingAmount: numeric(l.remainingAmount || l.principal || l.totalPrincipal),
-      monthlyEmi: numeric(l.monthlyEmi || l.emi),
-      interestRate: numeric(l.interestRate || l.rate),
-      emiDay: clampDay(numeric(l.emiDay || 5)),
-      status: l.status === 'Paid Off' ? 'Paid Off' : 'Active',
-    })) : [],
-    salary: Array.isArray(raw.salary)
-      ? raw.salary
-      : raw.salary && typeof raw.salary === 'object' && raw.salary.gross && raw.salary.company && raw.salary.company !== 'Salary'
-        ? [{
-          id: uid(),
-          monthYear: monthNow(),
-          company: raw.salary.company,
-          grossAmount: numeric(raw.salary.gross),
-          deductions: numeric(raw.salary.deductions),
-          netAmount: numeric(raw.salary.credited || numeric(raw.salary.gross) - numeric(raw.salary.deductions)),
-          receivedDate: today(),
-          status: 'credited',
-        }]
-        : [],
-    budgets: { ...defaultState.budgets, ...(raw.budgets || {}) },
-  };
+  const baseState: HisabState = raw.schemaVersion === 2
+    ? { ...defaultState, ...raw, budgets: { ...defaultState.budgets, ...(raw.budgets || {}) } }
+    : {
+        ...defaultState,
+        groqKey: raw.groqKey || '',
+        transactions: Array.isArray(raw.transactions) ? raw.transactions.map((tx: any) => ({
+          id: tx.id || uid(),
+          date: normalizeDateToISO(tx.date),
+          title: tx.title || 'Hisab entry',
+          amount: numeric(tx.amount),
+          category: tx.category === 'Salary' ? 'Income' : tx.category === 'Investments' ? 'Investment' : tx.category || 'Others',
+          type: tx.type === 'income' ? 'income' : 'expense',
+          paymentMethod: tx.paymentMethod || 'UPI',
+          notes: tx.notes,
+        })) : [],
+        debts: Array.isArray(raw.debts) ? raw.debts.map((d: any) => ({
+          id: d.id || uid(),
+          personName: d.personName || 'Person',
+          type: d.type || 'lent',
+          amount: numeric(d.amount),
+          settledAmount: d.settled ? numeric(d.amount) : 0,
+          date: d.date || today(),
+          status: d.settled ? 'settled' : 'pending',
+        })) : [],
+        investments: Array.isArray(raw.holdings) ? raw.holdings.map((h: any) => ({
+          id: h.id || uid(),
+          name: h.name || 'Investment',
+          category: h.kind || 'Investment',
+          type: h.kind || 'SIP',
+          monthlySip: 0,
+          totalInvested: numeric(h.amount),
+          currentValue: numeric(h.amount),
+          platform: '',
+          startDate: today(),
+        })) : [],
+        loans: Array.isArray(raw.loans) ? raw.loans.map((l: any) => ({
+          id: l.id || uid(),
+          name: l.name || 'Loan',
+          lender: l.lender || '',
+          totalPrincipal: numeric(l.totalPrincipal || l.principal || l.remainingAmount),
+          remainingAmount: numeric(l.remainingAmount || l.principal || l.totalPrincipal),
+          monthlyEmi: numeric(l.monthlyEmi || l.emi),
+          interestRate: numeric(l.interestRate || l.rate),
+          emiDay: clampDay(numeric(l.emiDay || 5)),
+          status: l.status === 'Paid Off' ? 'Paid Off' : 'Active',
+        })) : [],
+        salary: Array.isArray(raw.salary)
+          ? raw.salary
+          : raw.salary && typeof raw.salary === 'object' && raw.salary.gross && raw.salary.company && raw.salary.company !== 'Salary'
+            ? [{
+              id: uid(),
+              monthYear: monthNow(),
+              company: raw.salary.company,
+              grossAmount: numeric(raw.salary.gross),
+              deductions: numeric(raw.salary.deductions),
+              netAmount: numeric(raw.salary.credited || numeric(raw.salary.gross) - numeric(raw.salary.deductions)),
+              receivedDate: today(),
+              status: 'credited',
+            }]
+            : [],
+        budgets: { ...defaultState.budgets, ...(raw.budgets || {}) },
+      };
+
+  if (Array.isArray(baseState.transactions)) {
+    baseState.transactions = baseState.transactions.map(tx => ({
+      ...tx,
+      date: normalizeDateToISO(tx.date),
+    }));
+  }
+  return baseState;
 }
 
 function mergeById<T extends { id?: string }>(local: T[], cloud: T[], deletedIds?: Set<string>): T[] {
@@ -498,8 +519,17 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }, [loaded]);
 
   const syncInBackground = useCallback((_targetTab?: Tab) => {
-    // Background state persistence is debounced to avoid blocking navigation
-  }, []);
+    if (!canUseCloudSync() || localOnly || !networkOnline || !user || user.isAnonymous) return;
+    const nextHash = cloudStateFingerprint(state);
+    if (lastCloudSyncHashRef.current !== nextHash) {
+      syncStateToCloud(state, lastSyncedIdsRef.current)
+        .then(() => {
+          lastCloudSyncHashRef.current = nextHash;
+          lastSyncedIdsRef.current = syncedIdsFromState(state);
+        })
+        .catch(() => undefined);
+    }
+  }, [localOnly, networkOnline, user, state]);
 
   const showToast = useCallback((config: ToastConfig) => {
     setToast(config);
@@ -682,9 +712,18 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoaded(true));
   }, []);
 
+  const asyncStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!loaded) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+    if (asyncStorageTimerRef.current) clearTimeout(asyncStorageTimerRef.current);
+    asyncStorageTimerRef.current = setTimeout(() => {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+    }, 400);
+
+    return () => {
+      if (asyncStorageTimerRef.current) clearTimeout(asyncStorageTimerRef.current);
+    };
   }, [loaded, state]);
 
   useEffect(() => {
@@ -930,28 +969,30 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   function patch(patchValue: Partial<HisabState> | ((current: HisabState) => Partial<HisabState>)) {
     setState(current => {
       const resolved = typeof patchValue === 'function' ? patchValue(current) : patchValue;
-      const next = { ...current, ...resolved };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
+      return { ...current, ...resolved };
     });
   }
 
   function addTransactions(items: Transaction[], toastMsg?: string) {
     if (!items || items.length === 0) return;
-    items.forEach(it => {
+    const normalizedItems = items.map(it => ({
+      ...it,
+      id: it.id || uid(),
+      date: normalizeDateToISO(it.date),
+    }));
+    normalizedItems.forEach(it => {
       if (it?.id) {
         deletedIdsRef.current.delete(it.id);
         syncItemToCloud('transactions', it);
       }
     });
-    setState(current => {
-      const next = { ...current, transactions: [...items, ...current.transactions] };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      transactions: [...normalizedItems, ...current.transactions],
+    }));
     showToast({
       title: 'Added Successfully',
-      message: toastMsg || `${items.length} hisab ${items.length > 1 ? 'entries' : 'entry'} added`,
+      message: toastMsg || `${normalizedItems.length} hisab ${normalizedItems.length > 1 ? 'entries' : 'entry'} added`,
       type: 'success',
       duration: 1500,
     });
@@ -960,11 +1001,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   function removeTransaction(id: string) {
     if (!id) return;
     markIdDeleted('transactions', id);
-    setState(current => {
-      const next = { ...current, transactions: current.transactions.filter(tx => tx.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      transactions: current.transactions.filter(tx => tx.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Hisab entry removed',
@@ -981,7 +1021,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       type: tx.type,
       paymentMethod: tx.paymentMethod,
       cardId: tx.linkedCreditCardId || '',
-      date: tx.date || today(),
+      date: normalizeDateToISO(tx.date),
       notes: tx.notes || '',
     });
     setForm(current => ({ ...current, editingTxId: tx.id }));
@@ -1012,9 +1052,11 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       Alert.alert('Missing details', 'Add a title and amount.');
       return false;
     }
+    const editId = form.editingTxId;
+    const txDate = normalizeDateToISO(manual.date);
     const nextTx: Transaction = {
-      id: form.editingTxId || uid(),
-      date: manual.date || today(),
+      id: editId || uid(),
+      date: txDate,
       title: manual.title.trim(),
       amount,
       category: manual.category,
@@ -1023,19 +1065,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       notes: manual.notes?.trim() || undefined,
       linkedCreditCardId: manual.paymentMethod === 'Credit Card' ? manual.cardId : '',
     };
-    if (form.editingTxId) {
-      const editId = form.editingTxId;
-      syncItemToCloud('transactions', { ...nextTx, id: editId });
-      setState(current => {
-        const next = {
-          ...current,
-          transactions: current.transactions.map(tx =>
-            tx.id === editId ? { ...tx, ...nextTx, id: tx.id } : tx
-          ),
-        };
-        setTimeout(() => triggerImmediateSync(next), 0);
-        return next;
-      });
+    if (editId) {
+      syncItemToCloud('transactions', nextTx);
+      setState(current => ({
+        ...current,
+        transactions: current.transactions.map(tx =>
+          tx.id === editId ? { ...tx, ...nextTx, id: tx.id } : tx
+        ),
+      }));
       setForm(current => ({ ...current, editingTxId: '' }));
       showToast({
         title: 'Updated',
@@ -1445,11 +1482,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeDebt(id: string) {
     if (!id) return;
     markIdDeleted('debts', id);
-    setState(current => {
-      const next = { ...current, debts: current.debts.filter(debt => debt.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      debts: current.debts.filter(debt => debt.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Udhar record removed',
@@ -1503,11 +1539,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeInvestment(id: string) {
     if (!id) return;
     markIdDeleted('investments', id);
-    setState(current => {
-      const next = { ...current, investments: current.investments.filter(inv => inv.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      investments: current.investments.filter(inv => inv.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Investment removed',
@@ -1559,11 +1594,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeLoan(id: string) {
     if (!id) return;
     markIdDeleted('loans', id);
-    setState(current => {
-      const next = { ...current, loans: current.loans.filter(loan => loan.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      loans: current.loans.filter(loan => loan.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Loan removed',
@@ -1618,11 +1652,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeSalary(id: string) {
     if (!id) return;
     markIdDeleted('salary', id);
-    setState(current => {
-      const next = { ...current, salary: current.salary.filter(record => record.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      salary: current.salary.filter(record => record.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Salary record removed',
@@ -1681,11 +1714,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeRecurring(id: string) {
     if (!id) return;
     markIdDeleted('recurringRules', id);
-    setState(current => {
-      const next = { ...current, recurringRules: current.recurringRules.filter(rule => rule.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      recurringRules: current.recurringRules.filter(rule => rule.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Recurring rule removed',
@@ -1733,11 +1765,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeCreditCard(id: string) {
     if (!id) return;
     markIdDeleted('creditCards', id);
-    setState(current => {
-      const next = { ...current, creditCards: current.creditCards.filter(card => card.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      creditCards: current.creditCards.filter(card => card.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Credit card removed',
@@ -1786,11 +1817,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function removeGoal(id: string) {
     if (!id) return;
     markIdDeleted('savingsGoals', id);
-    setState(current => {
-      const next = { ...current, savingsGoals: current.savingsGoals.filter(goal => goal.id !== id) };
-      setTimeout(() => triggerImmediateSync(next), 0);
-      return next;
-    });
+    setState(current => ({
+      ...current,
+      savingsGoals: current.savingsGoals.filter(goal => goal.id !== id),
+    }));
     showToast({
       title: 'Deleted',
       message: 'Savings goal removed',
@@ -1906,7 +1936,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
 
   const openTab = useCallback((tab: Tab) => {
     setActiveTab(tab);
-  }, []);
+    setTimeout(() => {
+      syncInBackground(tab);
+    }, 100);
+  }, [syncInBackground]);
 
   const openAuth = useCallback(() => {
     handleSetLocalOnly(false);
@@ -2095,6 +2128,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
           <HisabScreen
             state={state}
             txs={txs}
+            currentMonth={currentMonth}
             quickText={quickText}
             setQuickText={setQuickText}
             form={form}
