@@ -82,6 +82,7 @@ import { AppThemeProvider, getAppTheme } from '../theme/appTheme';
 const STORAGE_KEY = 'dailyhisab.mobile.state.v2';
 const oldStorageKey = 'dailyhisab.mobile.state.v1';
 const LOCAL_ONLY_KEY = 'dailyhisab.auth.localOnly';
+const DELETED_IDS_STORAGE_KEY = 'dailyhisab.deleted_ids.v1';
 const categories = ['Food', 'Bills', 'Transport', 'Shopping', 'Entertainment', 'Health', 'F&O Trading', 'Stocks', 'EMI', 'Investment', 'Income', 'Others'];
 const paymentMethods = ['UPI', 'Cash', 'Credit Card', 'NetBanking', 'Auto-Debit'];
 const modules: Array<{ id: Tab; label: string; shortLabel: string; icon: string; description: string }> = [
@@ -329,13 +330,17 @@ function migrateState(raw: any): HisabState {
   };
 }
 
-function mergeById<T extends { id?: string }>(local: T[], cloud: T[]): T[] {
+function mergeById<T extends { id?: string }>(local: T[], cloud: T[], deletedIds?: Set<string>): T[] {
   const merged = new Map<string, T>();
   local.forEach(item => {
-    if (item?.id) merged.set(item.id, item);
+    if (item?.id && (!deletedIds || !deletedIds.has(item.id))) {
+      merged.set(item.id, item);
+    }
   });
   cloud.forEach(item => {
-    if (item?.id) merged.set(item.id, item);
+    if (item?.id && (!deletedIds || !deletedIds.has(item.id))) {
+      merged.set(item.id, item);
+    }
   });
   return Array.from(merged.values());
 }
@@ -453,6 +458,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const applyingCloudRef = useRef(false);
   const lastCloudSyncHashRef = useRef('');
   const lastSyncedIdsRef = useRef<SyncedIds>({});
+  const deletedIdsRef = useRef<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastConfig | null>(null);
   const [actionLoading, setActionLoading] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -509,11 +515,18 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const triggerImmediateSync = useCallback((targetState: HisabState, immediate = false) => {
-    // 1. Immediately persist to local AsyncStorage in the background without blocking UI
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(targetState)).catch(() => undefined);
+  const markIdDeleted = useCallback((collectionName: CloudArrayKey, id: string) => {
+    if (!id) return;
+    deletedIdsRef.current.add(id);
+    const trimmed = Array.from(deletedIdsRef.current).slice(-1000);
+    AsyncStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(trimmed)).catch(() => undefined);
 
-    // 2. Debounce cloud/Firebase sync so multiple rapid adds/edits are batched together cleanly
+    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+      deleteFromCloud(collectionName, id).catch(() => undefined);
+    }
+  }, [localOnly, networkOnline, user]);
+
+  const triggerImmediateSync = useCallback((targetState: HisabState, immediate = false) => {
     if (!canUseCloudSync() || localOnly || !networkOnline || !user || user.isAnonymous) {
       return;
     }
@@ -590,10 +603,28 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       AsyncStorage.getItem(LOCAL_ONLY_KEY),
       AsyncStorage.getItem('dailyhisab.notifications.read.v1'),
       AsyncStorage.getItem('dailyhisab.notifications.dismissed.v1'),
+      AsyncStorage.getItem(DELETED_IDS_STORAGE_KEY),
     ])
-      .then(([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw]) => {
+      .then(([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw, deletedRaw]) => {
+        if (deletedRaw) {
+          try {
+            const arr = JSON.parse(deletedRaw);
+            if (Array.isArray(arr)) {
+              deletedIdsRef.current = new Set(arr);
+            }
+          } catch {}
+        }
         const parsed = raw ? JSON.parse(raw) : oldRaw ? JSON.parse(oldRaw) : null;
         const nextState = removeDummyDataFromState(migrateState(parsed));
+        if (deletedIdsRef.current.size > 0) {
+          cloudArrayCollections.forEach(([, stateKey]) => {
+            if (Array.isArray((nextState as any)[stateKey])) {
+              (nextState as any)[stateKey] = (nextState as any)[stateKey].filter(
+                (item: any) => !item?.id || !deletedIdsRef.current.has(item.id)
+              );
+            }
+          });
+        }
         setState(nextState);
         if (nextState.pinEnabled) {
           setIsLocked(true);
@@ -685,12 +716,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         items
           .filter(item => item?.id && isDummyDataItem(item))
           .forEach(item => deleteFromCloud(cloudName, item.id).catch(() => undefined));
-        const cleanItems = removeDummyDataItems(items || []);
+        const cleanItems = removeDummyDataItems(items || []).filter(
+          item => !item?.id || !deletedIdsRef.current.has(item.id)
+        );
         applyingCloudRef.current = true;
         setState(current => {
           const next = removeDummyDataFromState({
             ...current,
-            [stateKey]: mergeById((current as any)[stateKey] || [], cleanItems),
+            [stateKey]: mergeById((current as any)[stateKey] || [], cleanItems, deletedIdsRef.current),
           });
           lastCloudSyncHashRef.current = cloudStateFingerprint(next);
           lastSyncedIdsRef.current = syncedIdsFromState(next);
@@ -861,9 +894,12 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
   function addTransactions(items: Transaction[], toastMsg?: string) {
     if (!items || items.length === 0) return;
+    items.forEach(it => {
+      if (it?.id) deletedIdsRef.current.delete(it.id);
+    });
     setState(current => {
       const next = { ...current, transactions: [...items, ...current.transactions] };
-      triggerImmediateSync(next);
+      setTimeout(() => triggerImmediateSync(next), 0);
       return next;
     });
     showToast({
@@ -875,9 +911,11 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }
 
   function removeTransaction(id: string) {
+    if (!id) return;
+    markIdDeleted('transactions', id);
     setState(current => {
       const next = { ...current, transactions: current.transactions.filter(tx => tx.id !== id) };
-      triggerImmediateSync(next);
+      setTimeout(() => triggerImmediateSync(next), 0);
       return next;
     });
     showToast({
@@ -950,7 +988,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
             tx.id === editId ? { ...tx, ...nextTx, id: tx.id } : tx
           ),
         };
-        triggerImmediateSync(next);
+        setTimeout(() => triggerImmediateSync(next), 0);
         return next;
       });
       setForm(current => ({ ...current, editingTxId: '' }));
@@ -1359,12 +1397,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeDebt(id: string) {
-    withActionLoader('Deleting udhar...', () => {
-      patch({ debts: state.debts.filter(debt => debt.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('debts', id);
+    setState(current => {
+      const next = { ...current, debts: current.debts.filter(debt => debt.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Udhar record removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1411,12 +1455,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeInvestment(id: string) {
-    withActionLoader('Deleting investment...', () => {
-      patch({ investments: state.investments.filter(inv => inv.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('investments', id);
+    setState(current => {
+      const next = { ...current, investments: current.investments.filter(inv => inv.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Investment removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1461,12 +1511,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeLoan(id: string) {
-    withActionLoader('Deleting loan...', () => {
-      patch({ loans: state.loans.filter(loan => loan.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('loans', id);
+    setState(current => {
+      const next = { ...current, loans: current.loans.filter(loan => loan.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Loan removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1514,12 +1570,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeSalary(id: string) {
-    withActionLoader('Deleting salary...', () => {
-      patch({ salary: state.salary.filter(record => record.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('salary', id);
+    setState(current => {
+      const next = { ...current, salary: current.salary.filter(record => record.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Salary record removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1571,12 +1633,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeRecurring(id: string) {
-    withActionLoader('Deleting rule...', () => {
-      patch({ recurringRules: state.recurringRules.filter(rule => rule.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('recurringRules', id);
+    setState(current => {
+      const next = { ...current, recurringRules: current.recurringRules.filter(rule => rule.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Recurring rule removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1617,12 +1685,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeCreditCard(id: string) {
-    withActionLoader('Deleting card...', () => {
-      patch({ creditCards: state.creditCards.filter(card => card.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('creditCards', id);
+    setState(current => {
+      const next = { ...current, creditCards: current.creditCards.filter(card => card.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Credit card removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 
@@ -1664,12 +1738,18 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function removeGoal(id: string) {
-    withActionLoader('Deleting goal...', () => {
-      patch({ savingsGoals: state.savingsGoals.filter(goal => goal.id !== id) });
-    }, {
+    if (!id) return;
+    markIdDeleted('savingsGoals', id);
+    setState(current => {
+      const next = { ...current, savingsGoals: current.savingsGoals.filter(goal => goal.id !== id) };
+      setTimeout(() => triggerImmediateSync(next), 0);
+      return next;
+    });
+    showToast({
       title: 'Deleted',
       message: 'Savings goal removed',
       type: 'danger',
+      duration: 1500,
     });
   }
 

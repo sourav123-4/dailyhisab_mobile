@@ -321,11 +321,12 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
                   borderColor: theme.dark ? '#3730a3' : '#ddd6fe',
                 },
               ]}
-              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              activeOpacity={0.6}
             >
               <AppIcon
                 name="edit"
-                size={12}
+                size={13}
                 color={theme.dark ? '#a5b4fc' : '#6366f1'}
               />
             </TouchableOpacity>
@@ -339,11 +340,12 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
                   borderColor: theme.dark ? '#881337' : '#fecdd3',
                 },
               ]}
-              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              activeOpacity={0.6}
             >
               <AppIcon
                 name="trash"
-                size={12}
+                size={13}
                 color={theme.dark ? '#fb7185' : '#e11d48'}
               />
             </TouchableOpacity>
@@ -2113,9 +2115,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   iconOnlyMicroActionBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
