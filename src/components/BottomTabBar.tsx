@@ -49,6 +49,7 @@ export const BottomTabBar = React.memo(function BottomTabBar({
         onPress={() => onOpenTab('dashboard')}
         style={styles.tabButton}
         activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
       >
         <AppIcon
           name="home"
@@ -73,6 +74,7 @@ export const BottomTabBar = React.memo(function BottomTabBar({
         onPress={() => onOpenTab('hisab')}
         style={styles.tabButton}
         activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
       >
         <AppIcon
           name="hisab"
@@ -114,6 +116,7 @@ export const BottomTabBar = React.memo(function BottomTabBar({
               },
             ]}
             activeOpacity={0.85}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <AppIcon
               name="voice"
@@ -129,6 +132,7 @@ export const BottomTabBar = React.memo(function BottomTabBar({
         onPress={() => onOpenTab('invest')}
         style={styles.tabButton}
         activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
       >
         <AppIcon
           name="reports"
@@ -153,6 +157,7 @@ export const BottomTabBar = React.memo(function BottomTabBar({
         onPress={() => onOpenTab('budgets')}
         style={styles.tabButton}
         activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
       >
         <AppIcon
           name="settings"

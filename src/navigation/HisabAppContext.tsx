@@ -464,7 +464,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const [importText, setImportText] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
-  const [activeModalOpen, setActiveModalOpen] = useState(false);
+  const [activeModalOpen, setActiveModalOpenState] = useState(false);
+  const setActiveModalOpen = useCallback((open: boolean) => {
+    setActiveModalOpenState(prev => (prev === open ? prev : open));
+  }, []);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [transcribedText, setTranscribedText] = useState('');
   const [voiceParsedEntries, setVoiceParsedEntries] = useState<Transaction[]>([]);
@@ -812,6 +815,13 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         return String(b.id || '').localeCompare(String(a.id || ''));
       });
   }, [state.transactions, currentMonth]);
+
+  const getCreditCardSpend = useCallback((cardId: string, monthYear = currentMonth) => {
+    return state.transactions
+      .filter(tx => tx.linkedCreditCardId === cardId && tx.date.startsWith(monthYear))
+      .reduce((sum, tx) => sum + tx.amount, 0);
+  }, [state.transactions, currentMonth]);
+
   const metrics = useMemo(() => {
     const totalIncome = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -982,12 +992,6 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       type: 'info',
       duration: 1500,
     });
-  }
-
-  function getCreditCardSpend(cardId: string, monthYear = currentMonth) {
-    return state.transactions
-      .filter(tx => tx.linkedCreditCardId === cardId && tx.date.startsWith(monthYear))
-      .reduce((sum, tx) => sum + tx.amount, 0);
   }
 
   function saveSmartEntry(overrideText?: string) {
@@ -2292,6 +2296,12 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     setActiveTab(current => current === tab ? current : tab);
   }, []);
 
+  const unlock = useCallback(() => setIsLocked(false), []);
+  const lock = useCallback(() => setIsLocked(true), []);
+  const patchState = useCallback((partial: Partial<HisabState>) => {
+    setState(prev => ({ ...prev, ...partial }));
+  }, []);
+
   const contextValue = useMemo<HisabAppContextValue>(() => ({
     activeTab,
     modules,
@@ -2326,10 +2336,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     openAuth,
     toggleVoiceEntry,
     handleVoiceSuggestion,
-    unlock: () => setIsLocked(false),
-    lock: () => setIsLocked(true),
+    unlock,
+    lock,
     pinEnabled: state.pinEnabled,
-    patchState: (partial: Partial<HisabState>) => setState(prev => ({ ...prev, ...partial })),
+    patchState,
     getThemeBg,
     logoutUser: handleLogout,
     saveProfile: handleSaveProfile,
@@ -2416,43 +2426,6 @@ type HisabScreenFrameNavigation = {
   openDrawer?: () => void;
 };
 
-const CachedScreenContainer = React.memo(function CachedScreenContainer({
-  activeTab,
-  renderScreen,
-}: {
-  activeTab: Tab;
-  renderScreen: (t: Tab) => ReactNode;
-}) {
-  const [visitedTabs, setVisitedTabs] = useState<Tab[]>(() => {
-    const initial: Tab[] = ['dashboard', 'hisab'];
-    if (!initial.includes(activeTab)) {
-      initial.push(activeTab);
-    }
-    return initial;
-  });
-
-  useEffect(() => {
-    setVisitedTabs((prev) => {
-      if (prev.includes(activeTab)) return prev;
-      return [...prev, activeTab];
-    });
-  }, [activeTab]);
-
-  return (
-    <>
-      {visitedTabs.map((t) => (
-        <View
-          key={t}
-          style={t === activeTab ? styles.visibleTabContainer : styles.hiddenTabContainer}
-          pointerEvents={t === activeTab ? 'auto' : 'none'}
-        >
-          {renderScreen(t)}
-        </View>
-      ))}
-    </>
-  );
-});
-
 export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenFrameNavigation; tab: Tab }) {
   const app = useHisabApp();
   const theme = getAppTheme(app.theme);
@@ -2471,23 +2444,30 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
   const closeProfile = useCallback(() => setProfileOpen(false), []);
   const openNotifications = useCallback(() => {
     app.openTab('notifications');
-    navigation.navigate(routeByTab['notifications']);
+    const target = routeByTab['notifications'] || 'notifications';
+    if (target) navigation.navigate(target);
   }, [app, navigation]);
   const handleBack = useCallback(() => {
     app.openTab('dashboard');
-    navigation.navigate(routeByTab['dashboard']);
+    const target = routeByTab['dashboard'] || 'dashboard';
+    if (target) navigation.navigate(target);
   }, [app, navigation]);
 
   const openBottomTab = useCallback((nextTab: Tab) => {
     app.openTab(nextTab);
-    if (nextTab !== tab) {
-      navigation.navigate(routeByTab[nextTab]);
+    const target = routeByTab[nextTab] || nextTab;
+    if (nextTab !== tab && target) {
+      navigation.navigate(target);
     }
   }, [app, navigation, tab]);
   const openDrawerTab = useCallback((nextTab: Tab) => {
     closeDrawer();
     app.openTab(nextTab);
-  }, [app, closeDrawer]);
+    const target = routeByTab[nextTab] || nextTab;
+    if (nextTab !== tab && target) {
+      navigation.navigate(target);
+    }
+  }, [app, closeDrawer, navigation, tab]);
 
   const handleVoiceAction = useCallback(() => {
     app.resetVoiceState();
@@ -2571,12 +2551,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
             />
           }
         >
-          {app.isLocked ? null : (
-            <CachedScreenContainer
-              activeTab={tab}
-              renderScreen={app.renderScreen}
-            />
-          )}
+          {app.isLocked ? null : app.renderScreen(tab)}
         </ScrollView>
         <AppDrawer
           isOpen={drawerOpen}

@@ -119,30 +119,31 @@ export const TitanFitBottomTabBar: React.FC<BottomTabBarProps> = ({
           );
         }
 
-        return (
-          <TouchableOpacity
-            key={route.key}
-            onPress={onPress}
-            style={styles.tabButton}
-            activeOpacity={0.7}
-            accessibilityLabel={cfg.label}
-          >
-            <Text style={[styles.tabEmoji, { transform: [{ scale: isFocused ? 1.15 : 1 }] }]}>
-              {cfg.emoji}
-            </Text>
-            <Text
-              style={[
-                styles.tabLabel,
-                {
-                  color: isFocused ? activeColor : inactiveColor,
-                  fontWeight: isFocused ? '800' : '600',
-                },
-              ]}
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={onPress}
+              style={styles.tabButton}
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              accessibilityLabel={cfg.label}
             >
-              {cfg.label}
-            </Text>
-          </TouchableOpacity>
-        );
+              <Text style={[styles.tabEmoji, { transform: [{ scale: isFocused ? 1.15 : 1 }] }]}>
+                {cfg.emoji}
+              </Text>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: isFocused ? activeColor : inactiveColor,
+                    fontWeight: isFocused ? '800' : '600',
+                  },
+                ]}
+              >
+                {cfg.label}
+              </Text>
+            </TouchableOpacity>
+          );
       })}
     </View>
   );

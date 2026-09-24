@@ -61,8 +61,8 @@ export const AppDrawer = React.memo(function AppDrawer({
       useNativeDriver: true,
     });
 
-    animation.start(({ finished }) => {
-      if (finished && !isOpen) {
+    animation.start(() => {
+      if (!isOpen) {
         setMounted(false);
       }
     });
@@ -70,6 +70,7 @@ export const AppDrawer = React.memo(function AppDrawer({
     return () => animation.stop();
   }, [isOpen, progress]);
 
+  if (!isOpen && !mounted) return null;
   if (!mounted) return null;
 
   const drawerTranslateX = progress.interpolate({

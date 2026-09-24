@@ -87,6 +87,8 @@ export function ProfileModal({
     return name.slice(0, 2).toUpperCase();
   };
 
+  if (!visible) return null;
+
   return (
     <Modal
       animationType="slide"
