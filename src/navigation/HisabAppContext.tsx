@@ -345,6 +345,22 @@ function mergeById<T extends { id?: string }>(local: T[], cloud: T[], deletedIds
   return Array.from(merged.values());
 }
 
+function haveItemsChanged<T extends { id?: string }>(a: T[], b: T[]): boolean {
+  if (a === b) return false;
+  if (a.length !== b.length) return true;
+  for (let i = 0; i < a.length; i++) {
+    const itemA = a[i] as any;
+    const itemB = b[i] as any;
+    if (itemA?.id !== itemB?.id) return true;
+    if (itemA?.amount !== itemB?.amount) return true;
+    if (itemA?.date !== itemB?.date) return true;
+    if (itemA?.title !== itemB?.title) return true;
+    if (itemA?.updatedAt !== itemB?.updatedAt) return true;
+    if (itemA?.status !== itemB?.status) return true;
+  }
+  return false;
+}
+
 function isDummyDataItem(_item: any) {
   return false;
 }
@@ -523,6 +539,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
     if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
       deleteFromCloud(collectionName, id).catch(() => undefined);
+    }
+  }, [localOnly, networkOnline, user]);
+
+  const syncItemToCloud = useCallback((collectionName: CloudArrayKey, item: { id: string; [key: string]: any }) => {
+    if (!item?.id) return;
+    deletedIdsRef.current.delete(item.id);
+    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+      saveToCloud(collectionName, item.id, item).catch(() => undefined);
     }
   }, [localOnly, networkOnline, user]);
 
@@ -721,9 +745,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         );
         applyingCloudRef.current = true;
         setState(current => {
+          const currentArray = (current as any)[stateKey] || [];
+          const nextMerged = mergeById(currentArray, cleanItems, deletedIdsRef.current);
+          if (!haveItemsChanged(currentArray, nextMerged)) {
+            return current;
+          }
           const next = removeDummyDataFromState({
             ...current,
-            [stateKey]: mergeById((current as any)[stateKey] || [], cleanItems, deletedIdsRef.current),
+            [stateKey]: nextMerged,
           });
           lastCloudSyncHashRef.current = cloudStateFingerprint(next);
           lastSyncedIdsRef.current = syncedIdsFromState(next);
@@ -756,16 +785,21 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       setSyncStatus('Local');
       return;
     }
-    const nextHash = cloudStateFingerprint(state);
-    if (lastCloudSyncHashRef.current === nextHash) return;
-    setSyncStatus('Syncing');
-    syncStateToCloud(state, lastSyncedIdsRef.current)
-      .then(() => {
-        lastCloudSyncHashRef.current = nextHash;
-        lastSyncedIdsRef.current = syncedIdsFromState(state);
-        setSyncStatus('Cloud Synced');
-      })
-      .catch(() => setSyncStatus('Local'));
+
+    const timer = setTimeout(() => {
+      const nextHash = cloudStateFingerprint(state);
+      if (lastCloudSyncHashRef.current === nextHash) return;
+      setSyncStatus('Syncing');
+      syncStateToCloud(state, lastSyncedIdsRef.current)
+        .then(() => {
+          lastCloudSyncHashRef.current = nextHash;
+          lastSyncedIdsRef.current = syncedIdsFromState(state);
+          setSyncStatus('Cloud Synced');
+        })
+        .catch(() => setSyncStatus('Local'));
+    }, 2000);
+
+    return () => clearTimeout(timer);
   }, [loaded, localOnly, networkOnline, user?.uid, user?.isAnonymous, state]);
 
   const txs = useMemo(() => {
@@ -895,7 +929,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   function addTransactions(items: Transaction[], toastMsg?: string) {
     if (!items || items.length === 0) return;
     items.forEach(it => {
-      if (it?.id) deletedIdsRef.current.delete(it.id);
+      if (it?.id) {
+        deletedIdsRef.current.delete(it.id);
+        syncItemToCloud('transactions', it);
+      }
     });
     setState(current => {
       const next = { ...current, transactions: [...items, ...current.transactions] };
@@ -965,11 +1002,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     addTransactions(entries, `${entries.length} hisab ${entries.length > 1 ? 'entries' : 'entry'} saved`);
   }
 
-  function saveManual() {
+  function saveManual(): boolean {
     const amount = numeric(manual.amount);
-    if (!amount || !manual.title.trim()) return Alert.alert('Missing details', 'Add a title and amount.');
+    if (!amount || !manual.title.trim()) {
+      Alert.alert('Missing details', 'Add a title and amount.');
+      return false;
+    }
     const nextTx: Transaction = {
-      id: uid(),
+      id: form.editingTxId || uid(),
       date: manual.date || today(),
       title: manual.title.trim(),
       amount,
@@ -981,6 +1021,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     };
     if (form.editingTxId) {
       const editId = form.editingTxId;
+      syncItemToCloud('transactions', { ...nextTx, id: editId });
       setState(current => {
         const next = {
           ...current,
@@ -1002,6 +1043,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       addTransactions([nextTx], `${money(amount, state.currency)} ${nextTx.title} added`);
     }
     setManual({ ...manual, title: '', amount: '', cardId: '', date: today(), notes: '' });
+    return true;
   }
 
   function cancelManualEdit() {

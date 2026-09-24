@@ -27,13 +27,8 @@ function formatRelativeDateBadge(dateStr?: string): { label: string; isToday: bo
   yDate.setDate(yDate.getDate() - 1);
   const yesterdayStr = yDate.toISOString().slice(0, 10);
 
-  if (dateStr === todayStr) {
-    return { label: 'Today', isToday: true, isYesterday: false };
-  }
-  if (dateStr === yesterdayStr) {
-    return { label: 'Yesterday', isToday: false, isYesterday: true };
-  }
-
+  let formattedDate = dateStr;
+  let fullFormatted = dateStr;
   try {
     const parts = dateStr.split('-');
     if (parts.length === 3) {
@@ -44,11 +39,20 @@ function formatRelativeDateBadge(dateStr?: string): { label: string; isToday: bo
         const dateObj = new Date(y, m - 1, d);
         const day = String(d).padStart(2, '0');
         const monthName = dateObj.toLocaleString('en-IN', { month: 'short' });
-        return { label: `${day} ${monthName}`, isToday: false, isYesterday: false };
+        formattedDate = `${day} ${monthName}`;
+        fullFormatted = `${day} ${monthName} ${y}`;
       }
     }
   } catch {}
-  return { label: dateStr, isToday: false, isYesterday: false };
+
+  if (dateStr === todayStr) {
+    return { label: `Today, ${formattedDate}`, isToday: true, isYesterday: false };
+  }
+  if (dateStr === yesterdayStr) {
+    return { label: `Yesterday, ${formattedDate}`, isToday: false, isYesterday: true };
+  }
+
+  return { label: fullFormatted, isToday: false, isYesterday: false };
 }
 
 function getCategoryVisual(category: string, type: string, isDark: boolean) {
@@ -280,7 +284,7 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
                   },
                 ]}
               >
-                {dateInfo.label}
+                📅 {dateInfo.label}
               </Text>
             </View>
           </View>
@@ -397,7 +401,7 @@ export const HisabScreen = React.memo(function HisabScreen({
   saveSmartEntry: (text?: string) => void;
   startRecording: () => void;
   stopRecording: () => void;
-  saveManual: () => void;
+  saveManual: () => boolean | void;
   editTransaction: (tx: Transaction) => void;
   cancelManualEdit: () => void;
   removeTransaction: (id: string) => void;
@@ -1725,8 +1729,10 @@ export const HisabScreen = React.memo(function HisabScreen({
               <Button
                 label={form.editingTxId ? 'Update Entry' : 'Save Hisab Entry'}
                 onPress={() => {
-                  saveManual();
-                  setManualModalVisible(false);
+                  const saved = saveManual();
+                  if (saved !== false) {
+                    setManualModalVisible(false);
+                  }
                 }}
               />
             </ScrollView>
