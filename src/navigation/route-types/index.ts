@@ -10,6 +10,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Onboarding: undefined;
+  AppFlow: undefined;
   MainTabs: undefined;
   ActiveWorkout: undefined;
   ExerciseDetail: { exercise: Exercise };

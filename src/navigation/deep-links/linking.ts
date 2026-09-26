@@ -4,16 +4,20 @@ import { RootStackParamList } from '../route-types';
 export const linkingConfig: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
-      MainTabs: {
+      AppFlow: {
         screens: {
-          Today: 'today',
-          MuscleExplore: 'anatomy',
-          Weight: 'weight',
-          AICoach: 'coach',
-          Profile: 'profile',
+          MainTabs: {
+            screens: {
+              Today: 'today',
+              MuscleExplore: 'anatomy',
+              Weight: 'weight',
+              AICoach: 'coach',
+              Profile: 'profile',
+            },
+          },
+          ActiveWorkout: 'active-workout',
         },
       },
-      ActiveWorkout: 'active-workout',
       Onboarding: 'onboarding',
     },
   },

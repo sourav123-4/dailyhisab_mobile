@@ -12,6 +12,7 @@ import { GoogleSignin, isCancelledResponse, isErrorWithCode, isSuccessResponse, 
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
@@ -34,7 +35,14 @@ import {
   resetPassword,
   updateUserProfile,
 } from '../services/firebase';
-import { canUseCloudSync, deleteFromCloud, saveToCloud, setCloudNetworkEnabled, subscribeToCloudCollection } from '../services/sync';
+import {
+  canUseCloudSync,
+  deleteFromCloud,
+  saveToCloud,
+  setActiveCloudUid,
+  setCloudNetworkEnabled,
+  subscribeToCloudCollection,
+} from '../services/sync';
 
 import {
   AuthMode,
@@ -58,30 +66,13 @@ import {
 } from '../types';
 
 import { AuthGate } from '../components/AuthGate';
-import { TopHeader } from '../components/TopHeader';
-import { BottomTabBar } from '../components/BottomTabBar';
-import { SecurityLockModal } from '../components/SecurityLockModal';
-import { VoiceAssistantModal } from '../components/VoiceAssistantModal';
-import { AppDrawer } from '../components/AppDrawer';
-import { ProfileModal } from '../components/ProfileModal';
 import { AppToast, ToastConfig } from '../components/AppToast';
-import { ActionLoader } from '../components/ActionLoader';
-import { ScreenSkeleton } from '../components/SkeletonLoader';
-
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { HisabScreen } from '../screens/HisabScreen';
-import { LoansScreen } from '../screens/LoansScreen';
-import { InvestmentsScreen } from '../screens/InvestmentsScreen';
-import { SalaryScreen } from '../screens/SalaryScreen';
-import { DebtsScreen } from '../screens/DebtsScreen';
-import { PlannerScreen } from '../screens/PlannerScreen';
-import { BudgetsScreen } from '../screens/BudgetsScreen';
-import { NotificationsScreen } from '../screens/NotificationsScreen';
-import { AppThemeProvider, getAppTheme } from '../theme/appTheme';
+import { getAppTheme } from '../theme/appTheme';
 
 const STORAGE_KEY = 'dailyhisab.mobile.state.v2';
 const oldStorageKey = 'dailyhisab.mobile.state.v1';
 const LOCAL_ONLY_KEY = 'dailyhisab.auth.localOnly';
+const CACHED_USER_KEY = 'dailyhisab.auth.user';
 const DELETED_IDS_STORAGE_KEY = 'dailyhisab.deleted_ids.v1';
 const categories = ['Food', 'Bills', 'Transport', 'Shopping', 'Entertainment', 'Health', 'F&O Trading', 'Stocks', 'EMI', 'Investment', 'Income', 'Others'];
 const paymentMethods = ['UPI', 'Cash', 'Credit Card', 'NetBanking', 'Auto-Debit'];
@@ -114,7 +105,7 @@ const routeByTab: Record<Tab, string> = {
   notifications: 'notifications',
 };
 
-type HisabAppContextValue = {
+export type HisabAppContextType = {
   activeTab: Tab;
   modules: ModuleItem[];
   syncStatus: string;
@@ -145,7 +136,7 @@ type HisabAppContextValue = {
   handleVoiceSuggestion: (text: string) => Promise<void>;
   authReady: boolean;
   shouldShowAuthGate: boolean;
-  renderScreen: (tab: Tab) => ReactNode;
+  renderScreen?: (tab: Tab) => ReactNode;
   renderAuthGate: () => ReactNode;
   openTab: (tab: Tab) => void;
   setCurrentTab: (tab: Tab) => void;
@@ -168,6 +159,7 @@ type HisabAppContextValue = {
   syncInBackground: (tab?: Tab) => void;
   unreadNotifCount: number;
   setUnreadNotifCount: (count: number) => void;
+  quickText: string;
   setQuickText: (text: string) => void;
   categoryFilter: string;
   setCategoryFilter: (category: string) => void;
@@ -175,7 +167,63 @@ type HisabAppContextValue = {
   typeFilter: string;
   setTypeFilter: (type: string) => void;
   filterTrigger: number;
+  // Exposed for tab screens and HisabScreenFrame
+  state: HisabState;
+  setState: React.Dispatch<React.SetStateAction<HisabState>>;
+  defaultState: HisabState;
+  txs: Transaction[];
+  currentMonth: string;
+  metrics: any;
+  categories: string[];
+  paymentMethods: string[];
+  form: Record<string, string>;
+  setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  manual: any;
+  setManual: React.Dispatch<React.SetStateAction<any>>;
+  shiftMonth: (delta: number) => void;
+  removeTransaction: (id: string) => void;
+  editTransaction: (tx: Transaction) => void;
+  saveManual: () => boolean;
+  cancelManualEdit: () => void;
+  saveSmartEntry: (overrideText?: string) => void;
+  parseHisab: (text: string) => Transaction[];
+  patch: (patchValue: Partial<HisabState> | ((current: HisabState) => Partial<HisabState>)) => void;
+  addLoan: (customPayload?: Partial<Loan>) => void;
+  payEmi: (loan: Loan) => void;
+  removeLoan: (loanId: string) => void;
+  addInvestment: (customPayload?: Partial<Investment>) => void;
+  paySip: (inv: Investment) => void;
+  removeInvestment: (id: string) => void;
+  numeric: (value: string | number | undefined) => number;
+  addSalary: (customPayload?: Partial<SalaryRecord>) => void;
+  creditSalary: (record: SalaryRecord) => void;
+  removeSalary: (id: string) => void;
+  addDebt: (payload?: any) => void;
+  settleDebt: (id: string, amount: number) => void;
+  removeDebt: (id: string) => void;
+  generateRecurringForMonth: (monthYear?: string) => void;
+  addRecurring: (customPayload?: any) => void;
+  toggleRecurring: (id: string) => void;
+  removeRecurring: (id: string) => void;
+  getCreditCardSpend: (cardId: string, monthYear?: string) => number;
+  monthlyInsights: FinanceInsight[];
+  billCalendarEvents: BillCalendarEvent[];
+  addCreditCard: (customPayload?: Partial<CreditCard>) => void;
+  removeCreditCard: (id: string) => void;
+  recordCardPayment: (card: CreditCard) => void;
+  addGoal: (customPayload?: Partial<SavingsGoal>) => void;
+  removeGoal: (id: string) => void;
+  contributeGoal: (goal: SavingsGoal) => void;
+  addSplitExpense: () => void;
+  backupText: string;
+  setBackupText: (text: string) => void;
+  importText: string;
+  setImportText: (text: string) => void;
+  buildBackup: () => void;
+  importBackup: () => void;
 };
+
+type HisabAppContextValue = HisabAppContextType;
 
 const HisabAppContext = createContext<HisabAppContextValue | null>(null);
 
@@ -661,8 +709,19 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       AsyncStorage.getItem('dailyhisab.notifications.read.v1'),
       AsyncStorage.getItem('dailyhisab.notifications.dismissed.v1'),
       AsyncStorage.getItem(DELETED_IDS_STORAGE_KEY),
+      AsyncStorage.getItem(CACHED_USER_KEY),
     ])
-      .then(([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw, deletedRaw]) => {
+      .then(([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw, deletedRaw, cachedUserRaw]) => {
+        let cachedUser: any = null;
+        if (cachedUserRaw) {
+          try {
+            cachedUser = JSON.parse(cachedUserRaw);
+            if (cachedUser?.uid) {
+              setUser(cachedUser);
+              setActiveCloudUid(cachedUser.uid);
+            }
+          } catch {}
+        }
         if (deletedRaw) {
           try {
             const arr = JSON.parse(deletedRaw);
@@ -683,8 +742,12 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
           });
         }
         setState(nextState);
-        if (nextState.pinEnabled) {
+
+        const hasActiveSession = localOnlyRaw === 'true' || !!(cachedUser && cachedUser.uid);
+        if (nextState.pinEnabled && hasActiveSession) {
           setIsLocked(true);
+        } else {
+          setIsLocked(false);
         }
         if (localOnlyRaw === 'true') {
           setLocalOnly(true);
@@ -735,8 +798,16 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         clearTimeout(timer);
         timer = null;
       }
-      setUser(nextUser);
       if (nextUser && !nextUser.isAnonymous) {
+        setUser(nextUser);
+        setActiveCloudUid(nextUser.uid);
+        AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify({
+          uid: nextUser.uid,
+          email: nextUser.email,
+          displayName: nextUser.displayName,
+          photoURL: nextUser.photoURL,
+          isAnonymous: false,
+        })).catch(() => undefined);
         handleSetLocalOnly(false);
       }
       setAuthReady(true);
@@ -746,6 +817,22 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       unsubscribe();
     };
   }, [handleSetLocalOnly]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        const hasSession = localOnly || (user && !user.isAnonymous);
+        if (state.pinEnabled && hasSession) {
+          setIsLocked(true);
+        }
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+          syncStateToCloud(state, lastSyncedIdsRef.current).catch(() => undefined);
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [state, localOnly, networkOnline, user]);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -760,8 +847,20 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const updateNetworkStatus = (isOnline: boolean) => {
       setNetworkOnline(isOnline);
-      if (!isOnline) setSyncStatus('Local');
-      setCloudNetworkEnabled(isOnline).catch(() => undefined);
+      if (!isOnline) {
+        setSyncStatus('Local');
+      } else {
+        setCloudNetworkEnabled(true).catch(() => undefined);
+        if (canUseCloudSync() && !localOnly && user && !user.isAnonymous) {
+          syncStateToCloud(state, lastSyncedIdsRef.current)
+            .then(() => {
+              lastCloudSyncHashRef.current = cloudStateFingerprint(state);
+              lastSyncedIdsRef.current = syncedIdsFromState(state);
+              setSyncStatus('Cloud Synced');
+            })
+            .catch(() => undefined);
+        }
+      }
     };
 
     const isConnectionActive = (c: any) => c.isConnected !== false && c.type !== 'none' && c.type !== 'unknown';
@@ -773,7 +872,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     return NetInfo.addEventListener(connection => {
       updateNetworkStatus(isConnectionActive(connection));
     });
-  }, []);
+  }, [localOnly, user, state]);
 
   useEffect(() => {
     if (!loaded || localOnly || !networkOnline || !user || user.isAnonymous) return;
@@ -839,7 +938,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
           setSyncStatus('Cloud Synced');
         })
         .catch(() => setSyncStatus('Local'));
-    }, 2000);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, [loaded, localOnly, networkOnline, user?.uid, user?.isAnonymous, state]);
@@ -2046,8 +2145,11 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     } catch {
       // ignore
     }
+    await AsyncStorage.multiRemove([CACHED_USER_KEY, LOCAL_ONLY_KEY]).catch(() => undefined);
+    setActiveCloudUid(null);
     handleSetLocalOnly(false);
     setUser(null);
+    setIsLocked(false);
     showToast({
       title: 'Logged Out',
       message: 'You have been logged out successfully.',
@@ -2092,209 +2194,6 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       }
     }
   }, [user, showToast]);
-
-  const renderScreen = useCallback((tab: Tab) => {
-    if (!loaded) {
-      return <ScreenSkeleton tab={tab} />;
-    }
-    switch (tab) {
-      case 'dashboard':
-        return (
-          <DashboardScreen
-            state={state}
-            currentMonth={currentMonth}
-            metrics={metrics}
-            categories={categories}
-            quickText={quickText}
-            setQuickText={setQuickText}
-            isRecording={recorderState.isRecording}
-            isTranscribing={isTranscribing}
-            saveSmartEntry={saveSmartEntry}
-            startRecording={startRecording}
-            stopRecording={stopRecording}
-            shiftMonth={shiftMonth}
-            removeTransaction={removeTransaction}
-            editTransaction={editTransaction}
-            insights={monthlyInsights}
-            onOpenTab={openTab}
-            onSelectCategory={openCategoryInHisab}
-            onAddTransaction={() => {
-              openTab('hisab');
-            }}
-          />
-        );
-      case 'hisab':
-        return (
-          <HisabScreen
-            state={state}
-            txs={txs}
-            currentMonth={currentMonth}
-            quickText={quickText}
-            setQuickText={setQuickText}
-            form={form}
-            setForm={setForm}
-            manual={manual}
-            setManual={setManual}
-            categories={categories}
-            paymentMethods={paymentMethods}
-            isRecording={recorderState.isRecording}
-            isTranscribing={isTranscribing}
-            categoryFilter={categoryFilter}
-            typeFilter={typeFilter}
-            filterTrigger={filterTrigger}
-            onSelectCategory={openCategoryInHisab}
-            saveSmartEntry={saveSmartEntry}
-            startRecording={startRecording}
-            stopRecording={stopRecording}
-            saveManual={saveManual}
-            editTransaction={editTransaction}
-            cancelManualEdit={cancelManualEdit}
-            removeTransaction={removeTransaction}
-            parseHisab={parseHisab}
-          />
-        );
-      case 'loans':
-        return (
-          <LoansScreen
-            state={state}
-            form={form}
-            setForm={setForm}
-            patch={patch}
-            addLoan={addLoan}
-            payEmi={payEmi}
-            removeLoan={removeLoan}
-          />
-        );
-      case 'invest':
-        return (
-          <InvestmentsScreen
-            state={state}
-            currentMonth={currentMonth}
-            form={form}
-            setForm={setForm}
-            patch={patch}
-            addInvestment={addInvestment}
-            paySip={paySip}
-            removeInvestment={removeInvestment}
-          />
-        );
-      case 'salary':
-        return (
-          <SalaryScreen
-            state={state}
-            currentMonth={currentMonth}
-            form={form}
-            setForm={setForm}
-            numeric={numeric}
-            addSalary={addSalary}
-            creditSalary={creditSalary}
-            removeSalary={removeSalary}
-          />
-        );
-      case 'debts':
-        return (
-          <DebtsScreen
-            state={state}
-            form={form}
-            setForm={setForm}
-            addDebt={addDebt}
-            settleDebt={settleDebt}
-            removeDebt={removeDebt}
-          />
-        );
-      case 'planner':
-        return (
-          <PlannerScreen
-            state={state}
-            currentMonth={currentMonth}
-            form={form}
-            setForm={setForm}
-            shiftMonth={shiftMonth}
-            generateRecurringForMonth={generateRecurringForMonth}
-            addRecurring={addRecurring}
-            toggleRecurring={toggleRecurring}
-            removeRecurring={removeRecurring}
-            getCreditCardSpend={getCreditCardSpend}
-            insights={monthlyInsights}
-            events={billCalendarEvents}
-            addCreditCard={addCreditCard}
-            removeCreditCard={removeCreditCard}
-            recordCardPayment={recordCardPayment}
-            addGoal={addGoal}
-            removeGoal={removeGoal}
-            contributeGoal={contributeGoal}
-            addSplitExpense={addSplitExpense}
-          />
-        );
-      case 'budgets':
-        return (
-          <BudgetsScreen
-            state={state}
-            setState={setState}
-            defaultState={defaultState}
-            txs={txs}
-            form={form}
-            setForm={setForm}
-            localOnly={localOnly}
-            user={user}
-            syncStatus={syncStatus}
-            backupText={backupText}
-            setBackupText={setBackupText}
-            importText={importText}
-            setImportText={setImportText}
-            numeric={numeric}
-            patch={patch}
-            addCreditCard={addCreditCard}
-            removeCreditCard={removeCreditCard}
-            recordCardPayment={recordCardPayment}
-            getCreditCardSpend={getCreditCardSpend}
-            addGoal={addGoal}
-            removeGoal={removeGoal}
-            contributeGoal={contributeGoal}
-            buildBackup={buildBackup}
-            importBackup={importBackup}
-            onOpenAuth={openAuth}
-            logoutUser={handleLogout}
-          />
-        );
-      case 'notifications':
-        return (
-          <NotificationsScreen
-            state={state}
-            syncStatus={syncStatus}
-            onOpenTab={openTab}
-            onUpdateUnreadCount={setUnreadNotifCount}
-          />
-        );
-      default:
-        return null;
-    }
-  }, [
-    loaded,
-    state,
-    currentMonth,
-    metrics,
-    quickText,
-    recorderState.isRecording,
-    isTranscribing,
-    monthlyInsights,
-    openTab,
-    openCategoryInHisab,
-    txs,
-    form,
-    manual,
-    categoryFilter,
-    typeFilter,
-    filterTrigger,
-    billCalendarEvents,
-    localOnly,
-    user,
-    syncStatus,
-    backupText,
-    importText,
-    openAuth,
-    handleLogout,
-  ]);
 
   const getThemeBg = () => {
     return getAppTheme(state.theme).bg;
@@ -2363,7 +2262,6 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     stopRecording,
     authReady,
     shouldShowAuthGate,
-    renderScreen,
     renderAuthGate,
     openTab,
     setCurrentTab,
@@ -2390,6 +2288,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     syncInBackground,
     unreadNotifCount,
     setUnreadNotifCount,
+    quickText,
     setQuickText,
     categoryFilter,
     setCategoryFilter,
@@ -2397,16 +2296,66 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     typeFilter,
     setTypeFilter,
     filterTrigger,
+    // Exposed for tab screens & HisabScreenFrame
+    state,
+    setState,
+    defaultState,
+    txs,
+    currentMonth,
+    metrics,
+    categories,
+    paymentMethods,
+    form,
+    setForm,
+    manual,
+    setManual,
+    shiftMonth,
+    removeTransaction,
+    editTransaction,
+    saveManual,
+    cancelManualEdit,
+    saveSmartEntry,
+    parseHisab,
+    patch,
+    addLoan,
+    payEmi,
+    removeLoan,
+    addInvestment,
+    paySip,
+    removeInvestment,
+    numeric,
+    addSalary,
+    creditSalary,
+    removeSalary,
+    addDebt,
+    settleDebt,
+    removeDebt,
+    generateRecurringForMonth,
+    addRecurring,
+    toggleRecurring,
+    removeRecurring,
+    getCreditCardSpend,
+    monthlyInsights,
+    billCalendarEvents,
+    addCreditCard,
+    removeCreditCard,
+    recordCardPayment,
+    addGoal,
+    removeGoal,
+    contributeGoal,
+    addSplitExpense,
+    backupText,
+    setBackupText,
+    importText,
+    setImportText,
+    buildBackup,
+    importBackup,
   }), [
     activeTab,
     syncStatus,
     localOnly,
     user,
-    state.theme,
-    state.currency,
-    state.securityPin,
-    state.biometricEnabled,
-    state.pinEnabled,
+    state,
     isLocked,
     recorderState.isRecording,
     isTranscribing,
@@ -2421,8 +2370,6 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     handleVoiceSuggestion,
     authReady,
     shouldShowAuthGate,
-    renderScreen,
-    renderAuthGate,
     openTab,
     setCurrentTab,
     openAuth,
@@ -2441,10 +2388,23 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     isTabReady,
     syncInBackground,
     unreadNotifCount,
+    quickText,
     categoryFilter,
     openCategoryInHisab,
     typeFilter,
     filterTrigger,
+    txs,
+    currentMonth,
+    metrics,
+    form,
+    manual,
+    shiftMonth,
+    removeTransaction,
+    editTransaction,
+    monthlyInsights,
+    billCalendarEvents,
+    backupText,
+    importText,
   ]);
 
   return (
@@ -2454,199 +2414,3 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     </HisabAppContext.Provider>
   );
 }
-
-type HisabScreenFrameNavigation = {
-  navigate: (routeName: string) => void;
-  openDrawer?: () => void;
-};
-
-export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenFrameNavigation; tab: Tab }) {
-  const app = useHisabApp();
-  const theme = getAppTheme(app.theme);
-  const insets = useSafeAreaInsets();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const mainScrollRef = useRef<ScrollView>(null);
-
-  useEffect(() => {
-    mainScrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [tab]);
-
-  const openDrawer = useCallback(() => setDrawerOpen(true), []);
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  const openProfile = useCallback(() => setProfileOpen(true), []);
-  const closeProfile = useCallback(() => setProfileOpen(false), []);
-  const openNotifications = useCallback(() => {
-    app.openTab('notifications');
-    const target = routeByTab['notifications'] || 'notifications';
-    if (target) navigation.navigate(target);
-  }, [app, navigation]);
-  const handleBack = useCallback(() => {
-    app.openTab('dashboard');
-    const target = routeByTab['dashboard'] || 'dashboard';
-    if (target) navigation.navigate(target);
-  }, [app, navigation]);
-
-  const openBottomTab = useCallback((nextTab: Tab) => {
-    app.openTab(nextTab);
-    const target = routeByTab[nextTab] || nextTab;
-    if (nextTab !== tab && target) {
-      navigation.navigate(target);
-    }
-  }, [app, navigation, tab]);
-  const openDrawerTab = useCallback((nextTab: Tab) => {
-    closeDrawer();
-    app.openTab(nextTab);
-    const target = routeByTab[nextTab] || nextTab;
-    if (nextTab !== tab && target) {
-      navigation.navigate(target);
-    }
-  }, [app, closeDrawer, navigation, tab]);
-
-  const handleVoiceAction = useCallback(() => {
-    app.resetVoiceState();
-    app.setVoiceModalOpen(true);
-  }, [app]);
-
-  const handleSpeedPress = useCallback((info: any) => {
-    app.showToast({
-      title: `⚡ Network: ${info.connectionType} (${info.isOnline ? 'Connected' : 'Offline'})`,
-      message: `Ping: ${info.pingMs > 0 ? `${info.pingMs}ms` : 'Good'} • Status: ${info.isOnline ? 'Online' : 'Offline'} • Sync: ${app.syncStatus}`,
-      type: info.isOnline ? 'info' : 'danger',
-    });
-  }, [app]);
-
-  if (app.shouldShowAuthGate) {
-    return (
-      <AppThemeProvider themeName={app.theme}>
-        {app.renderAuthGate()}
-      </AppThemeProvider>
-    );
-  }
-
-  return (
-    <AppThemeProvider themeName={app.theme}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.app, { backgroundColor: theme.bg }]}
-      >
-        <StatusBar style={theme.dark ? 'light' : 'dark'} />
-        <VoiceAssistantModal
-          visible={app.voiceModalOpen}
-          isRecording={app.isRecording}
-          isTranscribing={app.isTranscribing}
-          recordingDuration={app.recordingDuration}
-          transcribedText={app.transcribedText}
-          parsedEntries={app.voiceParsedEntries}
-          currency={app.currency}
-          onClose={() => {
-            app.setVoiceModalOpen(false);
-            app.resetVoiceState();
-          }}
-          onToggleRecording={app.toggleVoiceEntry}
-          onConfirmEntries={app.confirmVoiceEntries}
-          onEditInHisab={app.editVoiceInHisab}
-          onResetVoice={app.resetVoiceState}
-          onSelectSuggestion={app.handleVoiceSuggestion}
-        />
-        <ActionLoader visible={app.actionLoading.visible} message={app.actionLoading.message} />
-        <View style={[styles.headerChrome, { backgroundColor: theme.surface, borderBottomColor: theme.borderSoft, paddingTop: insets.top + 10 }]}>
-          <TopHeader
-            activeTab={tab}
-            modules={app.modules}
-            syncStatus={app.syncStatus}
-            localOnly={app.localOnly}
-            user={app.user}
-            isRecording={app.isRecording}
-            isRefreshing={app.isRefreshing}
-            onOpenDrawer={openDrawer}
-            onOpenProfile={openProfile}
-            onVoiceToggle={handleVoiceAction}
-            onOpenAuth={app.openAuth}
-            onNotificationPress={openNotifications}
-            unreadNotificationsCount={app.unreadNotifCount}
-            onBack={handleBack}
-          />
-        </View>
-        <ScrollView
-          ref={mainScrollRef}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: Math.max(insets.bottom + 142, 156) },
-          ]}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={app.isRefreshing}
-              onRefresh={app.onRefresh}
-              tintColor={theme.primary}
-              colors={[theme.primary]}
-            />
-          }
-        >
-          {app.isLocked ? null : app.renderScreen(tab)}
-        </ScrollView>
-        <AppDrawer
-          isOpen={drawerOpen}
-          activeTab={tab}
-          modules={app.modules}
-          localOnly={app.localOnly}
-          user={app.user}
-          onClose={closeDrawer}
-          onOpenTab={openDrawerTab}
-          onOpenAuth={app.openAuth}
-          onLogout={app.logoutUser}
-          onOpenProfile={openProfile}
-        />
-        <ProfileModal
-          visible={profileOpen}
-          user={app.user}
-          localOnly={app.localOnly}
-          onClose={closeProfile}
-          onSignOut={() => {
-            closeProfile();
-            app.logoutUser();
-          }}
-          onSaveProfile={app.saveProfile}
-          onChangePassword={app.changePassword}
-        />
-        {app.activeModalOpen || profileOpen || app.voiceModalOpen || drawerOpen ? null : (
-          <BottomTabBar
-            activeTab={tab}
-            bottomTabs={bottomTabs}
-            isRecording={app.isRecording}
-            onOpenTab={openBottomTab}
-            onActionPress={handleVoiceAction}
-          />
-        )}
-      </KeyboardAvoidingView>
-    </AppThemeProvider>
-  );
-}
-
-const styles = StyleSheet.create({
-  app: { flex: 1 },
-  headerChrome: {
-    borderBottomWidth: 1,
-    paddingBottom: 8,
-    paddingHorizontal: 0,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-    zIndex: 20,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  visibleTabContainer: {
-    display: 'flex',
-    width: '100%',
-  },
-  hiddenTabContainer: {
-    display: 'none',
-  },
-});

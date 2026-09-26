@@ -11,8 +11,8 @@ import { WeightTrackerScreen } from '../../screens/WeightTrackerScreen';
 import { AICoachScreen } from '../../screens/AICoachScreen';
 import { ProfileScreen } from '../../screens/ProfileScreen';
 import { ActiveWorkoutScreen } from '../../screens/ActiveWorkoutScreen';
-
-import { HisabScreenFrame, useHisabApp } from '../HisabAppContext';
+import { useHisabApp } from '../HisabAppContext';
+import { HisabScreenFrame } from '../HisabScreenFrame';
 import { SecurityLockModal } from '../../components/SecurityLockModal';
 import { Tab } from '../../types';
 import { useAppMode } from '../AppModeContext';
@@ -55,7 +55,7 @@ function DailyHisabFrame() {
 
 export default function AppFlowNavigator() {
   const { appMode } = useAppMode();
-  const { isLocked, securityPin, biometricEnabled, unlock } = useHisabApp();
+  const { isLocked, securityPin, biometricEnabled, unlock, shouldShowAuthGate } = useHisabApp();
 
   return (
     <View style={styles.rootContainer}>
@@ -73,7 +73,7 @@ export default function AppFlowNavigator() {
       )}
 
       <SecurityLockModal
-        visible={isLocked}
+        visible={!shouldShowAuthGate && isLocked}
         storedPin={securityPin}
         biometricEnabled={biometricEnabled}
         onUnlock={unlock}

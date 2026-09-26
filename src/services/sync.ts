@@ -12,22 +12,32 @@ export type CloudCollection =
   | 'savingsGoals'
   | 'settings';
 
+let activeUidOverride: string | null = null;
+
+export function setActiveCloudUid(uid: string | null) {
+  activeUidOverride = uid;
+}
+
 function safeUid() {
-  const uid = auth?.currentUser?.uid;
-  return uid && !auth?.currentUser?.isAnonymous ? uid.replace(/[^a-zA-Z0-9_-]/g, '_') : null;
+  const uid = activeUidOverride || auth?.currentUser?.uid;
+  if (!uid) return null;
+  if (!activeUidOverride && auth?.currentUser?.isAnonymous) return null;
+  return String(uid).replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 function collectionRef(name: CloudCollection) {
   if (!db) return null;
   const uid = safeUid();
-  return uid ? collection(db, 'users', uid, name) : collection(db, name);
+  if (!uid) return null;
+  return collection(db, 'users', uid, name);
 }
 
 function docRef(name: CloudCollection, id: string) {
   if (!db) return null;
   const uid = safeUid();
+  if (!uid) return null;
   const safeId = String(id).replace(/\//g, '_');
-  return uid ? doc(db, 'users', uid, name, safeId) : doc(db, name, safeId);
+  return doc(db, 'users', uid, name, safeId);
 }
 
 const writeCache = new Map<string, string>();
@@ -51,16 +61,16 @@ function isBackendConnectionError(error: any) {
   );
 }
 
-function markQuotaBlocked() {
-  quotaBlockedUntil = Date.now() + 5 * 60 * 1000;
+function markQuotaBlocked(durationMs = 60 * 1000) {
+  quotaBlockedUntil = Date.now() + durationMs;
 }
 
-function markBackendBlocked(durationMs = 60 * 1000) {
+function markBackendBlocked(durationMs = 4000) {
   backendBlockedUntil = Date.now() + durationMs;
 }
 
 function cloudKey(name: CloudCollection, id = '') {
-  return `${auth?.currentUser?.uid || 'anonymous'}:${name}:${id}`;
+  return `${safeUid() || 'anonymous'}:${name}:${id}`;
 }
 
 function stableStringify(value: unknown): string {
@@ -78,7 +88,7 @@ function stableStringify(value: unknown): string {
 }
 
 export function canUseCloudSync() {
-  if (!db) return false;
+  if (!db || !safeUid()) return false;
   const now = Date.now();
   return now >= quotaBlockedUntil && now >= backendBlockedUntil;
 }
@@ -87,13 +97,14 @@ export async function setCloudNetworkEnabled(enabled: boolean) {
   if (!db) return;
   try {
     if (enabled) {
+      quotaBlockedUntil = 0;
+      backendBlockedUntil = 0;
       if (!cloudNetworkDisabled) return;
       await enableNetwork(db);
       cloudNetworkDisabled = false;
-      backendBlockedUntil = 0;
       return;
     }
-    markBackendBlocked();
+    markBackendBlocked(4000);
     cloudNetworkDisabled = true;
     await disableNetwork(db);
   } catch (error) {

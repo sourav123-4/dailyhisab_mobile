@@ -22,7 +22,7 @@ export const RootNavigator = () => {
           {() => <OnboardingScreen onComplete={() => setHasCompletedIntro(true)} />}
         </Stack.Screen>
       ) : (
-        <Stack.Screen name="MainTabs" component={AppFlowNavigator} />
+        <Stack.Screen name="AppFlow" component={AppFlowNavigator} />
       )}
     </Stack.Navigator>
   );
