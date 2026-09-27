@@ -849,25 +849,16 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const isConnectionActive = (c: any) => c.isConnected !== false && c.type !== 'none' && c.type !== 'unknown';
+
     const updateNetworkStatus = (isOnline: boolean) => {
       setNetworkOnline(isOnline);
       if (!isOnline) {
         setSyncStatus('Local');
       } else {
         setCloudNetworkEnabled(true).catch(() => undefined);
-        if (canUseCloudSync() && !localOnly && user && !user.isAnonymous) {
-          syncStateToCloud(state, lastSyncedIdsRef.current)
-            .then(() => {
-              lastCloudSyncHashRef.current = cloudStateFingerprint(state);
-              lastSyncedIdsRef.current = syncedIdsFromState(state);
-              setSyncStatus('Cloud Synced');
-            })
-            .catch(() => undefined);
-        }
       }
     };
-
-    const isConnectionActive = (c: any) => c.isConnected !== false && c.type !== 'none' && c.type !== 'unknown';
 
     NetInfo.fetch()
       .then(connection => updateNetworkStatus(isConnectionActive(connection)))
@@ -876,7 +867,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     return NetInfo.addEventListener(connection => {
       updateNetworkStatus(isConnectionActive(connection));
     });
-  }, [localOnly, user, state]);
+  }, []);
 
   useEffect(() => {
     if (!loaded || localOnly || !networkOnline || !user || user.isAnonymous) return;
@@ -2038,11 +2029,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   const openTab = useCallback((tab: Tab) => {
-    setActiveTab(tab);
-    setTimeout(() => {
-      syncInBackground(tab);
-    }, 100);
-  }, [syncInBackground]);
+    setActiveTab(current => (current === tab ? current : tab));
+  }, []);
 
   const openAuth = useCallback(() => {
     handleSetLocalOnly(false);

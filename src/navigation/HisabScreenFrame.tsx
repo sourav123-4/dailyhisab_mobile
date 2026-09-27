@@ -253,31 +253,23 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
   const closeProfile = useCallback(() => setProfileOpen(false), []);
   const openNotifications = useCallback(() => {
     app.openTab('notifications');
-    const target = routeByTab['notifications'] || 'notifications';
-    if (target) navigation.navigate(target);
-  }, [app, navigation]);
+  }, [app.openTab]);
+
   const handleBack = useCallback(() => {
+    if (tab === 'dashboard') return;
     app.openTab('dashboard');
-    const target = routeByTab['dashboard'] || 'dashboard';
-    if (target) navigation.navigate(target);
-  }, [app, navigation]);
+  }, [app.openTab, tab]);
 
   const openBottomTab = useCallback((nextTab: Tab) => {
+    if (nextTab === tab) return;
     app.openTab(nextTab);
-    const target = routeByTab[nextTab] || nextTab;
-    if (nextTab !== tab && target) {
-      navigation.navigate(target);
-    }
-  }, [app, navigation, tab]);
+  }, [app.openTab, tab]);
 
   const openDrawerTab = useCallback((nextTab: Tab) => {
     closeDrawer();
+    if (nextTab === tab) return;
     app.openTab(nextTab);
-    const target = routeByTab[nextTab] || nextTab;
-    if (nextTab !== tab && target) {
-      navigation.navigate(target);
-    }
-  }, [app, closeDrawer, navigation, tab]);
+  }, [app.openTab, closeDrawer, tab]);
 
   const handleVoiceAction = useCallback(() => {
     app.resetVoiceState();
@@ -349,7 +341,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
             styles.content,
             { paddingBottom: Math.max(insets.bottom + 142, 156) },
           ]}
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet, Text, View } from 'react-native';
@@ -50,7 +50,9 @@ function DailyHisabFrame() {
     [setCurrentTab]
   );
 
-  return <HisabScreenFrame navigation={{ navigate }} tab={activeTab} />;
+  const navigationProp = useMemo(() => ({ navigate }), [navigate]);
+
+  return <HisabScreenFrame navigation={navigationProp} tab={activeTab} />;
 }
 
 export default function AppFlowNavigator() {

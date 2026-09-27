@@ -26,7 +26,7 @@ inputDefaults.defaultProps = {
   maxFontSizeMultiplier: 1.12,
 };
 
-const ThemedAppShell = () => {
+const ThemedAppShell = React.memo(() => {
   const theme = useAppTheme();
 
   return (
@@ -37,7 +37,7 @@ const ThemedAppShell = () => {
       </NavigationContainer>
     </>
   );
-};
+});
 
 const ThemedAppContainer = () => {
   const { appMode } = useAppMode();
