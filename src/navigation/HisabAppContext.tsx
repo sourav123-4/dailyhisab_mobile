@@ -126,6 +126,8 @@ export type HisabAppContextType = {
   voiceParsedEntries: Transaction[];
   voiceModalOpen: boolean;
   setVoiceModalOpen: (open: boolean) => void;
+  phonePeModalOpen: boolean;
+  setPhonePeModalOpen: (open: boolean) => void;
   activeModalOpen: boolean;
   setActiveModalOpen: (open: boolean) => void;
   confirmVoiceEntries: (entries: Transaction[]) => void;
@@ -182,6 +184,7 @@ export type HisabAppContextType = {
   setManual: React.Dispatch<React.SetStateAction<any>>;
   shiftMonth: (delta: number) => void;
   removeTransaction: (id: string) => void;
+  addTransactions: (items: Transaction[], toastMsg?: string) => void;
   editTransaction: (tx: Transaction) => void;
   saveManual: () => boolean;
   cancelManualEdit: () => void;
@@ -533,6 +536,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const [importText, setImportText] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [phonePeModalOpen, setPhonePeModalOpen] = useState(false);
   const [activeModalOpen, setActiveModalOpenState] = useState(false);
   const setActiveModalOpen = useCallback((open: boolean) => {
     setActiveModalOpenState(prev => (prev === open ? prev : open));
@@ -2253,6 +2257,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     voiceParsedEntries,
     voiceModalOpen,
     setVoiceModalOpen,
+    phonePeModalOpen,
+    setPhonePeModalOpen,
     activeModalOpen,
     setActiveModalOpen,
     confirmVoiceEntries,
@@ -2311,6 +2317,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     setManual,
     shiftMonth,
     removeTransaction,
+    addTransactions,
     editTransaction,
     saveManual,
     cancelManualEdit,
@@ -2363,6 +2370,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     transcribedText,
     voiceParsedEntries,
     voiceModalOpen,
+    phonePeModalOpen,
     activeModalOpen,
     confirmVoiceEntries,
     editVoiceInHisab,
@@ -2400,6 +2408,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     manual,
     shiftMonth,
     removeTransaction,
+    addTransactions,
     editTransaction,
     monthlyInsights,
     billCalendarEvents,

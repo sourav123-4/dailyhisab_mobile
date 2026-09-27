@@ -25,6 +25,7 @@ import { BudgetsScreen } from '../screens/BudgetsScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 
 import { VoiceAssistantModal } from '../components/VoiceAssistantModal';
+import { PhonePePaymentModal } from '../components/PhonePePaymentModal';
 import { ActionLoader } from '../components/ActionLoader';
 import { TopHeader } from '../components/TopHeader';
 import { AppDrawer } from '../components/AppDrawer';
@@ -316,6 +317,13 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
           onResetVoice={app.resetVoiceState}
           onSelectSuggestion={app.handleVoiceSuggestion}
         />
+        <PhonePePaymentModal
+          visible={app.phonePeModalOpen}
+          onClose={() => app.setPhonePeModalOpen(false)}
+          onSaveTransaction={(tx, toastMsg) => app.addTransactions([tx], toastMsg)}
+          categories={app.categories}
+          currency={app.currency}
+        />
         <ActionLoader visible={app.actionLoading.visible} message={app.actionLoading.message} />
         <View style={[styles.headerChrome, { backgroundColor: theme.surface, borderBottomColor: theme.borderSoft, paddingTop: insets.top + 10 }]}>
           <TopHeader
@@ -365,6 +373,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
           onOpenAuth={app.openAuth}
           onLogout={app.logoutUser}
           onOpenProfile={openProfile}
+          onOpenPhonePe={() => app.setPhonePeModalOpen(true)}
         />
         <ProfileModal
           visible={profileOpen}
@@ -378,7 +387,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
           onSaveProfile={app.saveProfile}
           onChangePassword={app.changePassword}
         />
-        {app.activeModalOpen || profileOpen || app.voiceModalOpen || drawerOpen ? null : (
+        {app.activeModalOpen || profileOpen || app.voiceModalOpen || app.phonePeModalOpen || drawerOpen ? null : (
           <BottomTabBar
             activeTab={tab}
             bottomTabs={bottomTabs}

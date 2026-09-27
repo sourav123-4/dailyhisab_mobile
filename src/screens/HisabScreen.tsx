@@ -429,7 +429,7 @@ export const HisabScreen = React.memo(function HisabScreen({
   onSelectCategory?: (category: string, type?: string) => void;
 }) {
   const theme = useAppTheme();
-  const { setActiveModalOpen } = useHisabApp();
+  const { setActiveModalOpen, setPhonePeModalOpen } = useHisabApp();
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -1765,6 +1765,29 @@ export const HisabScreen = React.memo(function HisabScreen({
                   }
                 }}
               />
+
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#5f259f',
+                  borderRadius: 14,
+                  paddingVertical: 13,
+                  marginTop: 10,
+                  gap: 8,
+                }}
+                onPress={() => {
+                  setManualModalVisible(false);
+                  setPhonePeModalOpen(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 16 }}>🟣</Text>
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>
+                  Pay via PhonePe & Auto-Save
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

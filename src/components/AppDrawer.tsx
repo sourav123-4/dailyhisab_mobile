@@ -31,6 +31,7 @@ export const AppDrawer = React.memo(function AppDrawer({
   onOpenAuth,
   onLogout,
   onOpenProfile,
+  onOpenPhonePe,
 }: {
   isOpen: boolean;
   activeTab: Tab;
@@ -42,6 +43,7 @@ export const AppDrawer = React.memo(function AppDrawer({
   onOpenAuth: () => void;
   onLogout?: () => void;
   onOpenProfile?: () => void;
+  onOpenPhonePe?: () => void;
 }) {
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
@@ -256,6 +258,50 @@ export const AppDrawer = React.memo(function AppDrawer({
                   Daily Hisab
                 </Text>
               </TouchableOpacity>
+
+              {/* Pay with PhonePe */}
+              {onOpenPhonePe && (
+                <TouchableOpacity
+                  onPress={() => {
+                    onClose();
+                    onOpenPhonePe();
+                  }}
+                  style={[
+                    styles.navRow,
+                    {
+                      backgroundColor: 'rgba(95, 37, 159, 0.08)',
+                      borderColor: 'rgba(95, 37, 159, 0.25)',
+                      borderWidth: 1,
+                      marginTop: 4,
+                    },
+                  ]}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 16 }}>🟣</Text>
+                  <Text
+                    style={[
+                      styles.navLabel,
+                      {
+                        color: '#5f259f',
+                        fontWeight: '700',
+                      },
+                    ]}
+                  >
+                    Pay with PhonePe
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: '#5f259f',
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 6,
+                      marginLeft: 'auto',
+                    }}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '800' }}>UPI</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* SECTION: FINANCIAL MODULES */}
