@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';
 import { Transaction } from '../types';
@@ -26,21 +27,10 @@ import {
 } from '../services/upiService';
 import {
   PhonePeContact,
-  POPULAR_CONTACTS,
   searchPhonePeAccounts,
   parseUpiQrCode,
+  getBankNameFromUpi,
 } from '../services/phonepeContacts';
-
-// Safe CameraView import
-let CameraView: any = null;
-let useCameraPermissionsHook: any = null;
-try {
-  const expoCam = require('expo-camera');
-  CameraView = expoCam.CameraView;
-  useCameraPermissionsHook = expoCam.useCameraPermissions;
-} catch (e) {
-  // Graceful fallback
-}
 
 interface PhonePePaymentModalProps {
   visible: boolean;
@@ -83,11 +73,10 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   const [isLaunching, setIsLaunching] = useState(false);
 
   // Camera permissions & QR Scanner state
-  const [cameraPermission, requestCameraPermission] = useCameraPermissionsHook
-    ? useCameraPermissionsHook()
-    : [null, async () => ({ granted: false })];
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [torchOn, setTorchOn] = useState(false);
   const [manualQrText, setManualQrText] = useState('');
+  const [scanned, setScanned] = useState(false);
 
   // Animations
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
@@ -97,6 +86,16 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   // Track app state for auto-detecting return from PhonePe
   const waitingRef = useRef(false);
   waitingRef.current = step === 'waiting_return';
+
+  // Request camera permission when entering qr_scan
+  useEffect(() => {
+    if (step === 'qr_scan') {
+      setScanned(false);
+      if (!cameraPermission?.granted) {
+        requestCameraPermission();
+      }
+    }
+  }, [step, cameraPermission?.granted]);
 
   // Laser scan line animation
   useEffect(() => {
@@ -143,6 +142,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       setIsLaunching(false);
       setTorchOn(false);
       setManualQrText('');
+      setScanned(false);
     }
   }, [visible, scaleAnim]);
 
@@ -162,13 +162,11 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
             useNativeDriver: true,
           }),
         ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
+      );
     }
   }, [step, pulseAnim]);
 
-  // Listen to AppState (active -> background -> active)
+  // Detect when user returns from PhonePe / external UPI app
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && waitingRef.current) {
@@ -181,17 +179,17 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
     };
   }, []);
 
-  // Search results
-  const searchResults = useMemo(() => {
+  // Filtered contacts list
+  const { results: searchResults, isSearching, hasLedgerHistory } = useMemo(() => {
     return searchPhonePeAccounts(searchQuery, transactions);
   }, [searchQuery, transactions]);
 
-  // Select Contact & Proceed to Transfer
+  // Select contact handler
   const handleSelectContact = (contact: PhonePeContact) => {
     setSelectedContact(contact);
     setPayeeUpi(contact.upiId);
     setPayeeName(contact.name);
-    if (contact.category && categories.includes(contact.category)) {
+    if (contact.category) {
       setCategory(contact.category);
     }
     setStep('transfer');
@@ -199,7 +197,9 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
 
   // QR Code scanned handler
   const handleBarCodeScanned = ({ data }: { data: string }) => {
-    if (!data) return;
+    if (!data || scanned) return;
+    setScanned(true);
+
     const parsed = parseUpiQrCode(data);
     if (parsed && parsed.payeeUpi) {
       setPayeeUpi(parsed.payeeUpi);
@@ -213,15 +213,19 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       setSelectedContact({
         id: `qr-${Date.now()}`,
         name: parsed.payeeName,
-        phone: parsed.payeeUpi,
+        phone: parsed.payeeUpi.split('@')[0],
         upiId: parsed.payeeUpi,
-        bankName: 'Verified QR Merchant',
+        bankName: getBankNameFromUpi(parsed.payeeUpi),
         hasPhonePe: true,
         avatarColor: '#5f259f',
       });
       setStep('transfer');
     } else {
-      Alert.alert('Invalid QR Code', 'This is not a recognized UPI payment QR code.');
+      Alert.alert(
+        'Invalid QR Code',
+        'This is not a recognized UPI payment QR code.',
+        [{ text: 'Try Again', onPress: () => setScanned(false) }]
+      );
     }
   };
 
@@ -235,11 +239,22 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       });
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
-        // Fallback prompt for demo/image paste
+        const imageUri = res.assets[0].uri;
+        try {
+          const scanResults = await scanFromURLAsync(imageUri, ['qr']);
+          if (scanResults && scanResults.length > 0 && scanResults[0].data) {
+            handleBarCodeScanned({ data: scanResults[0].data });
+            return;
+          }
+        } catch (e) {
+          // If native MLKit scanner wasn't available for URL
+        }
+
+        // Prompt user if automatic barcode decoding couldn't find a code
         Alert.prompt
           ? Alert.prompt(
-              'Scanned QR Image',
-              'Enter the UPI ID or raw text from the selected QR:',
+              'UPI QR Image',
+              'Could not auto-read QR code. Enter the UPI ID or UPI link:',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -250,23 +265,23 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                 },
               ]
             )
-          : Alert.alert('QR Image Selected', 'Point your camera at the QR code for instant auto-scan.');
+          : Alert.alert('QR Not Detected', 'Please try scanning directly with the camera or enter the UPI ID manually.');
       }
     } catch (e: any) {
       Alert.alert('Gallery Error', e?.message || 'Could not pick image.');
     }
   };
 
-  // Quick Amount add
+  // Quick Amount chips (+100, +200, +500, +1000, +2000)
   const handleQuickAddAmount = (addVal: number) => {
-    const cur = parseFloat(amount) || 0;
-    setAmount(String(cur + addVal));
+    const currentNum = parseFloat(amount) || 0;
+    setAmount(String(currentNum + addVal));
   };
 
-  // Initiate PhonePe Payment
-  const handleInitiatePayment = async () => {
+  // Launch Payment through PhonePe or selected UPI app
+  const handleProceedToPay = async () => {
     const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) {
+    if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid payment amount.');
       return;
     }
@@ -280,6 +295,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
     const finalTitle = payeeName.trim() || `Paid to ${normalizedUpi}`;
     const txRef = `DH${Date.now()}`;
 
+    // Store actual UPI details in notes so future transactions can cleanly re-resolve payees
     const newTx: Transaction = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       date: new Date().toISOString().slice(0, 10),
@@ -288,7 +304,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       category: category || 'Food',
       type: 'expense',
       paymentMethod: selectedApp === 'phonepe' ? 'PhonePe UPI' : `${selectedApp.toUpperCase()} UPI`,
-      notes: note.trim() ? `${note.trim()} (UPI Ref: ${txRef})` : `UPI Ref: ${txRef}`,
+      notes: `UPI: ${normalizedUpi} | Ref: ${txRef}${note.trim() ? ' | ' + note.trim() : ''}`,
     };
 
     setPendingTx(newTx);
@@ -369,11 +385,11 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       onClose();
                     }
                   }}
-                  style={styles.headerNavBtn}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  style={styles.backCloseBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <AppIcon
-                    name={step === 'search' || step === 'confirm_save' ? 'x' : 'chevron-left'}
+                    name={step === 'transfer' || step === 'qr_scan' ? 'arrow-left' : 'x'}
                     size={20}
                     color="#ffffff"
                   />
@@ -428,7 +444,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   <Text style={{ fontSize: 16, marginRight: 8 }}>🔍</Text>
                   <TextInput
                     style={[styles.searchTextInput, { color: theme.text }]}
-                    placeholder="Enter a mobile number or name"
+                    placeholder="Enter a mobile number, UPI ID, or name"
                     placeholderTextColor={theme.subtle}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -448,11 +464,15 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                 {/* Subtitle / Category Label */}
                 <View style={styles.sectionHeaderRow}>
                   <Text style={[styles.sectionHeading, { color: theme.subtle }]}>
-                    {searchQuery.trim().length > 0 ? 'SEARCH RESULTS' : 'RECENT PAYMENTS'}
+                    {isSearching
+                      ? 'SEARCH RESULTS'
+                      : hasLedgerHistory
+                      ? 'RECENT UPI TRANSFERS'
+                      : 'POPULAR UPI CONTACTS'}
                   </Text>
-                  {searchQuery.trim().length === 0 && (
+                  {!isSearching && (
                     <TouchableOpacity onPress={() => setStep('qr_scan')}>
-                      <Text style={styles.scanQrLinkText}>+ Scan QR</Text>
+                      <Text style={styles.scanQrLinkText}>📷 Scan QR</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -500,14 +520,16 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                         </View>
 
                         <Text style={[styles.contactUpiText, { color: theme.subtle }]} numberOfLines={1}>
-                          +91 {contact.phone} • {contact.upiId}
+                          {contact.phone ? `+91 ${contact.phone} • ` : ''}{contact.upiId}
                         </Text>
 
                         {/* PhonePe Verified Badge */}
                         <View style={styles.phonePeBadgeRow}>
                           <View style={styles.phonePeMiniBadge}>
                             <Text style={styles.phonePeMiniIcon}>🟣</Text>
-                            <Text style={styles.phonePeMiniText}>Account on PhonePe</Text>
+                            <Text style={styles.phonePeMiniText}>
+                              {contact.hasPhonePe ? 'Account on PhonePe' : 'Verified UPI'}
+                            </Text>
                           </View>
                           <Text style={[styles.bankNameText, { color: theme.subtle }]}>
                             • {contact.bankName}
@@ -521,12 +543,16 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                           <Text style={[styles.recentAmountText, { color: theme.text }]}>
                             {currency}{contact.recentAmount}
                           </Text>
-                          <Text style={[styles.recentDateText, { color: theme.subtle }]}>
-                            {contact.recentDate}
-                          </Text>
+                          {contact.recentDate && (
+                            <Text style={[styles.recentDateText, { color: theme.subtle }]}>
+                              {contact.recentDate}
+                            </Text>
+                          )}
                         </View>
                       ) : (
-                        <AppIcon name="chevron-right" size={16} color={theme.subtle} />
+                        <View style={styles.chevronBox}>
+                          <AppIcon name="chevron-right" size={16} color={theme.subtle} />
+                        </View>
                       )}
                     </TouchableOpacity>
                   ))}
@@ -535,7 +561,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     <View style={styles.noResultsBox}>
                       <Text style={{ fontSize: 32, marginBottom: 8 }}>🔍</Text>
                       <Text style={[styles.noResultsTitle, { color: theme.text }]}>
-                        No account found
+                        No Contacts Found
                       </Text>
                       <Text style={[styles.noResultsDesc, { color: theme.subtle }]}>
                         Enter a valid 10-digit mobile number or UPI ID (e.g. 9876543210 or user@ybl).
@@ -549,7 +575,41 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
             {/* SCREEN 2: DEDICATED QR CODE SCANNER */}
             {step === 'qr_scan' && (
               <View style={styles.qrScannerContainer}>
-                {CameraView ? (
+                {!cameraPermission?.granted ? (
+                  <View style={styles.permissionBox}>
+                    <Text style={{ fontSize: 40, marginBottom: 12 }}>📷</Text>
+                    <Text style={styles.permissionTitle}>Camera Permission Required</Text>
+                    <Text style={styles.permissionSub}>
+                      Allow DailyHisab to access your camera to scan any PhonePe or UPI QR code.
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.permissionBtn}
+                      onPress={() => requestCameraPermission()}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.permissionBtnText}>Enable Camera</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.permissionFallbackRow}>
+                      <TouchableOpacity
+                        style={styles.permSubBtn}
+                        onPress={handlePickQrImage}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.permSubBtnText}>🖼️ Upload from Gallery</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.permSubBtn}
+                        onPress={() => setStep('search')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.permSubBtnText}>⌨️ Enter UPI ID</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
                   <View style={styles.cameraBox}>
                     <CameraView
                       style={StyleSheet.absoluteFill}
@@ -558,7 +618,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       barcodeScannerSettings={{
                         barcodeTypes: ['qr'],
                       }}
-                      onBarcodeScanned={handleBarCodeScanned}
+                      onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                     />
 
                     {/* Translucent Dark Mask with Cutout Frame */}
@@ -577,29 +637,8 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                         <View style={[styles.cornerMarker, styles.cornerBL]} />
                         <View style={[styles.cornerMarker, styles.cornerBR]} />
                       </View>
+                      <Text style={styles.qrGuideText}>Align QR code within the frame</Text>
                     </View>
-                  </View>
-                ) : (
-                  <View style={[styles.cameraFallbackBox, { backgroundColor: '#0f0c1f' }]}>
-                    <Text style={{ fontSize: 44, marginBottom: 10 }}>📷</Text>
-                    <Text style={styles.fallbackTitle}>Scan Any UPI QR Code</Text>
-                    <Text style={styles.fallbackSub}>
-                      Point your phone's camera at any BharatPe, PhonePe, Paytm, or GPay QR code.
-                    </Text>
-
-                    <TextInput
-                      style={styles.manualQrInput}
-                      placeholder="Paste UPI Link or UPI ID here..."
-                      placeholderTextColor="#94a3b8"
-                      value={manualQrText}
-                      onChangeText={setManualQrText}
-                    />
-                    <TouchableOpacity
-                      style={styles.manualQrSubmitBtn}
-                      onPress={() => handleBarCodeScanned({ data: manualQrText })}
-                    >
-                      <Text style={styles.manualQrSubmitText}>Verify & Proceed</Text>
-                    </TouchableOpacity>
                   </View>
                 )}
 
@@ -608,6 +647,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   <TouchableOpacity
                     style={styles.qrToolBtn}
                     onPress={() => setTorchOn(!torchOn)}
+                    disabled={!cameraPermission?.granted}
                   >
                     <Text style={{ fontSize: 20 }}>{torchOn ? '🔦' : '💡'}</Text>
                     <Text style={styles.qrToolBtnText}>{torchOn ? 'Flash Off' : 'Flash On'}</Text>
@@ -655,10 +695,17 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     </Text>
                     <View style={styles.verifiedRow}>
                       <Text style={{ fontSize: 11, color: '#10b981', fontWeight: '800' }}>
-                        ✓ Banking Name: {payeeName || 'Verified Account'}
+                        ✓ {selectedContact?.bankName || getBankNameFromUpi(payeeUpi)}
                       </Text>
                     </View>
                   </View>
+
+                  <TouchableOpacity
+                    onPress={() => setStep('search')}
+                    style={styles.changePayeeBtn}
+                  >
+                    <Text style={styles.changePayeeText}>Change</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Amount Input */}
@@ -721,23 +768,23 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       return (
                         <TouchableOpacity
                           key={cat}
-                          onPress={() => setCategory(cat)}
                           style={[
-                            styles.catChip,
+                            styles.categoryChip,
                             {
                               backgroundColor: isSelected
-                                ? '#7c3aed'
-                                : theme.surfaceAlt || (theme.dark ? '#1e1b4b' : '#f1f5f9'),
-                              borderColor: isSelected
-                                ? '#6d28d9'
-                                : theme.borderSoft || theme.border,
+                                ? '#5f259f'
+                                : theme.dark
+                                ? '#1e1b2e'
+                                : '#f1f5f9',
+                              borderColor: isSelected ? '#5f259f' : theme.borderSoft || '#cbd5e1',
                             },
                           ]}
+                          onPress={() => setCategory(cat)}
                           activeOpacity={0.7}
                         >
                           <Text
                             style={[
-                              styles.catChipText,
+                              styles.categoryChipText,
                               { color: isSelected ? '#ffffff' : theme.text },
                             ]}
                           >
@@ -749,58 +796,50 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   </ScrollView>
                 </View>
 
-                {/* Note / Remarks */}
+                {/* Note / Message Input */}
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: theme.text }]}>Add a Message / Note</Text>
+                  <Text style={[styles.inputLabel, { color: theme.text }]}>Add a Note (Optional)</Text>
                   <TextInput
                     style={[
-                      styles.textInput,
+                      styles.noteInput,
                       {
-                        backgroundColor: theme.surfaceAlt || (theme.dark ? '#1e1b4b' : '#f8fafc'),
-                        borderColor: theme.borderSoft || theme.border,
+                        backgroundColor: theme.dark ? '#1a1033' : '#f8fafc',
                         color: theme.text,
+                        borderColor: theme.borderSoft || '#cbd5e1',
                       },
                     ]}
-                    placeholder="e.g. Dinner with team, Groceries..."
+                    placeholder="e.g. Chai, Groceries, Dinner split"
                     placeholderTextColor={theme.subtle}
                     value={note}
                     onChangeText={setNote}
                   />
                 </View>
 
-                {/* Choose UPI App */}
+                {/* UPI Application Selector */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.inputLabel, { color: theme.text }]}>Pay via App</Text>
-                  <View style={styles.appsGrid}>
+                  <View style={styles.upiAppsRow}>
                     {UPI_APPS.map((appOpt) => {
-                      const isChosen = selectedApp === appOpt.id;
+                      const isSelected = selectedApp === appOpt.id;
                       return (
                         <TouchableOpacity
                           key={appOpt.id}
                           style={[
-                            styles.appChoiceCard,
+                            styles.upiAppCard,
                             {
-                              backgroundColor: isChosen
-                                ? theme.dark
-                                  ? '#2b1b4d'
-                                  : '#f3e8ff'
-                                : theme.surfaceAlt || (theme.dark ? '#1e1b4b' : '#f8fafc'),
-                              borderColor: isChosen
-                                ? appOpt.color
-                                : theme.borderSoft || theme.border,
+                              backgroundColor: isSelected ? appOpt.bgColor : (theme.dark ? '#181230' : '#f8fafc'),
+                              borderColor: isSelected ? appOpt.color : (theme.borderSoft || '#e2e8f0'),
+                              borderWidth: isSelected ? 2 : 1,
                             },
                           ]}
                           onPress={() => setSelectedApp(appOpt.id)}
-                          activeOpacity={0.75}
+                          activeOpacity={0.7}
                         >
-                          <Text style={styles.appIconText}>{appOpt.icon}</Text>
+                          <Text style={{ fontSize: 20 }}>{appOpt.icon}</Text>
                           <Text
                             style={[
-                              styles.appNameText,
-                              {
-                                color: isChosen ? appOpt.color : theme.text,
-                                fontWeight: isChosen ? '700' : '500',
-                              },
+                              styles.upiAppName,
+                              { color: isSelected ? appOpt.color : theme.text },
                             ]}
                           >
                             {appOpt.name}
@@ -811,137 +850,143 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   </View>
                 </View>
 
-                {/* Giant Pay Button CTA */}
+                {/* Big Proceed To Pay Button */}
                 <TouchableOpacity
-                  style={[styles.payCtaBtn, { backgroundColor: '#5f259f' }]}
-                  onPress={handleInitiatePayment}
-                  disabled={isLaunching || !amount || parseFloat(amount) <= 0}
+                  style={[
+                    styles.proceedPayBtn,
+                    { opacity: isLaunching || !amount.trim() ? 0.7 : 1 },
+                  ]}
+                  onPress={handleProceedToPay}
+                  disabled={isLaunching || !amount.trim()}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.payCtaIcon}>🟣</Text>
-                  <Text style={styles.payCtaText}>
-                    {isLaunching
-                      ? 'Opening PhonePe...'
-                      : `PROCEED TO PAY ${currency}${amount || '0'}`}
+                  <Text style={styles.proceedPayBtnText}>
+                    {isLaunching ? 'OPENING PAYMENT APP...' : `PROCEED TO PAY ${amount ? currency + amount : ''}`}
                   </Text>
+                  <AppIcon name="arrow-right" size={18} color="#ffffff" />
                 </TouchableOpacity>
+
+                {/* Hint Notice */}
+                <View style={styles.securityNoticeRow}>
+                  <Text style={styles.securityNoticeIcon}>🔒</Text>
+                  <Text style={[styles.securityNoticeText, { color: theme.subtle }]}>
+                    100% Secure via NPCI UPI. After payment, return to DailyHisab to save this expense instantly.
+                  </Text>
+                </View>
               </ScrollView>
             )}
 
-            {/* SCREEN 4: WAITING RETURN */}
+            {/* SCREEN 4: WAITING FOR RETURN FROM PHONEPE */}
             {step === 'waiting_return' && (
               <View style={styles.waitingContainer}>
-                <View style={styles.waitingIconCircle}>
-                  <Text style={{ fontSize: 36 }}>⏳</Text>
+                <View style={styles.waitingCircle}>
+                  <Text style={{ fontSize: 42 }}>🟣</Text>
                 </View>
                 <Text style={[styles.waitingTitle, { color: theme.text }]}>
-                  Waiting for PhonePe Payment...
+                  Payment in Progress
                 </Text>
                 <Text style={[styles.waitingDesc, { color: theme.subtle }]}>
-                  Please approve the payment of{' '}
-                  <Text style={{ fontWeight: '700', color: '#7c3aed' }}>
-                    {currency}
-                    {pendingTx?.amount}
-                  </Text>{' '}
-                  in PhonePe. When completed, switch back to DailyHisab to save it.
+                  Please complete the payment in PhonePe or your UPI app, then switch back to DailyHisab.
                 </Text>
 
                 <TouchableOpacity
-                  style={[styles.confirmDoneBtn, { backgroundColor: '#10b981' }]}
+                  style={styles.manualReturnBtn}
                   onPress={() => setStep('confirm_save')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.confirmDoneText}>✓ I Have Completed the Payment</Text>
+                  <Text style={styles.manualReturnBtnText}>
+                    I Have Paid → Save to Hisab
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.cancelReturnBtn}
+                  style={{ marginTop: 14 }}
                   onPress={() => setStep('transfer')}
                 >
-                  <Text style={[styles.cancelReturnText, { color: theme.subtle }]}>
-                    Go Back / Edit Details
+                  <Text style={{ color: theme.subtle, fontSize: 13, fontWeight: '600' }}>
+                    Cancel & Return
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* SCREEN 5: CONFIRM & AUTO-SAVE */}
-            {step === 'confirm_save' && pendingTx && (
-              <View style={styles.confirmSaveContainer}>
+            {/* SCREEN 5: CONFIRM & AUTO-SAVE TRANSACTION */}
+            {step === 'confirm_save' && (
+              <View style={styles.confirmContainer}>
                 <Animated.View
                   style={[
-                    styles.successCheckCircle,
-                    {
-                      backgroundColor: '#10b981',
-                      transform: [{ scale: pulseAnim }],
-                    },
+                    styles.successBadge,
+                    { transform: [{ scale: pulseAnim }] },
                   ]}
                 >
-                  <AppIcon name="check" size={32} color="#ffffff" />
+                  <Text style={{ fontSize: 36 }}>✅</Text>
                 </Animated.View>
 
-                <Text style={[styles.confirmHeading, { color: theme.text }]}>
-                  Payment Completed?
+                <Text style={[styles.confirmTitle, { color: theme.text }]}>
+                  Payment Completed!
                 </Text>
-                <Text style={[styles.confirmSubheading, { color: theme.subtle }]}>
-                  Save this expense into your DailyHisab ledger:
+                <Text style={[styles.confirmSubtitle, { color: theme.subtle }]}>
+                  Save this transaction to your DailyHisab ledger:
                 </Text>
 
-                {/* Summary Card */}
-                <View
-                  style={[
-                    styles.summaryCard,
-                    {
-                      backgroundColor: theme.dark ? '#1a1033' : '#fbf8ff',
-                      borderColor: '#ddd6fe',
-                    },
-                  ]}
-                >
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.subtle }]}>Amount</Text>
-                    <Text style={[styles.summaryAmount, { color: '#ef4444' }]}>
-                      -{currency}
-                      {pendingTx.amount}
-                    </Text>
-                  </View>
+                {pendingTx && (
+                  <View
+                    style={[
+                      styles.receiptCard,
+                      {
+                        backgroundColor: theme.dark ? '#1a1033' : '#f9f5ff',
+                        borderColor: '#7c3aed',
+                      },
+                    ]}
+                  >
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: theme.subtle }]}>Amount</Text>
+                      <Text style={styles.receiptAmount}>
+                        {currency}{pendingTx.amount}
+                      </Text>
+                    </View>
 
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.subtle }]}>To</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]} numberOfLines={1}>
-                      {pendingTx.title}
-                    </Text>
-                  </View>
+                    <View style={styles.receiptDivider} />
 
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.subtle }]}>Category</Text>
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryBadgeText}>{pendingTx.category}</Text>
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: theme.subtle }]}>Payee</Text>
+                      <Text style={[styles.receiptVal, { color: theme.text }]} numberOfLines={1}>
+                        {pendingTx.title}
+                      </Text>
+                    </View>
+
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: theme.subtle }]}>Category</Text>
+                      <Text style={[styles.receiptVal, { color: theme.text }]}>
+                        {pendingTx.category}
+                      </Text>
+                    </View>
+
+                    <View style={styles.receiptRow}>
+                      <Text style={[styles.receiptLabel, { color: theme.subtle }]}>Method</Text>
+                      <Text style={[styles.receiptVal, { color: '#7c3aed', fontWeight: '800' }]}>
+                        {pendingTx.paymentMethod}
+                      </Text>
                     </View>
                   </View>
+                )}
 
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.subtle }]}>Method</Text>
-                    <Text style={[styles.summaryValue, { color: '#7c3aed', fontWeight: '700' }]}>
-                      {pendingTx.paymentMethod}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Save CTA */}
                 <TouchableOpacity
-                  style={[styles.saveHisabCtaBtn, { backgroundColor: '#10b981' }]}
+                  style={styles.confirmSaveBtn}
                   onPress={handleConfirmSave}
-                  activeOpacity={0.85}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.saveHisabCtaText}>💾 Yes, Save to My Hisab</Text>
+                  <Text style={styles.confirmSaveBtnText}>
+                    Save to My Hisab ✓
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.notPaidBtn}
-                  onPress={() => setStep('transfer')}
+                  style={{ marginTop: 14 }}
+                  onPress={onClose}
                 >
-                  <Text style={[styles.notPaidText, { color: theme.subtle }]}>
-                    Payment Did Not Go Through / Edit
+                  <Text style={{ color: theme.subtle, fontSize: 13, fontWeight: '600' }}>
+                    Skip without saving
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -959,28 +1004,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 14,
+    padding: 16,
   },
   keyboardContainer: {
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 440,
   },
   modalCard: {
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
     overflow: 'hidden',
-    maxHeight: '92%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 12,
   },
   phonePeHeader: {
     backgroundColor: '#5f259f',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -990,10 +1033,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  headerNavBtn: {
+  backCloseBtn: {
     padding: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   headerTitleText: {
     color: '#ffffff',
@@ -1003,12 +1046,12 @@ const styles = StyleSheet.create({
   headerSubtitleText: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 1,
   },
   qrHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
@@ -1016,8 +1059,8 @@ const styles = StyleSheet.create({
   },
   qrHeaderBtnText: {
     color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
   contentWrap: {
     padding: 16,
@@ -1028,31 +1071,31 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 14,
+    paddingVertical: 8,
+    marginBottom: 12,
   },
   searchTextInput: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    paddingVertical: 8,
+    padding: 0,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 2,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   sectionHeading: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   scanQrLinkText: {
-    fontSize: 12,
     color: '#7c3aed',
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
   contactCard: {
     flexDirection: 'row',
@@ -1124,6 +1167,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
+  chevronBox: {
+    marginLeft: 6,
+  },
   noResultsBox: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -1181,43 +1227,63 @@ const styles = StyleSheet.create({
   cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 12 },
   cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 12 },
   cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 12 },
-  cameraFallbackBox: {
+  qrGuideText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 16,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 4,
+  },
+  permissionBox: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+    backgroundColor: '#0f0c1f',
   },
-  fallbackTitle: {
+  permissionTitle: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
   },
-  fallbackSub: {
+  permissionSub: {
     color: '#94a3b8',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 4,
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  permissionBtn: {
+    backgroundColor: '#7c3aed',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
     marginBottom: 16,
   },
-  manualQrInput: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 10,
+  permissionBtnText: {
     color: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#64748b',
-    marginBottom: 10,
+    fontSize: 14,
+    fontWeight: '800',
   },
-  manualQrSubmitBtn: {
-    backgroundColor: '#7c3aed',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+  permissionFallbackRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  permSubBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  manualQrSubmitText: {
-    color: '#ffffff',
-    fontWeight: '700',
+  permSubBtnText: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '600',
   },
   qrToolbar: {
     flexDirection: 'row',
@@ -1260,7 +1326,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   recipientNameText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
   recipientUpiText: {
@@ -1268,242 +1334,232 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   verifiedRow: {
-    marginTop: 3,
+    marginTop: 4,
+  },
+  changePayeeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(95, 37, 159, 0.12)',
+  },
+  changePayeeText: {
+    color: '#5f259f',
+    fontSize: 11,
+    fontWeight: '800',
   },
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   amountInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   currencySymbol: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    marginRight: 6,
+    marginRight: 8,
   },
   amountTextInput: {
     flex: 1,
-    fontSize: 26,
-    fontWeight: '800',
-    paddingVertical: 6,
+    fontSize: 32,
+    fontWeight: '900',
+    padding: 0,
   },
   quickChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
+    gap: 8,
+    marginTop: 10,
   },
   quickChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
   },
   quickChipText: {
     fontSize: 12,
+    fontWeight: '800',
+  },
+  categoryScroll: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 12,
     fontWeight: '700',
   },
-  textInput: {
+  noteInput: {
+    borderRadius: 14,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
   },
-  categoryScroll: {
-    gap: 6,
-    paddingVertical: 4,
-  },
-  catChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  catChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  appsGrid: {
+  upiAppsRow: {
     flexDirection: 'row',
     gap: 8,
   },
-  appChoiceCard: {
+  upiAppCard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    gap: 4,
   },
-  appIconText: {
-    fontSize: 18,
-    marginBottom: 4,
-  },
-  appNameText: {
+  upiAppName: {
     fontSize: 11,
+    fontWeight: '700',
   },
-  payCtaBtn: {
+  proceedPayBtn: {
+    backgroundColor: '#5f259f',
+    borderRadius: 16,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: 14,
-    marginTop: 10,
+    marginTop: 8,
+    gap: 8,
     shadowColor: '#5f259f',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  payCtaIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  payCtaText: {
+  proceedPayBtnText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  securityNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  securityNoticeIcon: {
+    fontSize: 12,
+  },
+  securityNoticeText: {
+    fontSize: 11,
+    textAlign: 'center',
   },
   waitingContainer: {
     alignItems: 'center',
-    paddingVertical: 26,
-    paddingHorizontal: 16,
+    paddingVertical: 36,
+    paddingHorizontal: 24,
   },
-  waitingIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(124, 58, 237, 0.12)',
+  waitingCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(95, 37, 159, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   waitingTitle: {
     fontSize: 18,
     fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   waitingDesc: {
     fontSize: 13,
     textAlign: 'center',
+    marginBottom: 24,
     lineHeight: 18,
-    marginBottom: 20,
   },
-  confirmDoneBtn: {
-    width: '100%',
+  manualReturnBtn: {
+    backgroundColor: '#5f259f',
     paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 14,
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  confirmDoneText: {
+  manualReturnBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
   },
-  cancelReturnBtn: {
-    paddingVertical: 8,
-  },
-  cancelReturnText: {
-    fontSize: 13,
-    textDecorationLine: 'underline',
-  },
-  confirmSaveContainer: {
+  confirmContainer: {
     alignItems: 'center',
-    padding: 18,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
   },
-  successCheckCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+  successBadge: {
     marginBottom: 12,
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  confirmHeading: {
+  confirmTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 4,
   },
-  confirmSubheading: {
-    fontSize: 13,
+  confirmSubtitle: {
+    fontSize: 12,
     marginBottom: 16,
     textAlign: 'center',
   },
-  summaryCard: {
+  receiptCard: {
     width: '100%',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 16,
-    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 20,
   },
-  summaryRow: {
+  receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 4,
   },
-  summaryLabel: {
-    fontSize: 13,
-  },
-  summaryAmount: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  summaryValue: {
-    fontSize: 13,
+  receiptLabel: {
+    fontSize: 12,
     fontWeight: '600',
   },
-  categoryBadge: {
-    backgroundColor: 'rgba(124, 58, 237, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  categoryBadgeText: {
+  receiptAmount: {
     color: '#7c3aed',
-    fontSize: 11,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  receiptVal: {
+    fontSize: 13,
     fontWeight: '700',
   },
-  saveHisabCtaBtn: {
-    width: '100%',
+  receiptDivider: {
+    height: 1,
+    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+    marginVertical: 8,
+  },
+  confirmSaveBtn: {
+    backgroundColor: '#10b981',
     paddingVertical: 14,
     borderRadius: 14,
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 10,
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  saveHisabCtaText: {
+  confirmSaveBtnText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-  },
-  notPaidBtn: {
-    paddingVertical: 6,
-  },
-  notPaidText: {
-    fontSize: 12,
   },
 });
