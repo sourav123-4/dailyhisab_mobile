@@ -17,14 +17,14 @@ export interface PhonePeContact {
 const AVATAR_COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#06b6d4', '#14b8a6'];
 
 export function getBankNameFromUpi(upiId: string): string {
-  const lower = upiId.toLowerCase();
+  const lower = (upiId || '').toLowerCase().trim();
   if (lower.endsWith('@ybl')) return 'PhonePe (YES BANK)';
   if (lower.endsWith('@ibl')) return 'PhonePe (ICICI Bank)';
   if (lower.endsWith('@axl')) return 'PhonePe (Axis Bank)';
   if (lower.endsWith('@okaxis')) return 'Google Pay (Axis Bank)';
   if (lower.endsWith('@okhdfcbank')) return 'Google Pay (HDFC Bank)';
   if (lower.endsWith('@okicici')) return 'Google Pay (ICICI Bank)';
-  if (lower.endsWith('@oksbi')) return 'Google Pay (SBI)';
+  if (lower.endsWith('@oksbi')) return 'Google Pay (State Bank of India)';
   if (lower.endsWith('@paytm')) return 'Paytm Payments Bank';
   if (lower.endsWith('@barodampay')) return 'Bank of Baroda';
   if (lower.endsWith('@upi')) return 'BHIM UPI';
@@ -97,10 +97,10 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
   const list: PhonePeContact[] = [];
   const seenUpi = new Set<string>();
 
-  transactions.forEach((tx) => {
-    if (tx.type !== 'expense') return;
+  for (let i = 0; i < transactions.length; i++) {
+    const tx = transactions[i];
+    if (tx.type !== 'expense') continue;
 
-    // Look for real UPI handle in notes or title: e.g. "UPI: someone@ybl" or "someone@okaxis"
     const notesStr = tx.notes || '';
     const titleStr = tx.title || '';
     const combined = `${notesStr} ${titleStr}`;
@@ -108,7 +108,6 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
     const upiMatch = combined.match(/([a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,})/);
     const phoneMatch = combined.match(/\b([6-9]\d{9})\b/);
 
-    // If there's an actual valid UPI handle in the record
     if (upiMatch && upiMatch[1]) {
       const upi = upiMatch[1].toLowerCase();
       if (!seenUpi.has(upi)) {
@@ -131,7 +130,6 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
         });
       }
     } else if (tx.paymentMethod?.toLowerCase().includes('phonepe') || tx.paymentMethod?.toLowerCase().includes('upi')) {
-      // If paid via PhonePe and has a 10-digit phone number in title or note
       if (phoneMatch && phoneMatch[1]) {
         const phone = phoneMatch[1];
         const upi = `${phone}@ybl`;
@@ -153,32 +151,33 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
         }
       }
     }
-  });
+  }
 
   return list;
 }
 
 /**
- * Searches contacts or auto-resolves a 10-digit mobile number / UPI ID into a PhonePe account card
+ * Searches contacts or auto-resolves a 10-digit mobile number / UPI ID into a PhonePe account card.
+ * Uses pre-computed ledgerContacts for instant, zero-lag response.
  */
 export function searchPhonePeAccounts(
   query: string,
-  existingTransactions: Transaction[] = []
+  ledgerContacts: PhonePeContact[] = []
 ): {
   results: PhonePeContact[];
   isSearching: boolean;
   hasLedgerHistory: boolean;
 } {
   const clean = query.trim().toLowerCase();
-  const ledgerContacts = extractUpiContactsFromTransactions(existingTransactions);
 
-  // Pool of all known contacts: real ledger contacts first, then curated contacts
+  // Combine pre-extracted ledger contacts with curated contacts
   const allContacts: PhonePeContact[] = [...ledgerContacts];
-  VERIFIED_CONTACTS.forEach((c) => {
+  for (let i = 0; i < VERIFIED_CONTACTS.length; i++) {
+    const c = VERIFIED_CONTACTS[i];
     if (!allContacts.some((existing) => existing.upiId.toLowerCase() === c.upiId.toLowerCase())) {
       allContacts.push(c);
     }
-  });
+  }
 
   // If query is empty, show recent ledger payments first, followed by curated
   if (!clean) {
@@ -189,7 +188,7 @@ export function searchPhonePeAccounts(
     };
   }
 
-  // Filter contacts by name or phone or upi
+  // Fast filter by name or phone or upi
   const filtered = allContacts.filter(
     (c) =>
       c.name.toLowerCase().includes(clean) ||
@@ -221,7 +220,7 @@ export function searchPhonePeAccounts(
     const [userHandle] = clean.split('@');
     const autoUpi: PhonePeContact = {
       id: `auto-upi-${clean}`,
-      name: userHandle.charAt(0).toUpperCase() + userHandle.slice(1),
+      name: userHandle ? userHandle.charAt(0).toUpperCase() + userHandle.slice(1) : clean,
       phone: digitsOnly.length >= 10 ? digitsOnly : '',
       upiId: clean,
       bankName: getBankNameFromUpi(clean),

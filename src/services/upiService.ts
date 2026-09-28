@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
 
-export type UpiAppChoice = 'phonepe' | 'gpay' | 'paytm' | 'generic';
+export type UpiAppChoice = 'phonepe' | 'gpay' | 'paytm' | 'cred' | 'bhim' | 'generic';
 
 export interface UpiPaymentRequest {
   payeeUpi: string;
@@ -19,6 +19,7 @@ export interface UpiAppOption {
   color: string;
   bgColor: string;
   scheme: string;
+  packageName: string;
 }
 
 export const UPI_APPS: UpiAppOption[] = [
@@ -29,6 +30,7 @@ export const UPI_APPS: UpiAppOption[] = [
     color: '#5f259f',
     bgColor: '#f3e8ff',
     scheme: 'phonepe://pay',
+    packageName: 'com.phonepe.app',
   },
   {
     id: 'gpay',
@@ -37,6 +39,7 @@ export const UPI_APPS: UpiAppOption[] = [
     color: '#1a73e8',
     bgColor: '#e8f0fe',
     scheme: 'gpay://upi/pay',
+    packageName: 'com.google.android.apps.nbu.paisa.user',
   },
   {
     id: 'paytm',
@@ -45,18 +48,48 @@ export const UPI_APPS: UpiAppOption[] = [
     color: '#00baf2',
     bgColor: '#e0f7fc',
     scheme: 'paytmmp://pay',
+    packageName: 'net.one97.paytm',
+  },
+  {
+    id: 'cred',
+    name: 'CRED',
+    icon: '🟢',
+    color: '#059669',
+    bgColor: '#d1fae5',
+    scheme: 'cred://upi',
+    packageName: 'com.dreamplug.androidapp',
+  },
+  {
+    id: 'bhim',
+    name: 'BHIM',
+    icon: '🇮🇳',
+    color: '#ea580c',
+    bgColor: '#ffedd5',
+    scheme: 'upi://pay',
+    packageName: 'in.org.npci.upiapp',
   },
   {
     id: 'generic',
-    name: 'Any UPI',
+    name: 'All UPI Apps',
     icon: '⚡',
-    color: '#10b981',
-    bgColor: '#d1fae5',
+    color: '#7c3aed',
+    bgColor: '#ede9fe',
     scheme: 'upi://pay',
+    packageName: '',
   },
 ];
 
-export const POPULAR_UPI_HANDLES = ['@ybl', '@ibl', '@axl', '@okaxis', '@okhdfcbank', '@paytm', '@upi'];
+export const POPULAR_UPI_HANDLES = [
+  '@ybl',
+  '@ibl',
+  '@axl',
+  '@okaxis',
+  '@okhdfcbank',
+  '@okicici',
+  '@oksbi',
+  '@paytm',
+  '@upi',
+];
 
 /**
  * Normalizes input: if user types a 10 digit mobile number without @,
@@ -71,16 +104,16 @@ export function normalizePayeeUpi(input: string, preferredHandle: string = '@ybl
 }
 
 /**
- * Builds the deep link URL for UPI intent
+ * Builds the standard NPCI deep link query params
  */
-export function buildUpiUrl(req: UpiPaymentRequest): { appUrl: string; genericUrl: string } {
+export function buildUpiQueryParams(req: UpiPaymentRequest): string {
   const cleanUpi = normalizePayeeUpi(req.payeeUpi);
-  const cleanName = (req.payeeName || 'Store').trim();
+  const cleanName = (req.payeeName || 'Payee').trim();
   const cleanNote = (req.note || 'Payment via DailyHisab').trim();
   const txRef = req.transactionRef || `DH${Date.now()}`;
   const amountStr = Number(req.amount || 0).toFixed(2);
 
-  const queryParams = [
+  return [
     `pa=${encodeURIComponent(cleanUpi)}`,
     `pn=${encodeURIComponent(cleanName)}`,
     `am=${encodeURIComponent(amountStr)}`,
@@ -88,66 +121,71 @@ export function buildUpiUrl(req: UpiPaymentRequest): { appUrl: string; genericUr
     `tn=${encodeURIComponent(cleanNote)}`,
     `tr=${encodeURIComponent(txRef)}`,
   ].join('&');
-
-  const genericUrl = `upi://pay?${queryParams}`;
-
-  let appBaseScheme = 'upi://pay';
-  switch (req.app) {
-    case 'phonepe':
-      appBaseScheme = 'phonepe://pay';
-      break;
-    case 'gpay':
-      appBaseScheme = 'gpay://upi/pay';
-      break;
-    case 'paytm':
-      appBaseScheme = 'paytmmp://pay';
-      break;
-    default:
-      appBaseScheme = 'upi://pay';
-  }
-
-  const appUrl = `${appBaseScheme}?${queryParams}`;
-  return { appUrl, genericUrl };
 }
 
 /**
- * Launches the selected UPI payment application with fallback
+ * Launches the selected UPI payment application with package targeting and universal fallback
  */
 export async function launchUpiPayment(
   req: UpiPaymentRequest
 ): Promise<{ success: boolean; appOpened: string; usedFallback: boolean; error?: string }> {
   try {
-    const { appUrl, genericUrl } = buildUpiUrl(req);
+    const queryParams = buildUpiQueryParams(req);
+    const genericUrl = `upi://pay?${queryParams}`;
+    const appConfig = UPI_APPS.find((a) => a.id === req.app);
 
-    // Try app-specific scheme first (e.g. PhonePe)
-    if (req.app && req.app !== 'generic') {
+    // 1. Android Specific Package Intent (Launches target app directly without intermediary errors)
+    if (Platform.OS === 'android' && appConfig && appConfig.packageName && req.app !== 'generic') {
+      const intentUrl = `intent://pay?${queryParams}#Intent;scheme=upi;package=${appConfig.packageName};end`;
       try {
-        const canOpen = await Linking.canOpenURL(appUrl);
+        const canOpen = await Linking.canOpenURL(intentUrl).catch(() => false);
         if (canOpen) {
-          await Linking.openURL(appUrl);
-          return { success: true, appOpened: req.app, usedFallback: false };
+          await Linking.openURL(intentUrl);
+          return { success: true, appOpened: req.app || 'upi', usedFallback: false };
         }
       } catch (e) {
-        // Continue to fallback
+        // Continue to app-specific scheme fallback
+      }
+
+      // Direct intent attempt (Android 11+ canOpenURL may return false even when installed)
+      try {
+        await Linking.openURL(intentUrl);
+        return { success: true, appOpened: req.app || 'upi', usedFallback: false };
+      } catch (e) {
+        // Fallback to custom scheme
       }
     }
 
-    // Fallback to generic upi://pay which invokes Android/iOS app chooser
+    // 2. Custom App Scheme (e.g. phonepe://pay, paytmmp://pay)
+    if (appConfig && appConfig.scheme && appConfig.scheme !== 'upi://pay' && req.app !== 'generic') {
+      const customUrl = `${appConfig.scheme}?${queryParams}`;
+      try {
+        const canOpen = await Linking.canOpenURL(customUrl).catch(() => false);
+        if (canOpen) {
+          await Linking.openURL(customUrl);
+          return { success: true, appOpened: req.app || 'upi', usedFallback: false };
+        }
+      } catch (e) {
+        // Continue to generic fallback
+      }
+    }
+
+    // 3. Universal NPCI UPI (Invokes Android System App Chooser with all installed UPI apps)
     const canOpenGeneric = await Linking.canOpenURL(genericUrl).catch(() => false);
     if (canOpenGeneric) {
       await Linking.openURL(genericUrl);
-      return { success: true, appOpened: 'upi', usedFallback: true };
+      return { success: true, appOpened: req.app || 'upi', usedFallback: true };
     }
 
-    // Direct attempt even if canOpenURL was false (sometimes canOpenURL gives false negatives on Android 11+)
+    // Direct attempt for generic URL
     await Linking.openURL(genericUrl);
-    return { success: true, appOpened: 'upi', usedFallback: true };
+    return { success: true, appOpened: req.app || 'upi', usedFallback: true };
   } catch (error: any) {
     return {
       success: false,
       appOpened: 'none',
       usedFallback: false,
-      error: error?.message || 'Unable to open UPI payment application.',
+      error: error?.message || 'Could not open UPI payment app. Please ensure a UPI app is installed on your device.',
     };
   }
 }
