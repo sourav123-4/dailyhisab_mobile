@@ -315,6 +315,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
           onSaveTransaction={(tx, toastMsg) => app.addTransactions([tx], toastMsg)}
           categories={app.categories}
           currency={app.currency}
+          transactions={app.state.transactions}
         />
         <ActionLoader visible={app.actionLoading.visible} message={app.actionLoading.message} />
         <View style={[styles.headerChrome, { backgroundColor: theme.surface, borderBottomColor: theme.borderSoft, paddingTop: insets.top + 10 }]}>
@@ -333,6 +334,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
             onNotificationPress={openNotifications}
             unreadNotificationsCount={app.unreadNotifCount}
             onBack={handleBack}
+            onQrPress={() => app.setPhonePeModalOpen(true)}
           />
         </View>
         <ScrollView

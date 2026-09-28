@@ -39,6 +39,7 @@ export const TopHeader = React.memo(function TopHeader({
   onHistoryPress,
   onAddPress,
   onSpeedPress,
+  onQrPress,
 }: {
   activeTab: Tab;
   modules: ModuleItem[];
@@ -59,6 +60,7 @@ export const TopHeader = React.memo(function TopHeader({
   onHistoryPress?: () => void;
   onAddPress?: () => void;
   onSpeedPress?: (info: any) => void;
+  onQrPress?: () => void;
 }) {
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
@@ -144,6 +146,24 @@ export const TopHeader = React.memo(function TopHeader({
             <Text style={{ fontSize: 13 }}>⚡</Text>
             <Text style={{ color: '#FF4757', fontWeight: '800', fontSize: 11 }}>TitanFit</Text>
           </TouchableOpacity>
+
+          {onQrPress && (
+            <TouchableOpacity
+              onPress={onQrPress}
+              style={[
+                styles.actionIconButton,
+                {
+                  backgroundColor: 'rgba(95, 37, 159, 0.12)',
+                  borderColor: 'rgba(95, 37, 159, 0.25)',
+                },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+              accessibilityLabel="Scan any QR code"
+            >
+              <Text style={{ fontSize: 15 }}>📷</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             onPress={onNotificationPress || onOpenDrawer}
