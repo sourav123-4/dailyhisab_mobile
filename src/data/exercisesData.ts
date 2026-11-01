@@ -115,7 +115,7 @@ export const ALL_MUSCLE_PARTS_BREAKDOWN: Record<
       target: 'Massive overall chest thickness & pushing power',
       color: '#FF4757',
       primaryExerciseId: 'chest_push_up',
-      exercises: ['Standard Push-Up', 'Flat Dumbbell Bench Press'],
+      exercises: ['Standard Push-Up', 'Flat Barbell Bench Press'],
     },
     {
       id: 'chest_lower',
@@ -640,23 +640,23 @@ const RAW_EXERCISES_DATABASE: Omit<Exercise, 'videoUrl' | 'youtubeId' | 'thumbna
   // ================= CHEST =================
   {
     id: 'chest_barbell_bench_press',
-    name: 'Flat Dumbbell Bench Press',
+    name: 'Flat Barbell Bench Press',
     muscleGroup: 'chest',
     primaryMuscles: ['Pectoralis Major (Mid & Lower)'],
     secondaryMuscles: ['Anterior Deltoid', 'Triceps Brachii'],
-    equipment: 'dumbbell',
+    equipment: 'barbell',
     difficulty: 'intermediate',
     mechanics: 'compound',
     imageKey: 'chest',
-    description: 'The premier compound dumbbell movement for balanced pectoral hypertrophy, stabilization, and maximum chest stretch.',
+    description: 'The classic compound chest builder: lets you load the most weight for overall pectoral size and pressing strength.',
     instructions: [
-      'Sit on flat bench with a pair of dumbbells resting upright on thighs, feet firmly planted into the floor.',
-      'Kick the dumbbells up using your knees and lie back, retracting and pinching your shoulder blades.',
-      'Lower dumbbells smoothly until dumbbells reach outer chest level with elbows tucked at roughly 45 degrees.',
-      'Press dumbbells explosively upward in a converging arc, squeezing pectorals at peak lockout.'
+      'Lie on a flat bench with eyes under the bar and feet planted firmly on the floor.',
+      'Grip the bar a little wider than shoulder width, pinch your shoulder blades together and un-rack it over your chest.',
+      'Lower the bar under control to your mid-chest with elbows tucked at roughly 45 degrees.',
+      'Press the bar back up until your arms are straight, squeezing your chest at the top.'
     ],
-    tips: ['Maintain a slight natural arch in lower back and keep shoulder blades firmly glued to bench.'],
-    mistakes: ['Clanking dumbbells together at the top.', 'Flaring elbows out at 90 degrees putting stress on rotators.'],
+    tips: ['Keep a slight natural arch in the lower back and your shoulder blades glued to the bench.', 'Use a spotter or safety pins when lifting heavy.'],
+    mistakes: ['Bouncing the bar off the chest.', 'Flaring elbows out at 90 degrees, which stresses the shoulders.'],
     animationFrames: [
       'Phase 1: Bar un-racked over sternum, lats engaged.',
       'Phase 2: 3-second descent with elbows tucked 45°.',
@@ -942,7 +942,7 @@ const RAW_EXERCISES_DATABASE: Omit<Exercise, 'videoUrl' | 'youtubeId' | 'thumbna
   },
   {
     id: 'abs_plank_hold',
-    name: 'Weighted Core Plank',
+    name: 'Forearm Plank Hold',
     muscleGroup: 'abs',
     primaryMuscles: ['Transverse Abdominis', 'Rectus Abdominis'],
     secondaryMuscles: ['Glutes', 'Shoulders', 'Lower Back'],
@@ -1060,17 +1060,17 @@ const RAW_EXERCISES_DATABASE: Omit<Exercise, 'videoUrl' | 'youtubeId' | 'thumbna
   },
   {
     id: 'legs_standing_calf_raise',
-    name: 'Standing Machine Calf Raise',
+    name: 'Standing Dumbbell Calf Raise',
     muscleGroup: 'legs',
     primaryMuscles: ['Gastrocnemius (Outer & Inner Calf)'],
     secondaryMuscles: ['Soleus', 'Achilles Tendon'],
-    equipment: 'machine',
+    equipment: 'dumbbell',
     difficulty: 'beginner',
     mechanics: 'isolation',
     imageKey: 'legs',
     description: 'Builds Diamond-shaped calves through full stretch and peak plantarflexion contraction.',
     instructions: [
-      'Position shoulders under padded levers with balls of feet on edge of platform.',
+      'Hold a dumbbell in each hand and stand with the balls of your feet on the edge of a step.',
       'Lower heels as far as possible for a full 2-second deep calf stretch.',
       'Drive up through the balls of your big toes until you are fully on your tiptoes.',
       'Squeeze the peak for 1 second, then lower slowly back to full stretch.'

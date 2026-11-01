@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -10,13 +10,19 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { MealType } from '../types/fitness';
 import {
-  analyzeFoodFromName,
+  analyzeFoodFromText,
   analyzeFoodFromImage,
+  analyzePresetMeal,
+  FoodScanUnavailableError,
+  NotFoodError,
   PRESET_FITNESS_MEALS,
   FoodAnalysisResult,
   PresetFoodMeal,
@@ -43,6 +49,8 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
   const [portionMultiplier, setPortionMultiplier] = useState(1);
   const [editableName, setEditableName] = useState('');
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
+  // Bumped when the user cancels a scan, so a late answer from the AI is ignored.
+  const scanIdRef = useRef(0);
 
   const resetState = () => {
     setActiveTab('photo');
@@ -80,15 +88,12 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.75,
-        base64: true,
+        quality: 0.9,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        await processRealFoodPhoto(asset.uri, asset.base64 || undefined);
+        await processRealFoodPhoto(asset.uri);
       }
     } catch (e: any) {
       console.warn('Camera error:', e);
@@ -110,15 +115,12 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.75,
-        base64: true,
+        quality: 0.9,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        await processRealFoodPhoto(asset.uri, asset.base64 || undefined);
+        await processRealFoodPhoto(asset.uri);
       }
     } catch (e: any) {
       console.warn('Gallery error:', e);
@@ -127,19 +129,40 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
   };
 
   // Analyze the real food image using AI Vision
-  const processRealFoodPhoto = async (uri: string, base64?: string) => {
+  const processRealFoodPhoto = async (uri: string) => {
+    const scanId = ++scanIdRef.current;
     setIsScanning(true);
     setAnalysisResult(null);
     setCapturedPhotoUri(uri);
     try {
-      const res = await analyzeFoodFromImage(uri, base64);
+      // A ~768 px JPEG is plenty to recognise food and uploads in a moment, unlike a full camera photo.
+      const context = ImageManipulator.manipulate(uri);
+      context.resize({ width: 768, height: null });
+      const rendered = await context.renderAsync();
+      const small = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.7, base64: true });
+      const res = await analyzeFoodFromImage(uri, small.base64 || '');
+      if (scanId !== scanIdRef.current) return;
       setAnalysisResult(res);
       setEditableName(res.name);
       setPortionMultiplier(1);
     } catch (e) {
-      Alert.alert('Scan Failed', 'Could not process photo. You can enter the meal name directly to calculate macros.');
+      if (scanId !== scanIdRef.current) return;
+      setCapturedPhotoUri(null);
+      if (e instanceof NotFoodError) {
+        Alert.alert(
+          'Not food',
+          `This looks like ${e.seen}, not food. Only photos of meals, snacks or drinks can be scanned.`
+        );
+      } else if (e instanceof FoodScanUnavailableError) {
+        Alert.alert('Can\'t scan right now', `${e.message} You can also type what you ate instead.`, [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Type food', onPress: () => setActiveTab('text') },
+        ]);
+      } else {
+        Alert.alert('Scan failed', 'Could not read this photo. Try again, or type what you ate instead.');
+      }
     } finally {
-      setIsScanning(false);
+      if (scanId === scanIdRef.current) setIsScanning(false);
     }
   };
 
@@ -149,8 +172,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
     setAnalysisResult(null);
     setCapturedPhotoUri(preset.imageUri);
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      const res = await analyzeFoodFromImage(preset.imageUri, undefined, preset.name);
+      const res = analyzePresetMeal(preset);
       setAnalysisResult(res);
       setEditableName(res.name);
       setSelectedMealType(preset.mealType);
@@ -169,17 +191,24 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
       Alert.alert('Enter Food Name', 'Please type the name of the meal (e.g. 200g chicken and rice)');
       return;
     }
+    const scanId = ++scanIdRef.current;
+    setCapturedPhotoUri(null);
     setIsScanning(true);
     try {
-      await new Promise((r) => setTimeout(r, 350));
-      const res = analyzeFoodFromName(query);
+      const res = await analyzeFoodFromText(query);
+      if (scanId !== scanIdRef.current) return;
       setAnalysisResult(res);
       setEditableName(res.name);
       setPortionMultiplier(1);
     } catch (e) {
-      Alert.alert('Analysis Failed', 'Could not compute nutrition for this meal.');
+      if (scanId !== scanIdRef.current) return;
+      if (e instanceof NotFoodError) {
+        Alert.alert('Not food', `"${query.trim()}" doesn't look like food or drink. Type what you ate, like "2 roti and dal".`);
+      } else {
+        Alert.alert('Not recognised', e instanceof FoodScanUnavailableError ? e.message : 'Could not work out nutrition for this. Try different wording.');
+      }
     } finally {
-      setIsScanning(false);
+      if (scanId === scanIdRef.current) setIsScanning(false);
     }
   };
 
@@ -411,23 +440,6 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
               </View>
             )}
 
-            {/* SCANNING RADAR LOADER */}
-            {isScanning && (
-              <View style={styles.scanningBox}>
-                {capturedPhotoUri && (
-                  <View style={styles.scanningImagePreviewBox}>
-                    <Image source={{ uri: capturedPhotoUri }} style={styles.scanningImagePreview} />
-                    <View style={styles.scanningLaserBeam} />
-                  </View>
-                )}
-                <ActivityIndicator size="large" color="#00F0FF" style={{ marginTop: 12 }} />
-                <Text style={styles.scanningTitle}>🔬 AI Vision Analyzing Real Photo...</Text>
-                <Text style={styles.scanningSubtitle}>
-                  Detecting food components, portion volume & calculating Calories, Protein, Carbs and Fats
-                </Text>
-              </View>
-            )}
-
             {/* ANALYSIS RESULT VIEW */}
             {analysisResult && (
               <View style={styles.resultContainer}>
@@ -612,11 +624,73 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
               </View>
             )}
           </ScrollView>
+          {isScanning ? (
+            <ScanningOverlay
+              photoUri={capturedPhotoUri}
+              fromText={activeTab === 'text'}
+              onCancel={() => {
+                scanIdRef.current += 1;
+                setIsScanning(false);
+                setCapturedPhotoUri(null);
+              }}
+            />
+          ) : null}
         </View>
       </View>
     </Modal>
   );
 };
+
+const PHOTO_STEPS = ['Preparing photo…', 'Checking it is food…', 'Identifying each item…', 'Calculating calories & protein…'];
+const TEXT_STEPS = ['Reading your meal…', 'Estimating portions…', 'Calculating calories & protein…'];
+
+/** Full-sheet loader shown while the AI reads a meal, so it is always visible whatever the scroll position. */
+function ScanningOverlay({ photoUri, fromText, onCancel }: { photoUri: string | null; fromText: boolean; onCancel: () => void }) {
+  const sweep = useRef(new Animated.Value(0)).current;
+  const [step, setStep] = useState(0);
+  const steps = fromText ? TEXT_STEPS : PHOTO_STEPS;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sweep, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(sweep, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    const timer = setInterval(() => setStep(prev => Math.min(prev + 1, steps.length - 1)), 1400);
+    return () => {
+      loop.stop();
+      clearInterval(timer);
+    };
+  }, [sweep, steps.length]);
+
+  return (
+    <View style={styles.scanOverlay}>
+      <View style={styles.scanningBox}>
+        {photoUri ? (
+          <View style={styles.scanningImagePreviewBox}>
+            <Image source={{ uri: photoUri }} style={styles.scanningImagePreview} />
+            <Animated.View
+              style={[styles.scanningLaserBeam, { transform: [{ translateY: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, 196] }) }] }]}
+            />
+          </View>
+        ) : null}
+        <ActivityIndicator size="large" color="#00F0FF" style={{ marginTop: 16 }} />
+        <Text style={styles.scanningTitle}>{steps[step]}</Text>
+        <View style={styles.stepDots}>
+          {steps.map((label, i) => (
+            <View key={label} style={[styles.stepDot, i <= step && styles.stepDotOn]} />
+          ))}
+        </View>
+        <Text style={styles.scanningSubtitle}>Usually takes 2–5 seconds</Text>
+        <TouchableOpacity onPress={onCancel} style={styles.scanCancelBtn} activeOpacity={0.8}>
+          <Text style={styles.scanCancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -942,21 +1016,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  scanOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(5,10,20,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 50,
+    elevation: 50,
+  },
   scanningBox: {
+    width: '100%',
+    maxWidth: 340,
     backgroundColor: '#1E293B',
-    borderRadius: 18,
+    borderRadius: 22,
     padding: 24,
     alignItems: 'center',
-    marginVertical: 20,
     borderWidth: 1,
     borderColor: '#00F0FF',
   },
   scanningImagePreviewBox: {
-    width: 180,
-    height: 130,
-    borderRadius: 14,
+    width: 220,
+    height: 200,
+    borderRadius: 16,
     overflow: 'hidden',
-    position: 'relative',
     borderWidth: 2,
     borderColor: '#00F0FF',
   },
@@ -966,7 +1049,7 @@ const styles = StyleSheet.create({
   },
   scanningLaserBeam: {
     position: 'absolute',
-    top: '40%',
+    top: 0,
     left: 0,
     right: 0,
     height: 3,
@@ -979,16 +1062,43 @@ const styles = StyleSheet.create({
   },
   scanningTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     marginTop: 14,
+    textAlign: 'center',
+  },
+  stepDots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  stepDot: {
+    width: 22,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#334155',
+  },
+  stepDotOn: {
+    backgroundColor: '#00F0FF',
   },
   scanningSubtitle: {
     color: '#94A3B8',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 16,
+    marginTop: 8,
+  },
+  scanCancelBtn: {
+    marginTop: 16,
+    paddingHorizontal: 22,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  scanCancelText: {
+    color: '#E2E8F0',
+    fontWeight: '700',
+    fontSize: 13,
   },
   resultContainer: {
     gap: 14,

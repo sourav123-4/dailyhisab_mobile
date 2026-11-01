@@ -118,6 +118,8 @@ export type HisabState = {
   currency: string;
   theme: 'midnight' | 'oled' | 'emerald' | 'light' | 'cyber';
   pinEnabled?: boolean;
+  /** Set for locks still on the old default (1234) or another easy PIN; Settings asks for a change. */
+  pinNeedsUpdate?: boolean;
   securityPin?: string;
   biometricEnabled?: boolean;
   compactMode?: boolean;
@@ -146,3 +148,6 @@ export type BottomTabItem = {
   label: string;
   icon: string;
 };
+
+/** Accepts a partial state, or an updater built from the latest state so concurrent cloud merges are not overwritten. */
+export type HisabPatch = (delta: Partial<HisabState> | ((current: HisabState) => Partial<HisabState>)) => void;

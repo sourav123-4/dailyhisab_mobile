@@ -13,11 +13,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Button, Field, money } from '../components/UI';
-import { CreditCard, HisabState, SavingsGoal, Transaction } from '../types';
+import { Button, money } from '../components/UI';
+import { CreditCard, HisabPatch, HisabState, SavingsGoal, Transaction } from '../types';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { PinSetupModal, PinSetupMode } from '../components/PinSetupModal';
+import appConfig from '../../app.json';
 
 const getLocalAuth = () => {
   try {
@@ -73,7 +75,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
   importText: string;
   setImportText: (text: string) => void;
   numeric: (v: any) => number;
-  patch: (delta: Partial<HisabState>) => void;
+  patch: HisabPatch;
   addCreditCard: () => void;
   removeCreditCard: (id: string) => void;
   recordCardPayment: (card: CreditCard) => void;
@@ -87,7 +89,8 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
   logoutUser: () => void;
 }) {
   const theme = useAppTheme();
-  const { setActiveModalOpen } = useHisabApp();
+  const { setActiveModalOpen, setAppLockPin } = useHisabApp();
+  const [pinSetupMode, setPinSetupMode] = useState<PinSetupMode | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(true);
   const [activeSheet, setActiveSheet] = useState<null | 'appearance' | 'security' | 'budgets' | 'backup'>(null);
 
@@ -141,9 +144,9 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
 
   const currentThemeLabel = themeList.find(t => t.id === (state.theme || 'light'))?.label || 'Purple Light';
 
-  const userInitial = (user?.displayName?.[0] || user?.email?.[0] || 'S').toUpperCase();
-  const userName = user?.displayName || (user?.isAnonymous ? 'Guest User' : 'Sourav Mahanty');
-  const userEmail = user?.email || (user?.isAnonymous ? 'Local offline mode' : 'souravntsilcnagar@gmail.com');
+  const userInitial = (user?.displayName?.[0] || user?.email?.[0] || 'G').toUpperCase();
+  const userName = user?.displayName || user?.email?.split('@')[0] || 'Guest User';
+  const userEmail = user?.email || (localOnly || user?.isAnonymous ? 'Offline mode · saved on this phone only' : 'Not signed in');
 
   return (
     <View style={styles.screen}>
@@ -161,7 +164,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
               {money(monthlySpend, state.currency)}
             </Text>
             <Text style={styles.heroSubText} numberOfLines={1}>
-              {budgetUsagePercent}% of {money(totalBudget, state.currency)} monthly budget
+              {totalBudget > 0 ? `${budgetUsagePercent}% of ${money(totalBudget, state.currency)} monthly budget` : 'No monthly budget set yet'}
             </Text>
           </View>
         </View>
@@ -187,7 +190,8 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
 
         <View style={styles.heroFooter}>
           <Text style={styles.heroFooterText}>
-            Remaining Balance: <Text style={{ color: '#ffffff', fontWeight: '900' }}>{money(remainingBudget, state.currency)}</Text>
+            {totalBudget > 0 ? 'Remaining Balance: ' : 'Set category limits to track what is left'}
+            {totalBudget > 0 ? <Text style={{ color: '#ffffff', fontWeight: '900' }}>{money(remainingBudget, state.currency)}</Text> : null}
           </Text>
         </View>
       </View>
@@ -246,7 +250,9 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             </View>
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>App Lock</Text>
-              <Text style={[styles.menuRowSub, { color: theme.muted }]}>{pinEnabled ? 'PIN & Biometrics active' : 'Not set'}</Text>
+              <Text style={[styles.menuRowSub, { color: state.pinNeedsUpdate ? theme.danger : theme.muted }]}>
+                {!pinEnabled ? 'Not set' : state.pinNeedsUpdate ? 'Weak PIN, change it' : biometricEnabled ? 'PIN & biometrics' : 'PIN'}
+              </Text>
             </View>
             <Text style={pinEnabled ? styles.greenOnText : [styles.greenOnText, { color: theme.muted }]}>
               {pinEnabled ? 'On ›' : 'Off ›'}
@@ -263,7 +269,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>Category Budgets</Text>
               <Text style={[styles.menuRowSub, { color: theme.muted }]}>
-                {money(monthlySpend, state.currency)} of {money(totalBudget, state.currency)} spent
+                {totalBudget > 0 ? `${money(monthlySpend, state.currency)} of ${money(totalBudget, state.currency)} spent` : 'No limits set · tap to add'}
               </Text>
             </View>
             <AppIcon name="chevron-right" size={16} color={theme.muted} />
@@ -353,7 +359,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             </View>
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>Quick Export</Text>
-              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Copy full JSON data to clipboard</Text>
+              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Share or save a full JSON backup</Text>
             </View>
             <AppIcon name="chevron-right" size={16} color={theme.muted} />
           </TouchableOpacity>
@@ -363,7 +369,12 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
           {/* Help & Support */}
           <TouchableOpacity
             style={styles.menuRow}
-            onPress={() => Alert.alert('Daily Hisab Support', 'Personal finance tracking with end-to-end security & offline storage.')}
+            onPress={() =>
+              Alert.alert(
+                'Help & Security Info',
+                'Your records are saved on this phone and, when you are signed in, synced to your private Firebase account. Only you can read your cloud records. Data on the phone is protected by App Lock, not encrypted, so also keep a screen lock on your phone.',
+              )
+            }
             activeOpacity={0.7}
           >
             <View style={[styles.menuIconWrap, { backgroundColor: '#ede9fe' }]}>
@@ -371,7 +382,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             </View>
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>Help & Security Info</Text>
-              <Text style={[styles.menuRowSub, { color: theme.muted }]}>v1.4.4 • Encrypted</Text>
+              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Version {appConfig.expo.version}</Text>
             </View>
             <AppIcon name="chevron-right" size={16} color={theme.muted} />
           </TouchableOpacity>
@@ -390,8 +401,9 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
         <View style={{ gap: 12 }}>
           {Object.entries(state.budgets).map(([cat, limit]) => {
             const spent = txs.filter(tx => tx.category === cat && tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
-            const numLimit = numeric(limit) || 1;
-            const pct = Math.min(100, Math.round((spent / numLimit) * 100));
+            const numLimit = numeric(limit);
+            const hasLimit = numLimit > 0;
+            const pct = hasLimit ? Math.min(100, Math.round((spent / numLimit) * 100)) : 0;
 
             return (
               <View key={cat} style={[styles.categoryBudgetCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
@@ -402,12 +414,14 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.catName, { color: theme.text }]}>{cat}</Text>
                     <Text style={[styles.catSub, { color: theme.muted }]}>
-                      {money(spent, state.currency)} spent of {money(numLimit, state.currency)}
+                      {hasLimit
+                        ? `${money(spent, state.currency)} spent of ${money(numLimit, state.currency)}`
+                        : `${money(spent, state.currency)} spent · no limit set`}
                     </Text>
                   </View>
-                  <View style={[styles.catUsageBadge, { backgroundColor: pct > 90 ? theme.dangerSoft : pct > 70 ? theme.warningSoft : theme.successSoft }]}>
-                    <Text style={[styles.catUsageText, { color: pct > 90 ? theme.danger : pct > 70 ? theme.warning : theme.success }]}>
-                      {pct}%
+                  <View style={[styles.catUsageBadge, { backgroundColor: !hasLimit ? theme.surface : pct > 90 ? theme.dangerSoft : pct > 70 ? theme.warningSoft : theme.successSoft }]}>
+                    <Text style={[styles.catUsageText, { color: !hasLimit ? theme.muted : pct > 90 ? theme.danger : pct > 70 ? theme.warning : theme.success }]}>
+                      {hasLimit ? `${pct}%` : 'No limit'}
                     </Text>
                   </View>
                 </View>
@@ -431,8 +445,8 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
                   <TextInput
                     style={[styles.catLimitInput, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}
                     value={String(limit || '')}
-                    onChangeText={value => patch({ budgets: { ...state.budgets, [cat]: numeric(value) } })}
-                    placeholder="0"
+                    onChangeText={value => patch(current => ({ budgets: { ...current.budgets, [cat]: numeric(value) } }))}
+                    placeholder="Not set"
                     placeholderTextColor={theme.muted}
                     keyboardType="decimal-pad"
                     returnKeyType="done"
@@ -454,31 +468,35 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             </View>
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>App Lock (PIN Protection)</Text>
-              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Require 4-digit PIN to open</Text>
+              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Ask for your 4-digit PIN when the app opens</Text>
             </View>
             <Switch
               value={pinEnabled}
-              onValueChange={val => patch({ pinEnabled: val })}
+              onValueChange={val => setPinSetupMode(val ? 'create' : 'disable')}
               trackColor={{ false: '#e2e8f0', true: '#7c3aed' }}
               thumbColor="#ffffff"
+              accessibilityLabel="App lock"
             />
           </View>
 
           {pinEnabled && (
             <>
               <View style={[styles.rowDivider, { backgroundColor: theme.borderSoft }]} />
-              <View style={{ padding: 14 }}>
-                <Text style={[styles.fieldLabel, { color: theme.muted, marginBottom: 6 }]}>4-DIGIT SECURITY PIN</Text>
-                <Field
-                  value={state.securityPin || '1234'}
-                  onChangeText={val => {
-                    const cleaned = val.replace(/[^0-9]/g, '').slice(0, 4);
-                    patch({ securityPin: cleaned });
-                  }}
-                  placeholder="1234"
-                  keyboardType="numeric"
-                />
-              </View>
+              {state.pinNeedsUpdate ? (
+                <Text style={[styles.menuRowSub, { color: theme.danger, paddingHorizontal: 14, paddingTop: 12 }]}>
+                  Your PIN is the old default or easy to guess. Change it to keep the app locked.
+                </Text>
+              ) : null}
+              <TouchableOpacity style={styles.menuRow} onPress={() => setPinSetupMode('change')} activeOpacity={0.7} accessibilityRole="button">
+                <View style={[styles.menuIconWrap, { backgroundColor: '#ede9fe' }]}>
+                  <AppIcon name="lock" size={17} color="#7c3aed" />
+                </View>
+                <View style={styles.menuTextCol}>
+                  <Text style={[styles.menuRowTitle, { color: theme.text }]}>Change PIN</Text>
+                  <Text style={[styles.menuRowSub, { color: theme.muted }]}>Needs your current PIN</Text>
+                </View>
+                <AppIcon name="chevron-right" size={16} color={theme.muted} />
+              </TouchableOpacity>
             </>
           )}
 
@@ -490,10 +508,13 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
             </View>
             <View style={styles.menuTextCol}>
               <Text style={[styles.menuRowTitle, { color: theme.text }]}>Fingerprint / Biometric ID</Text>
-              <Text style={[styles.menuRowSub, { color: theme.muted }]}>Unlock with device biometrics</Text>
+              <Text style={[styles.menuRowSub, { color: theme.muted }]}>
+                {pinEnabled ? 'Unlock with your fingerprint or face' : 'Turn on App Lock first'}
+              </Text>
             </View>
             <Switch
-              value={biometricEnabled}
+              value={pinEnabled && biometricEnabled}
+              disabled={!pinEnabled}
               onValueChange={val => patch({ biometricEnabled: val })}
               trackColor={{ false: '#e2e8f0', true: '#7c3aed' }}
               thumbColor="#ffffff"
@@ -504,9 +525,19 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
         <View style={[styles.securityFooterBanner, { backgroundColor: '#ede9fe', marginTop: 14 }]}>
           <AppIcon name="shield-check" size={20} color="#7c3aed" />
           <Text style={styles.securityFooterText}>
-            Your financial data is stored locally with end-to-end device encryption.
+            App Lock keeps others out of the app on this phone. Your PIN is never included in backups or synced.
           </Text>
         </View>
+        <PinSetupModal
+          visible={pinSetupMode !== null}
+          mode={pinSetupMode || 'create'}
+          storedPin={state.securityPin}
+          onCancel={() => setPinSetupMode(null)}
+          onComplete={pinHash => {
+            setAppLockPin(pinHash);
+            setPinSetupMode(null);
+          }}
+        />
       </SettingsSheet>
 
       {/* APPEARANCE SHEET */}
@@ -568,7 +599,7 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
       {/* BACKUP SHEET */}
       <SettingsSheet title="Backup & Restore" visible={activeSheet === 'backup'} onClose={() => setActiveSheet(null)}>
         <Text style={[styles.sheetSubtitle, { color: theme.muted, marginBottom: 12 }]}>
-          Export your encrypted financial ledger or import previously backed up data
+          Export your records as a backup file or restore one. Backups are plain text, so keep them private. Your PIN and API key are not included.
         </Text>
         <View style={{ gap: 14 }}>
           {/* Groq API Key Input */}

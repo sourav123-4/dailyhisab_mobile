@@ -13,9 +13,11 @@ import {
 } from 'react-native';
 import { Button, Empty, Field, money, SegmentedRadio } from '../components/UI';
 import { AppIcon } from '../components/AppIcon';
+import { formatMonthLabel, formatRecordDate } from '../utils/date';
 import { useAppTheme } from '../theme/appTheme';
 import { HisabState, SalaryRecord } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { confirmDelete } from '../utils/confirm';
 
 type SalarySubTab = 'all' | 'credited' | 'pending' | 'tax';
 
@@ -34,7 +36,7 @@ export const SalaryScreen = React.memo(function SalaryScreen({
   form: any;
   setForm: (form: any) => void;
   numeric: (v: any) => number;
-  addSalary: () => void;
+  addSalary: () => boolean;
   creditSalary: (record: SalaryRecord) => void;
   removeSalary: (id: string) => void;
 }) {
@@ -95,8 +97,7 @@ export const SalaryScreen = React.memo(function SalaryScreen({
   }, [state.salary, activeTab, searchQuery]);
 
   const submitSalary = () => {
-    addSalary();
-    setAddModalVisible(false);
+    if (addSalary()) setAddModalVisible(false);
   };
 
   return (
@@ -340,7 +341,7 @@ export const SalaryScreen = React.memo(function SalaryScreen({
                   record={record}
                   currency={state.currency}
                   onCredit={() => creditSalary(record)}
-                  onDelete={() => removeSalary(record.id)}
+                  onDelete={() => confirmDelete(`salary record for ${record.monthYear}`, () => removeSalary(record.id))}
                 />
               ))
             ) : (
@@ -405,11 +406,11 @@ function SalaryItemCard({
           <View style={styles.recordTagRow}>
             <View style={[styles.monthTag, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
               <AppIcon name="planner" size={10} color={theme.muted} />
-              <Text style={[styles.monthTagText, { color: theme.muted }]}>{record.monthYear}</Text>
+              <Text style={[styles.monthTagText, { color: theme.muted }]}>{formatMonthLabel(record.monthYear)}</Text>
             </View>
             {isCredited && record.receivedDate ? (
               <Text style={[styles.receivedText, { color: theme.subtle }]}>
-                Recd: {record.receivedDate}
+                Received {formatRecordDate(record.receivedDate).label}
               </Text>
             ) : null}
           </View>

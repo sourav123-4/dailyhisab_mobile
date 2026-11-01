@@ -1,18 +1,23 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
 import { StyleSheet, Text, TextInput, StatusBar } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 
 import { HisabAppProvider, useHisabApp } from '../navigation/HisabAppContext';
 import { FitnessAppProvider, useFitnessApp } from '../navigation/FitnessAppContext';
-import { AppModeProvider, useAppMode } from '../navigation/AppModeContext';
+import { AppModeProvider } from '../navigation/AppModeContext';
 import { AppThemeProvider, useAppTheme } from '../theme/appTheme';
 import { RootNavigator } from '../navigation/root/RootNavigator';
 import { navigationRef } from '../navigation/navigationRef';
 
 enableScreens(true);
+
+// The native splash stays up until stored data is read, so launch never flashes a blank screen.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
+SplashScreen.setOptions({ fade: true, duration: 200 });
 
 const textDefaults = Text as typeof Text & { defaultProps?: Record<string, unknown> };
 textDefaults.defaultProps = {
@@ -26,13 +31,22 @@ inputDefaults.defaultProps = {
   maxFontSizeMultiplier: 1.12,
 };
 
-const ThemedAppShell = React.memo(() => {
+const ThemedAppShell = React.memo(function ThemedAppShell() {
   const theme = useAppTheme();
+  // Match navigation's own backgrounds to the app theme so no default white shows through
+  // (e.g. behind the tab bar's rounded corners or during screen transitions).
+  const navigationTheme = useMemo(() => {
+    const base = theme.dark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: { ...base.colors, background: theme.bg, card: theme.surface, border: theme.border, text: theme.text, primary: theme.primary },
+    };
+  }, [theme]);
 
   return (
     <>
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} theme={navigationTheme}>
         <RootNavigator />
       </NavigationContainer>
     </>
@@ -40,11 +54,16 @@ const ThemedAppShell = React.memo(() => {
 });
 
 const ThemedAppContainer = () => {
-  const { appMode } = useAppMode();
   const fitness = useFitnessApp();
   const hisab = useHisabApp();
 
-  const activeThemeName = appMode === 'fitness' ? fitness.themeName : (hisab.theme || 'cyber');
+  // One theme for the whole app, so TitanFit matches Daily Hisab.
+  const activeThemeName = hisab.theme || 'midnight';
+  const ready = hisab.loaded && !fitness.isLoading;
+
+  useEffect(() => {
+    if (ready) SplashScreen.hide();
+  }, [ready]);
 
   return (
     <AppThemeProvider themeName={activeThemeName}>
@@ -53,14 +72,25 @@ const ThemedAppContainer = () => {
   );
 };
 
+// TitanFit data follows the signed-in account; the provider is memoized, so Hisab updates
+// that keep the same owner don't re-render it.
+const FitnessForCurrentAccount = ({ children }: { children: React.ReactNode }) => {
+  const { dataOwner, loaded } = useHisabApp();
+  return (
+    <FitnessAppProvider owner={dataOwner} ready={loaded}>
+      {children}
+    </FitnessAppProvider>
+  );
+};
+
+const themedApp = <ThemedAppContainer />;
+
 const App = () => (
   <SafeAreaProvider>
     <GestureHandlerRootView style={styles.root}>
       <AppModeProvider>
         <HisabAppProvider>
-          <FitnessAppProvider>
-            <ThemedAppContainer />
-          </FitnessAppProvider>
+          <FitnessForCurrentAccount>{themedApp}</FitnessForCurrentAccount>
         </HisabAppProvider>
       </AppModeProvider>
     </GestureHandlerRootView>

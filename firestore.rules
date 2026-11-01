@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Each signed-in (non-anonymous) user can only touch their own synced records.
+    function isOwner(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    match /users/{uid}/{collection}/{docId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && collection in ['transactions', 'salary', 'loans', 'investments', 'debts',
+                          'recurringRules', 'creditCards', 'savingsGoals', 'settings']
+        && request.resource.data.userId == uid;
+    }
+
+    // Anything not matched above (any other collection) is denied by default.
+  }
+}

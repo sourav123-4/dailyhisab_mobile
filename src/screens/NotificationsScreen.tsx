@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../theme/appTheme';
 import { HisabState, Tab } from '../types';
 import { AppIcon, IconName } from '../components/AppIcon';
+import { isLoanActive } from '../utils/loans';
 
 const NOTIFS_READ_KEY = 'dailyhisab.notifications.read.v1';
 const NOTIFS_DISMISSED_KEY = 'dailyhisab.notifications.dismissed.v1';
@@ -54,7 +55,7 @@ export const NotificationsScreen = React.memo(function NotificationsScreen({
 
       // 1. Loans & EMI Due Notifications
       (state.loans || []).forEach((loan) => {
-        if (loan.status === 'Active' && loan.monthlyEmi > 0) {
+        if (isLoanActive(loan) && loan.monthlyEmi > 0) {
           list.push({
             id: `loan-emi-${loan.id}`,
             title: `${loan.name} EMI Due`,
@@ -206,10 +207,13 @@ export const NotificationsScreen = React.memo(function NotificationsScreen({
       // 8. Cloud Backup & Sync Status
       list.push({
         id: 'cloud-sync-status',
-        title: 'Cloud Backup & Sync Active',
-        description: syncStatus === 'synced'
-          ? `All ${state.transactions?.length || 0} transactions and accounts are safely encrypted and synchronized with Firebase.`
-          : 'Cloud sync is maintaining encrypted local backups and syncing whenever online.',
+        // Report the real status: offline-mode data never leaves the phone.
+        title: syncStatus === 'Cloud Synced' ? 'Cloud sync is up to date' : syncStatus === 'Syncing' ? 'Syncing your records' : 'Not synced to the cloud',
+        description: syncStatus === 'Cloud Synced'
+          ? `All ${state.transactions?.length || 0} transactions are saved to your account.`
+          : syncStatus === 'Syncing'
+            ? 'Your latest changes are being saved to your account.'
+            : 'Records are saved on this phone only. Sign in and stay online to sync them to your account.',
         category: 'security',
         time: 'Active',
         isRead: true,

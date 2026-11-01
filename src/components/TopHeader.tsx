@@ -11,7 +11,7 @@ import { AppIcon } from './AppIcon';
 import { useAppMode } from '../navigation/AppModeContext';
 
 const formatDisplayName = (name?: string) => {
-  if (!name) return 'Sourav Mahanty';
+  if (!name) return 'Guest User';
   return name
     .trim()
     .split(/\s+/)
@@ -68,13 +68,13 @@ export const TopHeader = React.memo(function TopHeader({
 
   const getGreeting = () => {
     const hours = new Date().getHours();
-    if (hours < 12) return 'Good Morning 👋';
-    if (hours < 17) return 'Good Afternoon 👋';
-    return 'Good Evening 👋';
+    if (hours < 12) return 'Good morning';
+    if (hours < 17) return 'Good afternoon';
+    return 'Good evening';
   };
 
-  const displayName = user?.displayName || 'sourav mahanty';
-  const userInitial = (user?.displayName?.[0] || user?.email?.[0] || 'S').toUpperCase();
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Guest User';
+  const userInitial = (user?.displayName?.[0] || user?.email?.[0] || 'G').toUpperCase();
 
   const getScreenTitle = () => {
     switch (activeTab) {
@@ -117,11 +117,11 @@ export const TopHeader = React.memo(function TopHeader({
 
         {/* Center Greeting & Formatted User Name */}
         <View style={styles.centerGreetingCol}>
-          <Text style={[styles.greetingSub, { color: theme.subtle || '#94a3b8' }]}>
+          <Text style={[styles.greetingSub, { color: theme.subtle || '#94a3b8' }]} numberOfLines={1}>
             {getGreeting()}
           </Text>
           <Text style={[styles.greetingName, { color: '#7c3aed' }]} numberOfLines={1}>
-            {formatDisplayName(displayName)}
+            {formatDisplayName(displayName).split(' ')[0]}
           </Text>
         </View>
 
@@ -188,8 +188,9 @@ export const TopHeader = React.memo(function TopHeader({
             style={styles.avatarMiniCircle}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.8}
+            accessibilityLabel="Open profile"
           >
-            <AppIcon name="user" size={17} color="#ffffff" />
+            <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '800' }}>{userInitial}</Text>
           </TouchableOpacity>
         </View>
       </View>

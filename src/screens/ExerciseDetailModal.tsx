@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Image,
   Modal,
   Platform,
   ScrollView,
@@ -10,14 +9,9 @@ import {
   View,
 } from 'react-native';
 import { Exercise } from '../types/fitness';
-import {
-  MUSCLE_GROUPS_META,
-  ARMS_PARTS_BREAKDOWN,
-  MUSCLE_ANATOMY_IMAGES,
-  EXERCISE_3D_VIDEOS,
-} from '../data/exercisesData';
+import { MUSCLE_GROUPS_META } from '../data/exercisesData';
 import { useAppTheme } from '../theme/appTheme';
-import { Exercise3DVideoPlayer } from '../components/Exercise3DVideoPlayer';
+import { ExerciseVideoPlayer } from '../components/ExerciseVideoPlayer';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 
 interface ExerciseDetailModalProps {
@@ -30,12 +24,10 @@ interface ExerciseDetailModalProps {
 export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
   visible,
   exercise,
-  highlightPart: initialHighlight,
   onClose,
 }) => {
   const theme = useAppTheme();
   const { addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
-  const [selectedArmPart, setSelectedArmPart] = useState<string | undefined>(initialHighlight);
 
   const muscleMeta =
     MUSCLE_GROUPS_META.find((m) => m.id === exercise.muscleGroup) || MUSCLE_GROUPS_META[0];
@@ -59,11 +51,6 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
                   {exercise.equipment.toUpperCase()}
                 </Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: 'rgba(0, 229, 255, 0.15)' }]}>
-                <Text style={[styles.badgeText, { color: theme.accent }]}>
-                  ⚡ 60 FPS 3D
-                </Text>
-              </View>
             </View>
 
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -77,15 +64,11 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
             {/* Unified 3D Video Player & Scene Switcher */}
-            <Exercise3DVideoPlayer
-              exercise={exercise}
-              highlightPart={selectedArmPart}
-              onSelectPart={(partId) => setSelectedArmPart(partId)}
-            />
+            <ExerciseVideoPlayer exercise={exercise} />
 
             {/* Biomechanical Execution Guide */}
             <View style={{ paddingHorizontal: 4, marginTop: 16 }}>
-              <Text style={[styles.subHeading, { color: theme.text }]}>BIOMECHANICAL EXECUTION GUIDE</Text>
+              <Text style={[styles.subHeading, { color: theme.text }]}>HOW TO DO IT</Text>
               {exercise.instructions.map((step, idx) => (
                 <View key={idx} style={styles.stepRow}>
                   <View style={[styles.stepNumBox, { backgroundColor: theme.primarySoft }]}>
@@ -98,7 +81,7 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
               {/* Form Checklist Pro Tips */}
               {exercise.tips && exercise.tips.length > 0 && (
                 <>
-                  <Text style={[styles.subHeading, { color: theme.accent, marginTop: 14 }]}>PRO FORM CHECKLIST</Text>
+                  <Text style={[styles.subHeading, { color: theme.accent, marginTop: 14 }]}>FORM TIPS</Text>
                   {exercise.tips.map((tip, idx) => (
                     <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.accent }]}>
                       <Text style={styles.tipIcon}>💡</Text>
@@ -111,7 +94,7 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
               {/* Mistakes to Avoid */}
               {exercise.mistakes && exercise.mistakes.length > 0 && (
                 <>
-                  <Text style={[styles.subHeading, { color: theme.danger, marginTop: 14 }]}>CRITICAL MISTAKES TO AVOID</Text>
+                  <Text style={[styles.subHeading, { color: theme.danger, marginTop: 14 }]}>COMMON MISTAKES</Text>
                   {exercise.mistakes.map((mistake, idx) => (
                     <View key={idx} style={[styles.tipCard, { backgroundColor: theme.surfaceAlt, borderColor: theme.danger }]}>
                       <Text style={styles.tipIcon}>⚠️</Text>

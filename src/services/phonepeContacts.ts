@@ -12,7 +12,15 @@ export interface PhonePeContact {
   recentDate?: string;
   category?: string;
   isRecentLedger?: boolean;
+  /** True when the UPI ID was guessed from a mobile number; the payer must confirm the name in their UPI app. */
+  isGuess?: boolean;
 }
+
+const PHONEPE_HANDLES = ['@ybl', '@ibl', '@axl'];
+const isPhonePeHandle = (upi: string) => PHONEPE_HANDLES.some(handle => upi.toLowerCase().endsWith(handle));
+const formatMobile = (digits: string) => `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+/** Shown wherever a UPI ID is inferred from a mobile number rather than given by the user. */
+export const GUESSED_UPI_NOTE = 'Guessed from number · check the name in your UPI app';
 
 const AVATAR_COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#06b6d4', '#14b8a6'];
 
@@ -28,64 +36,8 @@ export function getBankNameFromUpi(upiId: string): string {
   if (lower.endsWith('@paytm')) return 'Paytm Payments Bank';
   if (lower.endsWith('@barodampay')) return 'Bank of Baroda';
   if (lower.endsWith('@upi')) return 'BHIM UPI';
-  return 'Verified UPI Account';
+  return 'UPI ID';
 }
-
-/**
- * Curated list of verified contacts with real, valid UPI formats
- */
-export const VERIFIED_CONTACTS: PhonePeContact[] = [
-  {
-    id: 'c1',
-    name: 'Rahul Sharma',
-    phone: '9876543210',
-    upiId: '9876543210@ybl',
-    bankName: 'PhonePe (YES BANK)',
-    hasPhonePe: true,
-    avatarColor: '#7c3aed',
-    category: 'General',
-  },
-  {
-    id: 'c2',
-    name: 'Sharma Kirana Store',
-    phone: '9830011223',
-    upiId: 'sharmakirana@ybl',
-    bankName: 'PhonePe Merchant',
-    hasPhonePe: true,
-    avatarColor: '#10b981',
-    category: 'Groceries',
-  },
-  {
-    id: 'c3',
-    name: 'Pooja Verma',
-    phone: '9812345678',
-    upiId: 'pooja.verma@ibl',
-    bankName: 'PhonePe (ICICI Bank)',
-    hasPhonePe: true,
-    avatarColor: '#ec4899',
-    category: 'Shopping',
-  },
-  {
-    id: 'c4',
-    name: 'Amit Roy',
-    phone: '9903122334',
-    upiId: 'amitroy@axl',
-    bankName: 'PhonePe (Axis Bank)',
-    hasPhonePe: true,
-    avatarColor: '#3b82f6',
-    category: 'General',
-  },
-  {
-    id: 'c5',
-    name: 'Indian Oil Fuel Pump',
-    phone: '9800012345',
-    upiId: 'indianoilfuel@ybl',
-    bankName: 'PhonePe Merchant',
-    hasPhonePe: true,
-    avatarColor: '#ef4444',
-    category: 'Transport',
-  },
-];
 
 /**
  * Extract genuine UPI payees from ledger transactions.
@@ -121,7 +73,7 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
           phone: phone,
           upiId: upi,
           bankName: getBankNameFromUpi(upi),
-          hasPhonePe: upi.endsWith('@ybl') || upi.endsWith('@ibl') || upi.endsWith('@axl'),
+          hasPhonePe: isPhonePeHandle(upi),
           avatarColor: AVATAR_COLORS[Math.abs(cleanName.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % AVATAR_COLORS.length],
           recentAmount: tx.amount,
           recentDate: tx.date,
@@ -137,11 +89,12 @@ export function extractUpiContactsFromTransactions(transactions: Transaction[]):
           seenUpi.add(upi);
           list.push({
             id: `tx-${tx.id}`,
-            name: tx.title && !tx.title.includes(phone) ? tx.title : `User (+91 ${phone})`,
+            name: tx.title && !tx.title.includes(phone) ? tx.title : formatMobile(phone),
             phone: phone,
             upiId: upi,
-            bankName: 'PhonePe (YES BANK)',
-            hasPhonePe: true,
+            bankName: GUESSED_UPI_NOTE,
+            hasPhonePe: false,
+            isGuess: true,
             avatarColor: AVATAR_COLORS[Math.abs(phone.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % AVATAR_COLORS.length],
             recentAmount: tx.amount,
             recentDate: tx.date,
@@ -170,16 +123,10 @@ export function searchPhonePeAccounts(
 } {
   const clean = query.trim().toLowerCase();
 
-  // Combine pre-extracted ledger contacts with curated contacts
-  const allContacts: PhonePeContact[] = [...ledgerContacts];
-  for (let i = 0; i < VERIFIED_CONTACTS.length; i++) {
-    const c = VERIFIED_CONTACTS[i];
-    if (!allContacts.some((existing) => existing.upiId.toLowerCase() === c.upiId.toLowerCase())) {
-      allContacts.push(c);
-    }
-  }
+  // Only people this user has actually paid; the app never suggests strangers.
+  const allContacts: PhonePeContact[] = ledgerContacts;
 
-  // If query is empty, show recent ledger payments first, followed by curated
+  // If query is empty, show recent ledger payments
   if (!clean) {
     return {
       results: allContacts,
@@ -201,11 +148,12 @@ export function searchPhonePeAccounts(
   if (digitsOnly.length === 10 && !filtered.some((c) => c.phone === digitsOnly)) {
     const autoAccount: PhonePeContact = {
       id: `auto-${digitsOnly}`,
-      name: `User (+91 ${digitsOnly.slice(0, 5)} ${digitsOnly.slice(5)})`,
+      name: formatMobile(digitsOnly),
       phone: digitsOnly,
       upiId: `${digitsOnly}@ybl`,
-      bankName: 'PhonePe (YES BANK)',
-      hasPhonePe: true,
+      bankName: GUESSED_UPI_NOTE,
+      hasPhonePe: false,
+      isGuess: true,
       avatarColor: '#5f259f',
     };
     return {
@@ -224,7 +172,7 @@ export function searchPhonePeAccounts(
       phone: digitsOnly.length >= 10 ? digitsOnly : '',
       upiId: clean,
       bankName: getBankNameFromUpi(clean),
-      hasPhonePe: clean.endsWith('@ybl') || clean.endsWith('@ibl') || clean.endsWith('@axl'),
+      hasPhonePe: isPhonePeHandle(clean),
       avatarColor: '#5f259f',
     };
     return {
@@ -276,7 +224,7 @@ export function parseUpiQrCode(qrData: string): {
 
   // If 10 digit phone number: e.g. 9876543210
   if (/^\d{10}$/.test(clean)) {
-    return { payeeUpi: `${clean}@ybl`, payeeName: `Contact (+91 ${clean})` };
+    return { payeeUpi: `${clean}@ybl`, payeeName: formatMobile(clean) };
   }
 
   return null;

@@ -79,7 +79,7 @@ function stableStringify(value: unknown): string {
   }
   if (value && typeof value === 'object') {
     return `{${Object.keys(value as Record<string, unknown>)
-      .filter(key => key !== 'updatedAt' && key !== 'userId')
+      .filter(key => key !== 'updatedAt' && key !== 'userId' && (value as Record<string, unknown>)[key] !== undefined)
       .sort()
       .map(key => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
       .join(',')}}`;
@@ -116,15 +116,16 @@ export async function setCloudNetworkEnabled(enabled: boolean) {
   }
 }
 
-export async function saveToCloud(name: CloudCollection, id: string, data: Record<string, unknown>) {
-  if (!canUseCloudSync() || !db) return;
+/** Resolves true once the cloud holds this exact data (written now, or already identical). */
+export async function saveToCloud(name: CloudCollection, id: string, data: Record<string, unknown>): Promise<boolean> {
+  if (!canUseCloudSync() || !db) return false;
 
   const key = cloudKey(name, id);
   const fingerprint = stableStringify(data);
-  if (writeCache.get(key) === fingerprint) return;
+  if (writeCache.get(key) === fingerprint) return true;
 
   const targetRef = docRef(name, id);
-  if (!targetRef) return;
+  if (!targetRef) return false;
 
   try {
     await setDoc(targetRef, {
@@ -133,40 +134,45 @@ export async function saveToCloud(name: CloudCollection, id: string, data: Recor
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     writeCache.set(key, fingerprint);
+    return true;
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaBlocked();
-      return;
+      return false;
     }
     if (isBackendConnectionError(error)) {
       markBackendBlocked();
-      return;
+      return false;
     }
     throw error;
   }
 }
 
-export async function deleteFromCloud(name: CloudCollection, id: string) {
-  if (!canUseCloudSync() || !db) return;
+export async function deleteFromCloud(name: CloudCollection, id: string): Promise<boolean> {
+  if (!canUseCloudSync() || !db) return false;
   const targetRef = docRef(name, id);
-  if (!targetRef) return;
+  if (!targetRef) return false;
   try {
     await deleteDoc(targetRef);
     writeCache.delete(cloudKey(name, id));
+    return true;
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaBlocked();
-      return;
+      return false;
     }
     if (isBackendConnectionError(error)) {
       markBackendBlocked();
-      return;
+      return false;
     }
     throw error;
   }
 }
 
-export function subscribeToCloudCollection<T>(name: CloudCollection, onUpdate: (items: T[]) => void) {
+export function subscribeToCloudCollection<T>(
+  name: CloudCollection,
+  onUpdate: (items: T[], meta: { fromServer: boolean }) => void,
+) {
   if (!db) {
     return () => {};
   }
@@ -176,8 +182,15 @@ export function subscribeToCloudCollection<T>(name: CloudCollection, onUpdate: (
   }
   return onSnapshot(targetRef, snapshot => {
     const items: T[] = [];
-    snapshot.forEach(item => items.push(item.data() as T));
-    onUpdate(items);
+    snapshot.forEach(item => {
+      const data = item.data();
+      // Remember what the server already holds so unchanged records are not re-uploaded on every launch.
+      if (!item.metadata.hasPendingWrites) {
+        writeCache.set(cloudKey(name, String(data?.id ?? item.id)), stableStringify(data));
+      }
+      items.push(data as T);
+    });
+    onUpdate(items, { fromServer: !snapshot.metadata.fromCache });
   }, error => {
     if (isQuotaError(error)) {
       markQuotaBlocked();

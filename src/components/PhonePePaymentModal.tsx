@@ -18,13 +18,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';
+import { UpiQrCode } from './UpiQrCode';
 import { Transaction } from '../types';
 import {
-  launchUpiPayment,
+  buildUpiPaymentUri,
+  copyUpiIdAndOpenApp,
+  isMerchantUpiUri,
+  launchUpiUri,
   normalizePayeeUpi,
   POPULAR_UPI_HANDLES,
   UPI_APPS,
   UpiAppChoice,
+  validateUpiPayment,
+  withAmountIfMissing,
 } from '../services/upiService';
 import {
   PhonePeContact,
@@ -33,6 +39,8 @@ import {
   parseUpiQrCode,
   getBankNameFromUpi,
 } from '../services/phonepeContacts';
+import { localDateISO } from '../utils/date';
+import * as Clipboard from 'expo-clipboard';
 
 interface PhonePePaymentModalProps {
   visible: boolean;
@@ -54,9 +62,11 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   transactions = [],
 }: PhonePePaymentModalProps) {
   const theme = useAppTheme();
+  // "Rs 150" needs a space; "₹150" does not.
+  const currencyPrefix = /[a-z]$/i.test(currency) ? `${currency} ` : currency;
 
-  // Navigation steps: 'search' | 'qr_scan' | 'transfer' | 'waiting_return' | 'confirm_save'
-  const [step, setStep] = useState<'search' | 'qr_scan' | 'transfer' | 'waiting_return' | 'confirm_save'>('search');
+  // Navigation steps: 'search' | 'qr_scan' | 'transfer' | 'show_qr' | 'waiting_return' | 'confirm_save'
+  const [step, setStep] = useState<'search' | 'qr_scan' | 'transfer' | 'show_qr' | 'waiting_return' | 'confirm_save'>('search');
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +84,10 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   // Pending transaction
   const [pendingTx, setPendingTx] = useState<Transaction | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
+  // The scanned QR text, kept verbatim: merchant QRs only pay when forwarded unchanged.
+  const [scannedQrUri, setScannedQrUri] = useState<string | null>(null);
+  const [paymentResult, setPaymentResult] = useState<'success' | 'submitted' | 'unknown'>('unknown');
+  const awaitingUpiResultRef = useRef(false);
 
   // Camera permissions & QR Scanner state
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -143,6 +157,8 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       setStep('search');
       setPendingTx(null);
       setIsLaunching(false);
+      setScannedQrUri(null);
+      setPaymentResult('unknown');
       setTorchOn(false);
       setScanned(false);
     }
@@ -173,7 +189,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   // Detect when user returns from external UPI app
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active' && waitingRef.current) {
+      if (nextAppState === 'active' && waitingRef.current && !awaitingUpiResultRef.current) {
         setStep('confirm_save');
       }
     });
@@ -196,6 +212,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   // Select contact handler
   const handleSelectContact = (contact: PhonePeContact) => {
     setSelectedContact(contact);
+    setScannedQrUri(null);
     setPayeeUpi(contact.upiId);
     setPayeeName(contact.name);
     setIsEditingUpi(false);
@@ -212,6 +229,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
 
     const parsed = parseUpiQrCode(data);
     if (parsed && parsed.payeeUpi) {
+      setScannedQrUri(/^upi:\/\/pay\?/i.test(data.trim()) ? data.trim() : null);
       setPayeeUpi(parsed.payeeUpi);
       setPayeeName(parsed.payeeName);
       setIsEditingUpi(false);
@@ -224,10 +242,10 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       setSelectedContact({
         id: `qr-${Date.now()}`,
         name: parsed.payeeName,
-        phone: parsed.payeeUpi.split('@')[0],
+        phone: /^\d{10}$/.test(parsed.payeeUpi.split('@')[0]) ? parsed.payeeUpi.split('@')[0] : '',
         upiId: parsed.payeeUpi,
         bankName: getBankNameFromUpi(parsed.payeeUpi),
-        hasPhonePe: true,
+        hasPhonePe: /@(ybl|ibl|axl)$/i.test(parsed.payeeUpi),
         avatarColor: '#5f259f',
       });
       setStep('transfer');
@@ -307,76 +325,112 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
     }
   };
 
-  // Launch Payment through Selected UPI App
+  const selectedAppName = UPI_APPS.find(a => a.id === selectedApp)?.name || 'UPI app';
+  // Editing the payee after a scan means this is no longer that merchant's QR.
+  const isMerchantPayment = Boolean(
+    scannedQrUri && isMerchantUpiUri(scannedQrUri) && parseUpiQrCode(scannedQrUri)?.payeeUpi === normalizePayeeUpi(payeeUpi)
+  );
+
+  const buildPendingTx = (method: string, numAmount: number, normalizedUpi: string): Transaction => ({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    date: localDateISO(),
+    title: payeeName.trim() || `Paid to ${normalizedUpi}`,
+    amount: numAmount,
+    category: category || 'Food',
+    type: 'expense',
+    paymentMethod: method,
+    // UPI ID kept in notes so the payee shows up in contact search next time
+    notes: `UPI: ${normalizedUpi}${note.trim() ? ' | ' + note.trim() : ''}`,
+  });
+
   const handleProceedToPay = async () => {
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid payment amount.');
+    // A merchant QR with a printed amount is paid for exactly that amount.
+    const fixedQrAmount = isMerchantPayment ? parseUpiQrCode(scannedQrUri!)?.amount : undefined;
+    const numAmount = fixedQrAmount || parseFloat(amount);
+    const problem = validateUpiPayment({ payeeUpi, amount: numAmount });
+    if (problem) {
+      Alert.alert('Check payment details', problem);
       return;
     }
-
-    if (!payeeUpi.trim()) {
-      Alert.alert('Payee Required', 'Please enter a valid UPI ID or mobile number.');
-      return;
-    }
-
     const normalizedUpi = normalizePayeeUpi(payeeUpi);
-    const finalTitle = payeeName.trim() || `Paid to ${normalizedUpi}`;
-    const txRef = `DH${Date.now()}`;
 
-    // Store actual UPI details in notes so future transactions can cleanly re-resolve payees
-    const appOpt = UPI_APPS.find((a) => a.id === selectedApp);
-    const appName = appOpt?.name || 'UPI';
+    if (!isMerchantPayment) {
+      // Person-to-person: UPI apps block pre-filled links from other apps, so hand over the UPI ID.
+      setPendingTx(buildPendingTx(`${selectedAppName} Payment`, numAmount, normalizedUpi));
+      const opened = await copyUpiIdAndOpenApp(normalizedUpi, selectedApp);
+      setStep('waiting_return');
+      if (!opened) {
+        Alert.alert('UPI ID copied', `Open ${selectedApp === 'generic' ? 'your UPI app' : selectedAppName}, choose "Pay to UPI ID / mobile number", paste the ID and pay ${currencyPrefix}${numAmount}.`);
+      }
+      return;
+    }
 
-    const newTx: Transaction = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      date: new Date().toISOString().slice(0, 10),
-      title: finalTitle,
-      amount: numAmount,
-      category: category || 'Food',
-      type: 'expense',
-      paymentMethod: `${appName} Payment`,
-      notes: `UPI: ${normalizedUpi} | Ref: ${txRef}${note.trim() ? ' | ' + note.trim() : ''}`,
-    };
-
-    setPendingTx(newTx);
+    setPendingTx(buildPendingTx('UPI Merchant Payment', numAmount, normalizedUpi));
     setIsLaunching(true);
-
+    awaitingUpiResultRef.current = true;
+    setStep('waiting_return');
     try {
-      const res = await launchUpiPayment({
-        payeeUpi: normalizedUpi,
-        payeeName: payeeName.trim() || 'Store',
-        amount: numAmount,
-        note: note.trim() || 'Payment via DailyHisab',
-        category,
-        app: selectedApp,
-        transactionRef: txRef,
-      });
-
-      if (!res.success) {
-        Alert.alert(
-          'Could not open payment app',
-          res.error || 'Please make sure PhonePe, Google Pay, or a UPI app is installed on your device.'
-        );
-        setIsLaunching(false);
+      const result = await launchUpiUri(withAmountIfMissing(scannedQrUri!, numAmount));
+      if (!result.opened) {
+        Alert.alert('No UPI app found', 'Install PhonePe, Google Pay, Paytm or another UPI app to pay this QR.');
+        setStep('transfer');
         return;
       }
-
-      setStep('waiting_return');
+      if (result.status === 'failure') {
+        Alert.alert('Payment not completed', 'The UPI app reported that the payment failed or was cancelled. No money was saved to your Hisab.');
+        setStep('transfer');
+        return;
+      }
+      setPaymentResult(result.status);
+      setStep('confirm_save');
+    } finally {
+      awaitingUpiResultRef.current = false;
       setIsLaunching(false);
-    } catch (e: any) {
-      setIsLaunching(false);
-      Alert.alert('Payment Error', e?.message || 'Failed to trigger UPI payment.');
     }
   };
+
+  const handleCopyUpiAndOpenApp = async () => {
+    const normalizedUpi = normalizePayeeUpi(payeeUpi);
+    if (!normalizedUpi) return;
+    const opened = await copyUpiIdAndOpenApp(normalizedUpi, selectedApp);
+    if (!opened) {
+      Alert.alert('UPI ID copied', `${normalizedUpi} is on your clipboard. Open your UPI app and paste it to pay.`);
+    }
+  };
+
+  // UPI payment URI encoded into the QR on-device; payment details never leave the phone
+  const qrPaymentError = useMemo(
+    () => validateUpiPayment({ payeeUpi, amount: parseFloat(amount) }),
+    [payeeUpi, amount]
+  );
+  const qrPaymentUri = useMemo(() => {
+    if (qrPaymentError) return '';
+    return buildUpiPaymentUri({
+      payeeUpi: normalizePayeeUpi(payeeUpi),
+      payeeName: payeeName.trim() || 'Payee',
+      amount: parseFloat(amount),
+      note: note.trim() || (category || 'Payment'),
+    });
+  }, [qrPaymentError, payeeUpi, payeeName, amount, note, category]);
 
   // Confirm and Save into DailyHisab
   const handleConfirmSave = () => {
     if (pendingTx) {
       onSaveTransaction(
         pendingTx,
-        `${currency}${pendingTx.amount} paid via ${pendingTx.paymentMethod} saved to Hisab!`
+        `${currencyPrefix}${pendingTx.amount} paid via ${pendingTx.paymentMethod} saved to Hisab!`
       );
+      onClose();
+    }
+  };
+
+  // Header arrow and Android back step back through the flow instead of discarding it.
+  const handleBack = () => {
+    if (step === 'show_qr' || step === 'waiting_return') {
+      setStep('transfer');
+    } else if (step === 'transfer' || step === 'qr_scan') {
+      setStep('search');
+    } else {
       onClose();
     }
   };
@@ -388,7 +442,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       visible={visible}
       animationType="fade"
       transparent
-      onRequestClose={onClose}
+      onRequestClose={handleBack}
       statusBarTranslucent
     >
       <View style={styles.modalBackdrop}>
@@ -410,18 +464,12 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
             <View style={styles.phonePeHeader}>
               <View style={styles.headerLeftCol}>
                 <TouchableOpacity
-                  onPress={() => {
-                    if (step === 'transfer' || step === 'qr_scan') {
-                      setStep('search');
-                    } else {
-                      onClose();
-                    }
-                  }}
+                  onPress={handleBack}
                   style={styles.backCloseBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <AppIcon
-                    name={step === 'transfer' || step === 'qr_scan' ? 'arrow-left' : 'x'}
+                    name={step === 'transfer' || step === 'qr_scan' || step === 'show_qr' ? 'arrow-left' : 'x'}
                     size={20}
                     color="#ffffff"
                   />
@@ -431,18 +479,26 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   <Text style={styles.headerTitleText}>
                     {step === 'qr_scan'
                       ? 'Scan any QR Code'
+                      : step === 'show_qr'
+                      ? 'Scan QR to Pay'
                       : step === 'transfer'
                       ? 'Pay with UPI'
                       : step === 'confirm_save'
-                      ? 'Confirm & Save Hisab'
+                      ? 'Save to Hisab'
+                      : step === 'waiting_return'
+                      ? 'Finish in your UPI app'
                       : 'Send Money via UPI'}
                   </Text>
                   <Text style={styles.headerSubtitleText} numberOfLines={1}>
                     {step === 'qr_scan'
                       ? 'PhonePe, GPay, Paytm, BharatPe, BHIM'
+                      : step === 'show_qr'
+                      ? (payeeName || payeeUpi)
                       : step === 'transfer'
                       ? selectedContact?.upiId || payeeUpi
-                      : 'Transfer instantly to any mobile number or UPI ID'}
+                      : step === 'confirm_save' || step === 'waiting_return'
+                      ? `${currencyPrefix}${amount || '0'} to ${payeeName || normalizePayeeUpi(payeeUpi)}`
+                      : 'Pay any mobile number or UPI ID'}
                   </Text>
                 </View>
               </View>
@@ -480,7 +536,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     placeholderTextColor={theme.subtle}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
-                    autoFocus
+                    returnKeyType="search"
                   />
                   {searchQuery.length > 0 ? (
                     <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
@@ -500,7 +556,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       ? 'SEARCH RESULTS'
                       : hasLedgerHistory
                       ? 'RECENT UPI TRANSFERS'
-                      : 'POPULAR UPI CONTACTS'}
+                      : 'PAY ANYONE'}
                   </Text>
                   {!isSearching && (
                     <TouchableOpacity onPress={() => setStep('qr_scan')}>
@@ -552,15 +608,15 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                         </View>
 
                         <Text style={[styles.contactUpiText, { color: theme.subtle }]} numberOfLines={1}>
-                          {contact.phone ? `+91 ${contact.phone} • ` : ''}{contact.upiId}
+                          {contact.phone && !contact.upiId.startsWith(contact.phone) ? `+91 ${contact.phone} • ` : ''}{contact.upiId}
                         </Text>
 
-                        {/* Verified Badge */}
+                        {/* UPI handle badge: describes the ID's provider, never claims it was verified */}
                         <View style={styles.phonePeBadgeRow}>
                           <View style={styles.phonePeMiniBadge}>
-                            <Text style={styles.phonePeMiniIcon}>🟣</Text>
+                            <Text style={styles.phonePeMiniIcon}>{contact.isGuess ? '⚠️' : '🟣'}</Text>
                             <Text style={styles.phonePeMiniText}>
-                              {contact.hasPhonePe ? 'Account on PhonePe' : 'Verified UPI'}
+                              {contact.isGuess ? 'Not verified' : contact.hasPhonePe ? 'PhonePe UPI ID' : 'UPI ID'}
                             </Text>
                           </View>
                           <Text style={[styles.bankNameText, { color: theme.subtle }]}>
@@ -573,7 +629,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       {contact.recentAmount ? (
                         <View style={{ alignItems: 'flex-end', marginLeft: 6 }}>
                           <Text style={[styles.recentAmountText, { color: theme.text }]}>
-                            {currency}{contact.recentAmount}
+                            {currencyPrefix}{contact.recentAmount}
                           </Text>
                           {contact.recentDate && (
                             <Text style={[styles.recentDateText, { color: theme.subtle }]}>
@@ -593,10 +649,12 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     <View style={styles.noResultsBox}>
                       <Text style={{ fontSize: 32, marginBottom: 8 }}>🔍</Text>
                       <Text style={[styles.noResultsTitle, { color: theme.text }]}>
-                        No Contacts Found
+                        {isSearching ? 'No contacts found' : 'No UPI payments yet'}
                       </Text>
                       <Text style={[styles.noResultsDesc, { color: theme.subtle }]}>
-                        Enter a valid 10-digit mobile number or UPI ID (e.g. 9876543210 or user@ybl).
+                        {isSearching
+                          ? 'Enter a 10-digit mobile number or a UPI ID such as name@okaxis.'
+                          : 'Search a mobile number or UPI ID above, or scan a QR code. People you pay will appear here.'}
                       </Text>
                     </View>
                   )}
@@ -753,8 +811,8 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     )}
 
                     <View style={styles.verifiedRow}>
-                      <Text style={{ fontSize: 11, color: '#10b981', fontWeight: '800' }}>
-                        ✓ {getBankNameFromUpi(payeeUpi)}
+                      <Text style={{ fontSize: 11, color: theme.subtle, fontWeight: '700' }}>
+                        {getBankNameFromUpi(payeeUpi)} · check the name your UPI app shows before paying
                       </Text>
                     </View>
                   </View>
@@ -809,7 +867,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                       },
                     ]}
                   >
-                    <Text style={[styles.currencySymbol, { color: '#7c3aed' }]}>{currency}</Text>
+                    <Text style={[styles.currencySymbol, { color: '#7c3aed' }]}>{currencyPrefix}</Text>
                     <TextInput
                       style={[styles.amountTextInput, { color: theme.text }]}
                       placeholder="0"
@@ -837,7 +895,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                         activeOpacity={0.7}
                       >
                         <Text style={[styles.quickChipText, { color: '#7c3aed' }]}>
-                          +{currency}{val}
+                          +{currencyPrefix}{val}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -955,21 +1013,172 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   disabled={isLaunching || !amount.trim()}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.proceedPayBtnText}>
+                  <Text style={styles.proceedPayBtnText} numberOfLines={1} adjustsFontSizeToFit>
                     {isLaunching
                       ? 'OPENING PAYMENT APP...'
-                      : `PROCEED TO PAY ${amount ? currency + amount : ''}`}
+                      : isMerchantPayment
+                      ? `PAY ${amount ? currencyPrefix + amount : ''}`
+                      : selectedApp === 'generic'
+                      ? 'COPY UPI ID & PAY'
+                      : `COPY UPI ID & OPEN ${selectedAppName.toUpperCase()}`}
                   </Text>
                   <AppIcon name="arrow-right" size={18} color="#ffffff" />
                 </TouchableOpacity>
+
+                {/* Alternate 1-Tap Options: Show QR or Copy & Open App */}
+                <View style={{ flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: theme.dark ? '#221938' : '#ede9fe',
+                      paddingVertical: 12,
+                      paddingHorizontal: 8,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 1,
+                      borderColor: '#7c3aed',
+                    }}
+                    onPress={() => {
+                      if (qrPaymentError) {
+                        Alert.alert('Check payment details', qrPaymentError);
+                        return;
+                      }
+                      setStep('show_qr');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ fontSize: 16, marginBottom: 2 }}>📷</Text>
+                    <Text style={{ color: theme.dark ? '#c4b5fd' : '#5b21b6', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+                      Show QR Code
+                    </Text>
+                    <Text style={{ color: theme.subtle, fontSize: 10, textAlign: 'center' }}>
+                      Scan with any UPI app
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: theme.dark ? '#1c1c28' : '#f1f5f9',
+                      paddingVertical: 12,
+                      paddingHorizontal: 8,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 1,
+                      borderColor: theme.borderSoft || '#cbd5e1',
+                    }}
+                    onPress={async () => {
+                      const copied = normalizePayeeUpi(payeeUpi);
+                      if (!copied) return;
+                      await Clipboard.setStringAsync(copied).catch(() => undefined);
+                      Alert.alert('UPI ID copied', copied);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ fontSize: 16, marginBottom: 2 }}>📋</Text>
+                    <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+                      Copy UPI ID
+                    </Text>
+                    <Text style={{ color: theme.subtle, fontSize: 10, textAlign: 'center' }}>
+                      Paste in any UPI app
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Hint Notice */}
                 <View style={styles.securityNoticeRow}>
                   <Text style={styles.securityNoticeIcon}>🔒</Text>
                   <Text style={[styles.securityNoticeText, { color: theme.subtle }]}>
-                    100% Secure via NPCI UPI. Returning to DailyHisab will automatically prompt you to save this transaction.
+                    {isMerchantPayment
+                      ? 'You approve the payment inside your UPI app. DailyHisab reads the result and offers to save it to your ledger.'
+                      : `UPI apps block pre-filled payments to people from other apps, so DailyHisab copies the UPI ID and opens ${selectedApp === 'generic' ? 'your UPI app' : selectedAppName}. Paste it there, enter ${amount ? currencyPrefix + amount : 'the amount'} and pay.`}
                   </Text>
                 </View>
+              </ScrollView>
+            )}
+
+            {/* SCREEN: SHOW DYNAMIC UPI QR CODE */}
+            {step === 'show_qr' && (
+              <ScrollView contentContainerStyle={{ alignItems: 'center', padding: 20 }}>
+                <View style={{
+                  backgroundColor: '#ffffff',
+                  padding: 16,
+                  borderRadius: 16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 10,
+                  elevation: 5,
+                  alignItems: 'center',
+                }}>
+                  <UpiQrCode
+                    value={qrPaymentUri}
+                    size={220}
+                    accessibilityLabel={`UPI QR code to pay ${currencyPrefix}${amount} to ${payeeName || normalizePayeeUpi(payeeUpi)}`}
+                  />
+                  <Text style={{ marginTop: 8, fontSize: 13, fontWeight: '700', color: '#1e1b4b' }}>
+                    Scan with PhonePe, GPay, or Paytm
+                  </Text>
+                </View>
+
+                <View style={{ marginTop: 16, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 24, fontWeight: '800', color: theme.text }}>
+                    {currencyPrefix}{amount || '0'}
+                  </Text>
+                  <Text style={{ fontSize: 14, color: theme.subtle, marginTop: 2 }}>
+                    Paying to: <Text style={{ fontWeight: '600', color: theme.text }}>{payeeName || payeeUpi}</Text>
+                  </Text>
+                  <Text style={{ fontSize: 12, color: theme.subtle, marginTop: 2 }}>
+                    UPI: {normalizePayeeUpi(payeeUpi)}
+                  </Text>
+                </View>
+
+                <View style={{
+                  backgroundColor: theme.dark ? 'rgba(95, 37, 159, 0.15)' : '#f3e8ff',
+                  borderRadius: 10,
+                  padding: 12,
+                  marginTop: 16,
+                  width: '100%',
+                }}>
+                  <Text style={{ fontSize: 12, color: theme.dark ? '#d8b4fe' : '#581c87', lineHeight: 16, textAlign: 'center' }}>
+                    💡 <Text style={{ fontWeight: '700' }}>Pay by scanning:</Text> scan this screen from another phone, or save a screenshot and open it from the gallery in PhonePe or Google Pay.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.manualReturnBtn, { width: '100%', marginTop: 16 }]}
+                  onPress={() => {
+                    const normalizedUpi = normalizePayeeUpi(payeeUpi);
+                    const newTx: Transaction = {
+                      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                      date: localDateISO(),
+                      title: payeeName.trim() || `Paid to ${normalizedUpi}`,
+                      amount: parseFloat(amount) || 0,
+                      category: category || 'Food',
+                      type: 'expense',
+                      paymentMethod: 'UPI QR Payment',
+                      notes: `UPI: ${normalizedUpi}${note.trim() ? ' | ' + note.trim() : ''}`,
+                    };
+                    setPendingTx(newTx);
+                    setStep('confirm_save');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.manualReturnBtnText}>
+                    I Have Paid → Save to Hisab
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ marginTop: 14 }}
+                  onPress={() => setStep('transfer')}
+                >
+                  <Text style={{ color: theme.subtle, fontSize: 13, fontWeight: '600' }}>
+                    ← Back to Options
+                  </Text>
+                </TouchableOpacity>
               </ScrollView>
             )}
 
@@ -977,14 +1186,54 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
             {step === 'waiting_return' && (
               <View style={styles.waitingContainer}>
                 <View style={styles.waitingCircle}>
-                  <Text style={{ fontSize: 42 }}>🟣</Text>
+                  <Text style={{ fontSize: 42 }}>{isMerchantPayment ? '🟣' : '📋'}</Text>
                 </View>
                 <Text style={[styles.waitingTitle, { color: theme.text }]}>
-                  Payment in Progress
+                  {isMerchantPayment ? 'Payment in progress' : 'UPI ID copied'}
                 </Text>
                 <Text style={[styles.waitingDesc, { color: theme.subtle }]}>
-                  Please complete the payment in your UPI app, then switch back to DailyHisab.
+                  {isMerchantPayment
+                    ? 'Complete the payment in your UPI app. You will come back here automatically.'
+                    : 'Finish the payment in your UPI app, then come back to save it.'}
                 </Text>
+
+                {!isMerchantPayment && (
+                  <View style={{
+                    backgroundColor: theme.dark ? '#1c152e' : '#f5f3ff',
+                    borderRadius: 10,
+                    padding: 12,
+                    marginVertical: 12,
+                    width: '100%',
+                    borderWidth: 1,
+                    borderColor: theme.dark ? '#3b2063' : '#e9d5ff',
+                  }}>
+                    <Text style={{ color: theme.dark ? '#c4b5fd' : '#6b21a8', fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
+                      In {selectedApp === 'generic' ? 'your UPI app' : selectedAppName}:
+                    </Text>
+                    <Text style={{ color: theme.text, fontSize: 12, lineHeight: 18 }}>
+                      1. Tap "To Mobile Number" / "Pay UPI ID"{'\n'}
+                      2. Paste <Text style={{ fontWeight: '800' }}>{normalizePayeeUpi(payeeUpi)}</Text>{'\n'}
+                      3. Check the name, enter {currencyPrefix}{amount || '0'} and pay
+                    </Text>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#5f259f',
+                        borderRadius: 8,
+                        paddingVertical: 9,
+                        marginTop: 10,
+                      }}
+                      onPress={handleCopyUpiAndOpenApp}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                        📋 Copy again & open {selectedApp === 'generic' ? 'app' : selectedAppName}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
                 <TouchableOpacity
                   style={styles.manualReturnBtn}
@@ -1016,14 +1265,22 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     { transform: [{ scale: pulseAnim }] },
                   ]}
                 >
-                  <Text style={{ fontSize: 36 }}>✅</Text>
+                  <Text style={{ fontSize: 36 }}>{paymentResult === 'success' ? '✅' : '🧾'}</Text>
                 </Animated.View>
 
                 <Text style={[styles.confirmTitle, { color: theme.text }]}>
-                  Payment Completed!
+                  {paymentResult === 'success'
+                    ? 'Payment successful'
+                    : paymentResult === 'submitted'
+                    ? 'Payment submitted'
+                    : 'Did the payment go through?'}
                 </Text>
                 <Text style={[styles.confirmSubtitle, { color: theme.subtle }]}>
-                  Save this transaction to your DailyHisab ledger:
+                  {paymentResult === 'success'
+                    ? 'Your UPI app confirmed it. Save it to your DailyHisab ledger:'
+                    : paymentResult === 'submitted'
+                    ? 'Your bank is still processing it. Save it now or check your UPI app first:'
+                    : 'Save it only if your UPI app showed the payment as successful:'}
                 </Text>
 
                 {pendingTx && (
@@ -1039,7 +1296,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                     <View style={styles.receiptRow}>
                       <Text style={[styles.receiptLabel, { color: theme.subtle }]}>Amount</Text>
                       <Text style={styles.receiptAmount}>
-                        {currency}{pendingTx.amount}
+                        {currencyPrefix}{pendingTx.amount}
                       </Text>
                     </View>
 
@@ -1083,7 +1340,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
                   onPress={onClose}
                 >
                   <Text style={{ color: theme.subtle, fontSize: 13, fontWeight: '600' }}>
-                    Skip without saving
+                    {paymentResult === 'success' ? 'Skip without saving' : "Not paid · don't save"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1099,23 +1356,31 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: 16,
+    // statusBarTranslucent draws under the status bar; keep the sheet clear of it.
+    paddingTop: 48,
   },
   keyboardContainer: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 520,
+    maxHeight: '100%',
   },
+  // Bottom sheet, like UPI apps' own pay screens: tall enough to show the flow without scrolling.
   modalCard: {
-    borderRadius: 24,
+    flexShrink: 1,
+    minHeight: "62%",
+    paddingBottom: 12,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     borderWidth: 1,
+    borderBottomWidth: 0,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    elevation: 16,
   },
   phonePeHeader: {
     backgroundColor: '#5f259f',

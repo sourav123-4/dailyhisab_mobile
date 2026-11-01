@@ -18,12 +18,48 @@ import { AppIcon, IconName } from './AppIcon';
 import { useAppMode } from '../navigation/AppModeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DRAWER_WIDTH = Math.min(300, Math.round(SCREEN_WIDTH * 0.76));
+const DRAWER_WIDTH = Math.min(310, Math.round(SCREEN_WIDTH * 0.8));
+
+type NavItem = { tab: string; label: string; hint: string; icon: IconName; tint: string };
+
+const MAIN_ITEMS: NavItem[] = [
+  { tab: 'dashboard', label: 'Dashboard', hint: 'Balance & insights', icon: 'home', tint: '#8b5cf6' },
+  { tab: 'hisab', label: 'Daily Hisab', hint: 'All transactions', icon: 'hisab', tint: '#0ea5e9' },
+];
+
+const MONEY_ITEMS: NavItem[] = [
+  { tab: 'loans', label: 'Loans & EMIs', hint: 'Dues and repayments', icon: 'loans', tint: '#f43f5e' },
+  { tab: 'invest', label: 'Investments & SIP', hint: 'Portfolio and returns', icon: 'invest', tint: '#10b981' },
+  { tab: 'salary', label: 'Salary & Income', hint: 'Credits and payouts', icon: 'salary', tint: '#f59e0b' },
+  { tab: 'debts', label: 'Udhar & Debts', hint: 'Lent and borrowed', icon: 'debts', tint: '#ec4899' },
+  { tab: 'planner', label: 'Planner & Goals', hint: 'EMI calendar, goals', icon: 'planner', tint: '#6366f1' },
+];
+
+const FITNESS_ITEMS: NavItem[] = [
+  { tab: 'Today', label: 'Today', hint: 'Plan, streak & nutrition', icon: 'home', tint: '#8b5cf6' },
+  { tab: 'MuscleExplore', label: 'Exercises', hint: 'Demos by muscle group', icon: 'dumbbell', tint: '#0ea5e9' },
+  { tab: 'AICoach', label: 'AI Coach', hint: 'Ask about training & diet', icon: 'spark', tint: '#f59e0b' },
+  { tab: 'Weight', label: 'Progress', hint: 'Weight, body & history', icon: 'scale', tint: '#10b981' },
+  { tab: 'Profile', label: 'Profile & goals', hint: 'Targets and preferences', icon: 'user', tint: '#ec4899' },
+];
+
+/** When set, the drawer shows TitanFit's sections and routes instead of Daily Hisab's. */
+export type FitnessDrawerConfig = {
+  activeRoute: string;
+  onNavigate: (route: string) => void;
+  onStartWorkout: () => void;
+  workoutInProgress: boolean;
+};
+
+const getInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'G';
+  return (parts.length >= 2 ? parts[0][0] + parts[1][0] : parts[0].slice(0, 2)).toUpperCase();
+};
 
 export const AppDrawer = React.memo(function AppDrawer({
   isOpen,
   activeTab,
-  modules,
   localOnly,
   user,
   onClose,
@@ -32,6 +68,7 @@ export const AppDrawer = React.memo(function AppDrawer({
   onLogout,
   onOpenProfile,
   onOpenPhonePe,
+  fitness,
 }: {
   isOpen: boolean;
   activeTab: Tab;
@@ -44,6 +81,7 @@ export const AppDrawer = React.memo(function AppDrawer({
   onLogout?: () => void;
   onOpenProfile?: () => void;
   onOpenPhonePe?: () => void;
+  fitness?: FitnessDrawerConfig;
 }) {
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
@@ -58,526 +96,241 @@ export const AppDrawer = React.memo(function AppDrawer({
   useEffect(() => {
     const animation = Animated.timing(progress, {
       toValue: isOpen ? 1 : 0,
-      duration: isOpen ? 220 : 180,
+      duration: isOpen ? 240 : 180,
       easing: isOpen ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
       useNativeDriver: true,
     });
-
     animation.start(() => {
-      if (!isOpen) {
-        setMounted(false);
-      }
+      if (!isOpen) setMounted(false);
     });
-
     return () => animation.stop();
   }, [isOpen, progress]);
 
-  if (!isOpen && !mounted) return null;
   if (!mounted) return null;
 
-  const drawerTranslateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-DRAWER_WIDTH, 0],
-  });
-  const scrimOpacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
+  const drawerTranslateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-DRAWER_WIDTH, 0] });
 
-  const displayName = user?.displayName || (localOnly ? 'Guest User' : 'Sourav Mahanty');
-  const displayEmail = user?.email || (localOnly ? 'Offline Local Mode' : 'souravrasiknagar@gmail.com');
+  const signedIn = Boolean(user && !user.isAnonymous);
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Guest';
+  const displayEmail = user?.email || (localOnly ? 'Offline · saved on this phone' : 'Not signed in');
 
-  // Generate 2-letter monogram
-  const getInitials = (name: string) => {
-    if (!name || name === 'Guest User') return 'GU';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
+  const currentTab: string = fitness ? fitness.activeRoute : activeTab;
+  const go = (tab: string) => {
+    onClose();
+    if (tab === currentTab) return;
+    if (fitness && FITNESS_ITEMS.some(item => item.tab === tab)) fitness.onNavigate(tab);
+    else onOpenTab(tab as Tab);
   };
-  const monogram = getInitials(displayName);
+
+  const renderItem = (item: NavItem) => {
+    const active = currentTab === item.tab;
+    return (
+      <TouchableOpacity
+        key={item.tab}
+        onPress={() => go(item.tab)}
+        style={[styles.navRow, active && { backgroundColor: theme.primarySoft || `${theme.primary}22` }]}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+      >
+        {active ? <View style={[styles.activeBar, { backgroundColor: theme.primary }]} /> : null}
+        <View style={[styles.iconTile, { backgroundColor: `${item.tint}22` }]}>
+          <AppIcon name={item.icon} size={17} color={item.tint} />
+        </View>
+        <View style={styles.navTextCol}>
+          <Text style={[styles.navLabel, { color: active ? theme.primary : theme.text }]} numberOfLines={1}>
+            {item.label}
+          </Text>
+          <Text style={[styles.navHint, { color: theme.subtle }]} numberOfLines={1}>
+            {item.hint}
+          </Text>
+        </View>
+        <AppIcon name="chevron-right" size={13} color={active ? theme.primary : theme.subtle} />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.drawerLayer} pointerEvents={isOpen ? 'auto' : 'none'}>
-      {/* Dimmed backdrop */}
-      <Animated.View style={[styles.drawerScrim, { opacity: scrimOpacity }]}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-          accessibilityLabel="Close navigation drawer"
-        />
+      <Animated.View style={[styles.drawerScrim, { opacity: progress }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close navigation drawer" />
       </Animated.View>
 
-      {/* Main Drawer Slide */}
       <Animated.View
         style={[
           styles.drawer,
           {
             width: DRAWER_WIDTH,
+            backgroundColor: theme.surface,
+            borderColor: theme.borderSoft || theme.border,
             transform: [{ translateX: drawerTranslateX }],
           },
         ]}
       >
-        {/* Top Purple Header */}
-        <View
-          style={[
-            styles.topPurpleHeader,
-            {
-              paddingTop: Math.max(insets.top + 10, 42),
-            },
-          ]}
-        >
-          <View style={styles.headerBrandRow}>
-            {/* White Rounded Square Logo Box with Daily Hisab Logo */}
-            <View style={styles.whiteLogoBox}>
-              <Image
-                source={require('../../assets/daily_hisab_logo.png')}
-                style={styles.logoImage}
-                resizeMode="cover"
-              />
+        {/* Header: brand + account */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top + 12, 40) }]}>
+          <View style={styles.headerGlow} />
+          <View style={styles.brandRow}>
+            <View style={styles.logoBox}>
+              <Image source={require('../../assets/app_logo.png')} style={styles.logoImage} resizeMode="cover" />
             </View>
-
-            {/* Title & Subtitle */}
-            <View style={styles.brandTitleCol}>
-              <Text style={styles.brandTitleText}>Daily Hisab</Text>
-              <Text style={styles.brandSubtitleText}>Personal Finance</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.brandTitle}>Wellth</Text>
+              <Text style={styles.brandSubtitle}>{fitness ? 'Fitness · workouts & nutrition' : 'Money · personal finance'}</Text>
             </View>
-
-            {/* Circular Back Button on Right */}
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.circleCloseBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close"
-            >
-              <AppIcon name="chevron-left" size={15} color="#ffffff" />
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7} accessibilityLabel="Close menu">
+              <AppIcon name="close" size={14} color="#ffffff" />
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.accountCard}
+            activeOpacity={0.8}
+            onPress={() => {
+              onClose();
+              if (signedIn) onOpenProfile?.();
+              else onOpenAuth();
+            }}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.accountName} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.accountEmail} numberOfLines={1}>{displayEmail}</Text>
+            </View>
+            <View style={[styles.statusPill, { backgroundColor: signedIn ? 'rgba(16,185,129,0.22)' : 'rgba(255,255,255,0.16)' }]}>
+              <View style={[styles.statusDot, { backgroundColor: signedIn ? '#34d399' : '#cbd5e1' }]} />
+              <Text style={styles.statusText}>{signedIn ? 'Synced' : localOnly ? 'Offline' : 'Sign in'}</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* White Rounded Sheet Body */}
-        <View style={styles.whiteSheetBody}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={styles.menuScrollView}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="always"
-          >
-            {/* APP PLATFORM SWITCHER */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={{
-                backgroundColor: '#090D1A',
-                borderWidth: 1.5,
-                borderColor: '#FF4757',
-                borderRadius: 14,
-                padding: 12,
-                marginBottom: 14,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-              }}
-              onPress={() => {
-                onClose();
-                setAppMode('fitness');
-              }}
-            >
-              <Text style={{ fontSize: 24 }}>⚡</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#FF4757', fontWeight: '900', fontSize: 13, letterSpacing: 0.3 }}>
-                  SWITCH TO TITANFIT AI
-                </Text>
-                <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 1 }}>
-                  3D Muscle & Workout Tracker
-                </Text>
-              </View>
-              <Text style={{ color: '#FF4757', fontWeight: '900', fontSize: 16 }}>➔</Text>
-            </TouchableOpacity>
-
-            {/* SECTION: MAIN */}
-            <View style={styles.menuSection}>
-              <Text style={styles.sectionTitle}>MAIN</Text>
-
-              {/* Dashboard */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('dashboard');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'dashboard' && styles.activeNavRowMain,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="home"
-                  size={18}
-                  color={activeTab === 'dashboard' ? '#c2410c' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'dashboard' ? '#c2410c' : '#1e293b',
-                      fontWeight: activeTab === 'dashboard' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Dashboard
-                </Text>
-              </TouchableOpacity>
-
-              {/* Daily Hisab */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('hisab');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'hisab' && styles.activeNavRowMain,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="hisab"
-                  size={18}
-                  color={activeTab === 'hisab' ? '#c2410c' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'hisab' ? '#c2410c' : '#1e293b',
-                      fontWeight: activeTab === 'hisab' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Daily Hisab
-                </Text>
-              </TouchableOpacity>
-
-              {/* Pay with PhonePe */}
-              {onOpenPhonePe && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* Quick actions */}
+          {fitness ? (
+            <>
+              <View style={styles.quickRow}>
                 <TouchableOpacity
+                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#24123f' : '#f3e8ff', borderColor: theme.dark ? '#4c1d95' : '#ddd6fe' }]}
+                  activeOpacity={0.8}
                   onPress={() => {
                     onClose();
-                    onOpenPhonePe();
+                    fitness.onStartWorkout();
                   }}
-                  style={[
-                    styles.navRow,
-                    {
-                      backgroundColor: 'rgba(95, 37, 159, 0.08)',
-                      borderColor: 'rgba(95, 37, 159, 0.25)',
-                      borderWidth: 1,
-                      marginTop: 4,
-                    },
-                  ]}
-                  activeOpacity={0.75}
                 >
-                  <Text style={{ fontSize: 16 }}>🟣</Text>
-                  <Text
-                    style={[
-                      styles.navLabel,
-                      {
-                        color: '#5f259f',
-                        fontWeight: '700',
-                      },
-                    ]}
-                  >
-                    Pay with PhonePe
+                  <Text style={styles.quickEmoji}>💪</Text>
+                  <Text style={[styles.quickTitle, { color: theme.dark ? '#d8b4fe' : '#5b21b6' }]}>
+                    {fitness.workoutInProgress ? 'Resume workout' : 'Start workout'}
                   </Text>
-                  <View
-                    style={{
-                      backgroundColor: '#5f259f',
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                      borderRadius: 6,
-                      marginLeft: 'auto',
+                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Today's plan</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#0f2a24' : '#ccfbf1', borderColor: theme.dark ? '#115e59' : '#99f6e4' }]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    onClose();
+                    setAppMode('hisab');
+                  }}
+                >
+                  <Text style={styles.quickEmoji}>💰</Text>
+                  <Text style={[styles.quickTitle, { color: theme.dark ? '#5eead4' : '#0f766e' }]}>Daily Hisab</Text>
+                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Money & UPI</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.sectionTitle, { color: theme.subtle }]}>TRAINING</Text>
+              {FITNESS_ITEMS.map(renderItem)}
+            </>
+          ) : (
+            <>
+              <View style={styles.quickRow}>
+                {onOpenPhonePe ? (
+                  <TouchableOpacity
+                    style={[styles.quickCard, { backgroundColor: theme.dark ? '#24123f' : '#f3e8ff', borderColor: theme.dark ? '#4c1d95' : '#ddd6fe' }]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      onClose();
+                      onOpenPhonePe();
                     }}
                   >
-                    <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '800' }}>UPI</Text>
-                  </View>
+                    <Text style={styles.quickEmoji}>💸</Text>
+                    <Text style={[styles.quickTitle, { color: theme.dark ? '#d8b4fe' : '#5b21b6' }]}>Pay via UPI</Text>
+                    <Text style={[styles.quickHint, { color: theme.subtle }]}>PhonePe, GPay…</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#2a0f16' : '#ffe4e6', borderColor: theme.dark ? '#7f1d1d' : '#fecdd3' }]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    onClose();
+                    setAppMode('fitness');
+                  }}
+                >
+                  <Text style={styles.quickEmoji}>⚡</Text>
+                  <Text style={[styles.quickTitle, { color: theme.dark ? '#fda4af' : '#be123c' }]}>TitanFit</Text>
+                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Workouts & diet</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
 
-            {/* SECTION: FINANCIAL MODULES */}
-            <View style={styles.menuSection}>
-              <Text style={styles.sectionTitle}>FINANCIAL MODULES</Text>
+              <Text style={[styles.sectionTitle, { color: theme.subtle }]}>OVERVIEW</Text>
+              {MAIN_ITEMS.map(renderItem)}
 
-              {/* Loans & EMIs */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('loans');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'loans' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="loans"
-                  size={18}
-                  color={activeTab === 'loans' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'loans' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'loans' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Loans & EMIs
-                </Text>
-              </TouchableOpacity>
+              <Text style={[styles.sectionTitle, { color: theme.subtle }]}>MONEY</Text>
+              {MONEY_ITEMS.map(renderItem)}
+            </>
+          )}
 
-              {/* Investments & SIP */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('invest');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'invest' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="invest"
-                  size={18}
-                  color={activeTab === 'invest' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'invest' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'invest' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Investments & SIP
-                </Text>
-              </TouchableOpacity>
+          <Text style={[styles.sectionTitle, { color: theme.subtle }]}>ACCOUNT</Text>
+          {renderItem({ tab: 'budgets', label: 'Settings & Backup', hint: 'Budgets, app lock, theme', icon: 'settings', tint: '#64748b' })}
+          {signedIn ? (
+            <TouchableOpacity
+              style={styles.navRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                onClose();
+                onOpenProfile?.();
+              }}
+            >
+              <View style={[styles.iconTile, { backgroundColor: '#0ea5e922' }]}>
+                <AppIcon name="user" size={17} color="#0ea5e9" />
+              </View>
+              <View style={styles.navTextCol}>
+                <Text style={[styles.navLabel, { color: theme.text }]}>Profile</Text>
+                <Text style={[styles.navHint, { color: theme.subtle }]}>Name, password, account</Text>
+              </View>
+              <AppIcon name="chevron-right" size={13} color={theme.subtle} />
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
 
-              {/* Salary & Income */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('salary');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'salary' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="salary"
-                  size={18}
-                  color={activeTab === 'salary' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'salary' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'salary' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Salary & Income
-                </Text>
-              </TouchableOpacity>
-
-              {/* Udhar & Debts */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('debts');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'debts' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="debts"
-                  size={18}
-                  color={activeTab === 'debts' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'debts' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'debts' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Udhar & Debts
-                </Text>
-              </TouchableOpacity>
-
-              {/* Planner & Goals */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('planner');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'planner' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="planner"
-                  size={18}
-                  color={activeTab === 'planner' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'planner' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'planner' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Planner & Goals
-                </Text>
-                <AppIcon name="chevron-right" size={13} color="#94a3b8" />
-              </TouchableOpacity>
-
-              {/* Settings & Budgets */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('budgets');
-                  onClose();
-                }}
-                style={[
-                  styles.navRow,
-                  activeTab === 'budgets' && styles.activeNavRow,
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon
-                  name="settings"
-                  size={18}
-                  color={activeTab === 'budgets' ? '#5b21b6' : '#475569'}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: activeTab === 'budgets' ? '#5b21b6' : '#1e293b',
-                      fontWeight: activeTab === 'budgets' ? '700' : '600',
-                    },
-                  ]}
-                >
-                  Settings & Backup
-                </Text>
-                <AppIcon name="chevron-right" size={13} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
-
-            {/* SECTION: ADMINISTRATION */}
-            <View style={styles.menuSection}>
-              <Text style={styles.sectionTitle}>ADMINISTRATION</Text>
-
-              {/* Personal Profile */}
-              <TouchableOpacity
-                onPress={() => {
-                  onClose();
-                  if (onOpenProfile) onOpenProfile();
-                }}
-                style={styles.navRow}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="building" size={18} color="#475569" />
-                <Text style={styles.navLabel}>User Profile</Text>
-              </TouchableOpacity>
-
-              {/* Security & Access */}
-              <TouchableOpacity
-                onPress={() => {
-                  onOpenTab('budgets');
-                  onClose();
-                }}
-                style={styles.navRow}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="lock" size={18} color="#475569" />
-                <Text style={styles.navLabel}>Security & PIN Lock</Text>
-              </TouchableOpacity>
-
-              {/* Help & Feedback */}
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.navRow}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="shield-check" size={18} color="#475569" />
-                <Text style={styles.navLabel}>Help & Feedback</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-
-          {/* Floating Bottom Profile Card (Exact Deal Square Match) */}
-          <View
-            style={[
-              styles.bottomProfileContainer,
-              {
-                paddingBottom: Math.max(insets.bottom + 8, 14),
-              },
-            ]}
-          >
-            <View style={styles.profileCard}>
-              <TouchableOpacity
-                onPress={() => {
-                  onClose();
-                  if (onOpenProfile) onOpenProfile();
-                }}
-                style={styles.profileTopRow}
-                activeOpacity={0.75}
-              >
-                <View style={styles.monogramCircle}>
-                  <Text style={styles.monogramText}>{monogram}</Text>
-                </View>
-                <View style={styles.profileDetailsCol}>
-                  <Text style={styles.userNameText} numberOfLines={1}>
-                    {displayName}
-                  </Text>
-                  <Text style={styles.userEmailText} numberOfLines={1}>
-                    {displayEmail}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Full-width Red Outline Logout Button with Power Icon */}
-              <TouchableOpacity
-                onPress={() => {
-                  onClose();
-                  if (onLogout) onLogout();
-                }}
-                style={styles.dealSquareLogoutBtn}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="power" size={15} color="#dc2626" />
-                <Text style={styles.logoutBtnText}>Logout</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        {/* Footer */}
+        <View style={[styles.footer, { borderTopColor: theme.borderSoft || theme.border, paddingBottom: Math.max(insets.bottom + 10, 16) }]}>
+          {signedIn || localOnly ? (
+            <TouchableOpacity
+              onPress={() => {
+                onClose();
+                onLogout?.();
+              }}
+              style={[styles.logoutBtn, { backgroundColor: theme.dangerSoft || 'rgba(239,68,68,0.12)' }]}
+              activeOpacity={0.75}
+            >
+              <AppIcon name="logout" size={15} color={theme.danger || '#dc2626'} />
+              <Text style={[styles.logoutText, { color: theme.danger || '#dc2626' }]}>{signedIn ? 'Sign out' : 'Leave offline mode'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                onClose();
+                onOpenAuth();
+              }}
+              style={[styles.logoutBtn, { backgroundColor: theme.primary }]}
+              activeOpacity={0.8}
+            >
+              <AppIcon name="user" size={15} color="#ffffff" />
+              <Text style={[styles.logoutText, { color: '#ffffff' }]}>Sign in to sync</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
     </View>
@@ -586,195 +339,217 @@ export const AppDrawer = React.memo(function AppDrawer({
 
 const styles = StyleSheet.create({
   drawerLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill,
     zIndex: 9999,
   },
   drawerScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(2, 6, 23, 0.6)',
   },
   drawer: {
     height: '100%',
-    backgroundColor: '#4c1d95',
+    borderTopRightRadius: 28,
+    borderBottomRightRadius: 28,
+    borderRightWidth: 1,
+    overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 25,
+    shadowOffset: { width: 6, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 24,
   },
-  topPurpleHeader: {
-    backgroundColor: '#4c1d95',
+  header: {
+    backgroundColor: '#0f172a',
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingBottom: 16,
+    overflow: 'hidden',
   },
-  headerBrandRow: {
+  headerGlow: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: '#34d399',
+    opacity: 0.22,
+    top: -90,
+    right: -70,
+  },
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
   },
-  whiteLogoBox: {
-    width: 44,
-    height: 44,
+  logoBox: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     padding: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
   },
   logoImage: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 9,
   },
-  brandTitleCol: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
-  },
-  brandTitleText: {
+  brandTitle: {
     color: '#ffffff',
-    fontSize: 16.5,
+    fontSize: 17,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
-  brandSubtitleText: {
-    color: 'rgba(255, 255, 255, 0.75)',
+  brandSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     fontWeight: '500',
-    marginTop: 1,
   },
-  circleCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  whiteSheetBody: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    overflow: 'hidden',
-    justifyContent: 'space-between',
+  accountCard: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
   },
-  menuScrollView: {
-    flex: 1,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#d1fae5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#065f46',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  accountName: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  accountEmail: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 11.5,
+    marginTop: 1,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    color: '#ffffff',
+    fontSize: 10.5,
+    fontWeight: '800',
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
-  menuSection: {
-    marginBottom: 18,
+  quickRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 6,
+  },
+  quickCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  quickEmoji: {
+    fontSize: 20,
+    marginBottom: 6,
+  },
+  quickTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+  quickHint: {
+    fontSize: 11,
+    marginTop: 1,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    letterSpacing: 0.8,
-    color: '#64748b',
+    letterSpacing: 1,
+    marginTop: 14,
     marginBottom: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9.5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
     gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    marginBottom: 2,
+    overflow: 'hidden',
   },
-  activeNavRowMain: {
-    backgroundColor: '#fff1ee',
+  activeBar: {
+    position: 'absolute',
+    left: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderRadius: 2,
   },
-  activeNavRow: {
-    backgroundColor: '#f3e8ff',
+  iconTile: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTextCol: {
+    flex: 1,
   },
   navLabel: {
     fontSize: 14,
-    color: '#1e293b',
-    fontWeight: '500',
-    flex: 1,
-  },
-  bottomProfileContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    backgroundColor: '#ffffff',
-  },
-  profileCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    gap: 10,
-  },
-  profileTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  monogramCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#181145',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monogramText: {
-    color: '#ffffff',
-    fontSize: 14.5,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  profileDetailsCol: {
-    flex: 1,
-  },
-  userNameText: {
-    fontSize: 14,
     fontWeight: '700',
-    color: '#0f172a',
   },
-  userEmailText: {
-    fontSize: 11.5,
-    color: '#64748b',
+  navHint: {
+    fontSize: 11,
     marginTop: 1,
   },
-  dealSquareLogoutBtn: {
+  footer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8.5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-    backgroundColor: '#ffffff',
-    gap: 6,
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
-  logoutBtnText: {
-    color: '#dc2626',
-    fontSize: 13,
-    fontWeight: '700',
+  logoutText: {
+    fontSize: 13.5,
+    fontWeight: '800',
   },
 });

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActiveExerciseLog,
@@ -17,6 +17,8 @@ import { DEFAULT_WEEKLY_SPLIT, EXERCISES_DATABASE } from '../data/exercisesData'
 import { ACTIVE_ENV } from '../config/active-env';
 import { AppThemeName } from '../theme/appTheme';
 import { generateFitnessAdviceWithGemini } from '../services/geminiAiService';
+import { localDateISO, nextStreakDays } from '../utils/date';
+import { scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
 
 interface FitnessContextType {
   profile: UserProfile;
@@ -54,6 +56,7 @@ interface FitnessContextType {
   logMeal: (meal: Omit<FoodMealLog, 'id' | 'date'> & { date?: string }) => Promise<void>;
   deleteMeal: (mealId: string) => Promise<void>;
   updateSplitDay: (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => Promise<void>;
+  replaceWeeklySplit: (split: WorkoutSplitDay[]) => Promise<void>;
   sendAICoachQuery: (prompt: string) => Promise<string>;
   triggerRestTimer: (seconds?: number) => void;
   clearRestTimer: () => void;
@@ -64,12 +67,12 @@ interface FitnessContextType {
 
 const DEFAULT_PROFILE: UserProfile = {
   id: 'user_local_default',
-  name: 'Sourav Mahanty',
-  email: 'souravrasiknagar@gmail.com',
+  name: 'Athlete',
+  email: '',
   gender: 'male',
   age: 26,
   heightCm: 178,
-  startWeightKg: 78.0,
+  startWeightKg: 74.5,
   currentWeightKg: 74.5,
   targetWeightKg: 80.0,
   fitnessGoal: 'weight_gain',
@@ -81,67 +84,22 @@ const DEFAULT_PROFILE: UserProfile = {
   targetCarbsGrams: 330,
   targetFatsGrams: 75,
   dailyWaterTargetMl: 3500,
-  todayWaterMl: 1500,
-  waterLogDate: new Date().toISOString().split('T')[0],
-  streakDays: 4,
+  todayWaterMl: 0,
+  waterLogDate: localDateISO(),
+  streakDays: 0,
   restTimerSeconds: 90,
 };
 
-const DEFAULT_WEIGHT_HISTORY: WeightEntry[] = [
-  { id: 'w1', date: '2026-08-15', weightKg: 78.0, notes: 'Starting physique' },
-  { id: 'w2', date: '2026-08-22', weightKg: 77.2, notes: 'End of week 1' },
-  { id: 'w3', date: '2026-08-29', weightKg: 76.5, notes: 'Strength holding' },
-  { id: 'w4', date: '2026-09-05', weightKg: 75.2, notes: 'Dialed in clean diet' },
-  { id: 'w5', date: '2026-09-12', weightKg: 74.5, notes: 'Current transformation check' },
-];
+// New users start with no history: earlier builds seeded sample records with these ids,
+// which are stripped from saved data on load. Real entries use timestamped ids.
+const SAMPLE_RECORD_IDS = new Set(['w1', 'w2', 'w3', 'w4', 'w5', 'm1', 'sess_1', 'meal_def_1', 'meal_def_2']);
+const withoutSamples = <T extends { id: string }>(items: T[]) => items.filter(item => !SAMPLE_RECORD_IDS.has(item.id));
 
-const DEFAULT_MEASUREMENTS: BodyMeasurement[] = [
-  {
-    id: 'm1',
-    date: '2026-09-01',
-    bicepsLeftCm: 38.5,
-    bicepsRightCm: 39.0,
-    chestCm: 104,
-    waistCm: 81,
-    thighsCm: 60,
-    shouldersCm: 122,
-  },
-];
+const DEFAULT_WEIGHT_HISTORY: WeightEntry[] = [];
 
-const DEFAULT_WORKOUT_HISTORY: WorkoutSession[] = [
-  {
-    id: 'sess_1',
-    title: 'Push Day (Chest & Shoulders)',
-    date: '2026-09-10',
-    startTime: '17:30',
-    endTime: '18:35',
-    durationMinutes: 65,
-    totalVolumeKg: 4850,
-    caloriesBurned: 420,
-    isCompleted: true,
-    exercises: [
-      {
-        exerciseId: 'chest_barbell_bench_press',
-        exerciseName: 'Barbell Flat Bench Press',
-        muscleGroup: 'chest',
-        sets: [
-          { id: 's1', setNumber: 1, weightKg: 80, reps: 10, isCompleted: true },
-          { id: 's2', setNumber: 2, weightKg: 85, reps: 8, isCompleted: true },
-          { id: 's3', setNumber: 3, weightKg: 90, reps: 6, isCompleted: true },
-        ],
-      },
-      {
-        exerciseId: 'shoulders_barbell_overhead_press',
-        exerciseName: 'Overhead Barbell Military Press',
-        muscleGroup: 'shoulders',
-        sets: [
-          { id: 's4', setNumber: 1, weightKg: 50, reps: 10, isCompleted: true },
-          { id: 's5', setNumber: 2, weightKg: 55, reps: 8, isCompleted: true },
-        ],
-      },
-    ],
-  },
-];
+const DEFAULT_MEASUREMENTS: BodyMeasurement[] = [];
+
+const DEFAULT_WORKOUT_HISTORY: WorkoutSession[] = [];
 
 const DEFAULT_AI_MESSAGES: AIChatMessage[] = [
   {
@@ -152,53 +110,32 @@ const DEFAULT_AI_MESSAGES: AIChatMessage[] = [
   },
 ];
 
-const DEFAULT_TODAY_MEALS: FoodMealLog[] = [
-  {
-    id: 'meal_def_1',
-    name: 'Oatmeal & Whey Protein Bowl with Berries',
-    mealType: 'breakfast',
-    calories: 520,
-    protein: 42,
-    carbs: 65,
-    fats: 10,
-    portion: '1 large bowl (350g)',
-    date: new Date().toISOString().split('T')[0],
-    timestamp: '08:30 AM',
-    imageUri: 'https://images.unsplash.com/photo-1517673400267-0251440c45dc?w=800&q=80',
-    source: 'preset',
-  },
-  {
-    id: 'meal_def_2',
-    name: 'Grilled Chicken Breast, Brown Rice & Broccoli',
-    mealType: 'lunch',
-    calories: 680,
-    protein: 58,
-    carbs: 72,
-    fats: 12,
-    portion: '220g chicken + 1.5 cup rice',
-    date: new Date().toISOString().split('T')[0],
-    timestamp: '01:15 PM',
-    imageUri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=80',
-    source: 'preset',
-  },
-];
+const DEFAULT_TODAY_MEALS: FoodMealLog[] = [];
 
 const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 
-const STORAGE_KEYS = {
-  PROFILE: '@titanfit_profile',
-  SPLIT: '@titanfit_split',
-  WORKOUTS: '@titanfit_workouts',
-  WEIGHTS: '@titanfit_weights',
-  MEASUREMENTS: '@titanfit_measurements',
-  ACTIVE_WORKOUT: '@titanfit_active_workout',
-  AI_CHAT: '@titanfit_ai_chat',
-  THEME: '@titanfit_theme',
-  AUTH: '@titanfit_auth',
-  MEALS: '@titanfit_meals',
-};
 
-export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+type StorageKeys = { [K in keyof typeof TITANFIT_STORAGE_KEYS]: string };
+
+const keysFor = (owner: string | null) =>
+  Object.fromEntries(
+    Object.entries(TITANFIT_STORAGE_KEYS).map(([name, key]) => [name, scopedStorageKey(key, owner ?? 'signed-out')])
+  ) as StorageKeys;
+
+/**
+ * `owner` is the account whose fitness data is shown (see dataOwner.ts); `ready` turns true once
+ * Daily Hisab has finished moving older shared data to its owner.
+ */
+export const FitnessAppProvider = React.memo(function FitnessAppProvider({
+  owner,
+  ready,
+  children,
+}: {
+  owner: string | null;
+  ready: boolean;
+  children: React.ReactNode;
+}) {
+  const STORAGE_KEYS = useMemo(() => keysFor(owner), [owner]);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [weeklySplit, setWeeklySplit] = useState<WorkoutSplitDay[]>(DEFAULT_WEEKLY_SPLIT);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutSession[]>(DEFAULT_WORKOUT_HISTORY);
@@ -213,12 +150,28 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [activeRestTimer, setActiveRestTimer] = useState<number | null>(null);
 
-  // Load persisted data on mount
+  // Load the owner's saved data, starting from a clean slate whenever the account changes.
   useEffect(() => {
-    loadLocalData();
-  }, []);
+    if (!ready) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setProfile(DEFAULT_PROFILE);
+    setWeeklySplit(DEFAULT_WEEKLY_SPLIT);
+    setWorkoutHistory(DEFAULT_WORKOUT_HISTORY);
+    setWeightHistory(DEFAULT_WEIGHT_HISTORY);
+    setBodyMeasurements(DEFAULT_MEASUREMENTS);
+    setActiveWorkout(null);
+    setAiChatHistory(DEFAULT_AI_MESSAGES);
+    setMeals(DEFAULT_TODAY_MEALS);
+    loadLocalData(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+    // loadLocalData reads STORAGE_KEYS, which only changes with owner.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, owner]);
 
-  const loadLocalData = async () => {
+  const loadLocalData = async (isCancelled: () => boolean) => {
     try {
       const [
         savedProf,
@@ -241,14 +194,12 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         AsyncStorage.getItem(STORAGE_KEYS.THEME),
         AsyncStorage.getItem(STORAGE_KEYS.MEALS),
       ]);
+      if (isCancelled()) return;
 
       if (savedProf) {
         const parsedProf = JSON.parse(savedProf);
-        if (!parsedProf.name || parsedProf.name === 'Titan Athlete') {
-          parsedProf.name = 'Sourav Mahanty';
-        }
-        if (!parsedProf.email || parsedProf.email === 'athlete@titanfit.ai') {
-          parsedProf.email = 'souravrasiknagar@gmail.com';
+        if (!parsedProf.name) {
+          parsedProf.name = 'Athlete';
         }
         setProfile(parsedProf);
       }
@@ -263,17 +214,17 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
         setWeeklySplit(merged);
       }
-      if (savedWorkouts) setWorkoutHistory(JSON.parse(savedWorkouts));
-      if (savedWeights) setWeightHistory(JSON.parse(savedWeights));
-      if (savedMeas) setBodyMeasurements(JSON.parse(savedMeas));
+      if (savedWorkouts) setWorkoutHistory(withoutSamples(JSON.parse(savedWorkouts)));
+      if (savedWeights) setWeightHistory(withoutSamples(JSON.parse(savedWeights)));
+      if (savedMeas) setBodyMeasurements(withoutSamples(JSON.parse(savedMeas)));
       if (savedActive) setActiveWorkout(JSON.parse(savedActive));
       if (savedChat) setAiChatHistory(JSON.parse(savedChat));
       if (savedTheme) setThemeNameState(savedTheme as AppThemeName);
-      if (savedMeals) setMeals(JSON.parse(savedMeals));
+      if (savedMeals) setMeals(withoutSamples(JSON.parse(savedMeals)));
     } catch (err) {
       console.warn('Error loading TitanFit local data:', err);
     } finally {
-      setIsLoading(false);
+      if (!isCancelled()) setIsLoading(false);
     }
   };
 
@@ -295,7 +246,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     exerciseIds?: string[],
     targetMuscles?: MuscleGroup[]
   ) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localDateISO();
     const initialExercises: ActiveExerciseLog[] = (exerciseIds || []).map((id) => {
       const ex = EXERCISES_DATABASE.find((e) => e.id === id);
       return {
@@ -444,9 +395,8 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setActiveWorkout(null);
 
     // Update streak accurately
-    const todayStr = new Date().toISOString().split('T')[0];
-    const isAlreadyCompletedToday = profile.lastWorkoutDate === todayStr;
-    const nextStreak = isAlreadyCompletedToday ? profile.streakDays : profile.streakDays + 1;
+    const todayStr = localDateISO();
+    const nextStreak = nextStreakDays(profile.lastWorkoutDate, profile.streakDays, todayStr);
 
     const updatedProfile: UserProfile = {
       ...profile,
@@ -465,9 +415,8 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const claimDailyStreak = async (): Promise<number> => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const isAlreadyCompletedToday = profile.lastWorkoutDate === todayStr;
-    const nextStreak = isAlreadyCompletedToday ? profile.streakDays : profile.streakDays + 1;
+    const todayStr = localDateISO();
+    const nextStreak = nextStreakDays(profile.lastWorkoutDate, profile.streakDays, todayStr);
 
     const updatedProfile: UserProfile = {
       ...profile,
@@ -487,28 +436,27 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const logWeight = async (weightKg: number, notes?: string) => {
     const newEntry: WeightEntry = {
       id: `w_${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      date: localDateISO(),
       weightKg,
       notes: notes || 'Daily weigh-in',
     };
-
-    const nextList = [...weightHistory, newEntry];
-    setWeightHistory(nextList);
-    setProfile((prev) => ({ ...prev, currentWeightKg: weightKg }));
-
-    await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.WEIGHTS, JSON.stringify(nextList)),
-      AsyncStorage.setItem(
-        STORAGE_KEYS.PROFILE,
-        JSON.stringify({ ...profile, currentWeightKg: weightKg })
-      ),
-    ]);
+    // Functional updates so a profile edit saved in the same tick is not overwritten.
+    setWeightHistory((prev) => {
+      const next = [...prev, newEntry];
+      AsyncStorage.setItem(STORAGE_KEYS.WEIGHTS, JSON.stringify(next));
+      return next;
+    });
+    setProfile((prev) => {
+      const next = { ...prev, currentWeightKg: weightKg };
+      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(next));
+      return next;
+    });
   };
 
   const logMeasurement = async (data: Omit<BodyMeasurement, 'id' | 'date'>) => {
     const newM: BodyMeasurement = {
       id: `m_${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      date: localDateISO(),
       ...data,
     };
 
@@ -519,7 +467,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const logWater = async (amountMl: number) => {
     setProfile((prev) => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = localDateISO();
       const nextWater = (prev.waterLogDate === today ? prev.todayWaterMl : 0) + amountMl;
       const next = { ...prev, todayWaterMl: nextWater, waterLogDate: today };
       AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(next));
@@ -527,7 +475,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = localDateISO();
   const mealsToday = meals.filter((m) => m.date === todayStr);
 
   const totalConsumedCalories = mealsToday.reduce((sum, m) => sum + (m.calories || 0), 0);
@@ -536,7 +484,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const totalConsumedFats = mealsToday.reduce((sum, m) => sum + (m.fats || 0), 0);
 
   const logMeal = async (mealData: Omit<FoodMealLog, 'id' | 'date'> & { date?: string }) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateISO();
     const newMeal: FoodMealLog = {
       id: `meal_${Date.now()}`,
       date: mealData.date || today,
@@ -551,6 +499,11 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const nextList = meals.filter((m) => m.id !== mealId);
     setMeals(nextList);
     await AsyncStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(nextList));
+  };
+
+  const replaceWeeklySplit = async (split: WorkoutSplitDay[]) => {
+    setWeeklySplit(split);
+    await AsyncStorage.setItem(STORAGE_KEYS.SPLIT, JSON.stringify(split));
   };
 
   const updateSplitDay = async (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => {
@@ -655,6 +608,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         logMeal,
         deleteMeal,
         updateSplitDay,
+        replaceWeeklySplit,
         sendAICoachQuery,
         triggerRestTimer,
         clearRestTimer,
@@ -666,7 +620,7 @@ export const FitnessAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       {children}
     </FitnessContext.Provider>
   );
-};
+});
 
 export const useFitnessApp = () => {
   const context = useContext(FitnessContext);

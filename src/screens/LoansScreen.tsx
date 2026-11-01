@@ -13,10 +13,11 @@ import {
   View,
 } from 'react-native';
 import { Button, Field, money } from '../components/UI';
-import { HisabState, Loan } from '../types';
+import { HisabPatch, HisabState, Loan } from '../types';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { isLoanActive } from '../utils/loans';
 
 export const LoansScreen = React.memo(function LoansScreen({
   state,
@@ -30,7 +31,7 @@ export const LoansScreen = React.memo(function LoansScreen({
   state: HisabState;
   form: any;
   setForm: (form: any) => void;
-  patch?: (slice: Partial<HisabState>) => void;
+  patch?: HisabPatch;
   addLoan: (payload?: Partial<Loan>) => void;
   payEmi: (loan: Loan) => void;
   removeLoan: (id: string) => void;
@@ -86,10 +87,14 @@ export const LoansScreen = React.memo(function LoansScreen({
     const princ = parseFloat(loanForm.principal) || rem;
     const emi = parseFloat(loanForm.monthlyEmi) || 0;
     const day = parseInt(loanForm.emiDay, 10) || 5;
+    if (rem <= 0) {
+      Alert.alert('Outstanding Amount Required', 'Enter how much is still left to repay on this loan.');
+      return;
+    }
 
     if (editingLoanId && patch) {
-      patch({
-        loans: state.loans.map(l =>
+      patch(current => ({
+        loans: current.loans.map(l =>
           l.id === editingLoanId
             ? {
                 ...l,
@@ -100,10 +105,12 @@ export const LoansScreen = React.memo(function LoansScreen({
                 monthlyEmi: emi,
                 interestRate: parseFloat(loanForm.interestRate) || 0,
                 emiDay: Math.min(31, Math.max(1, day)),
+                // A balance was entered (rem > 0 is required above), so the loan is open again.
+                status: 'Active',
               }
             : l
         ),
-      });
+      }));
     } else {
       addLoan({
         name: loanForm.name.trim(),
@@ -119,8 +126,10 @@ export const LoansScreen = React.memo(function LoansScreen({
     setAddModalVisible(false);
   };
 
+  // Open loans first; paid-off ones stay listed below for the record.
   const displayLoans: Loan[] = useMemo(() => {
-    return state.loans || [];
+    const loans = state.loans || [];
+    return [...loans.filter(isLoanActive), ...loans.filter(l => !isLoanActive(l))];
   }, [state.loans]);
 
   // Overall Statistics
@@ -128,15 +137,18 @@ export const LoansScreen = React.memo(function LoansScreen({
     let totalPrincipal = 0;
     let totalRemaining = 0;
     let totalMonthlyEmi = 0;
+    let activeLoanCount = 0;
 
     displayLoans.forEach(l => {
       const p = Number(l.totalPrincipal) || 0;
-      const r = Number(l.remainingAmount) || 0;
-      const emi = Number(l.monthlyEmi) || 0;
+      const r = Math.max(0, Number(l.remainingAmount) || 0);
 
       totalPrincipal += p;
       totalRemaining += r;
-      totalMonthlyEmi += emi;
+      if (isLoanActive(l)) {
+        totalMonthlyEmi += Number(l.monthlyEmi) || 0;
+        activeLoanCount += 1;
+      }
     });
 
     const totalPaid = Math.max(0, totalPrincipal - totalRemaining);
@@ -148,7 +160,7 @@ export const LoansScreen = React.memo(function LoansScreen({
       totalPaid,
       totalMonthlyEmi,
       paidPercent,
-      activeLoanCount: displayLoans.length,
+      activeLoanCount,
     };
   }, [displayLoans]);
 
@@ -523,6 +535,7 @@ export const LoansScreen = React.memo(function LoansScreen({
               const paid = Math.max(0, princ - rem);
               const pct = princ > 0 ? Math.round((paid / princ) * 100) : 0;
               const loanTheme = getLoanTheme(loan.lender, loan.name);
+              const active = isLoanActive(loan);
 
               return (
                 <View
@@ -567,8 +580,10 @@ export const LoansScreen = React.memo(function LoansScreen({
                       </View>
                     </View>
 
-                    <View style={styles.activeStatusPill}>
-                      <Text style={styles.activeStatusText}>ACTIVE</Text>
+                    <View style={[styles.activeStatusPill, !active && styles.paidOffStatusPill]}>
+                      <Text style={[styles.activeStatusText, !active && styles.paidOffStatusText]}>
+                        {active ? 'ACTIVE' : 'PAID OFF'}
+                      </Text>
                     </View>
                   </View>
 
@@ -618,13 +633,17 @@ export const LoansScreen = React.memo(function LoansScreen({
                       { borderTopColor: theme.borderSoft || 'rgba(148, 163, 184, 0.12)' },
                     ]}
                   >
-                    <TouchableOpacity
-                      onPress={() => handlePayEmiAction(loan)}
-                      style={styles.payEmiActionBtn}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.payEmiActionBtnText}>⚡ Pay Monthly EMI</Text>
-                    </TouchableOpacity>
+                    {active ? (
+                      <TouchableOpacity
+                        onPress={() => handlePayEmiAction(loan)}
+                        style={styles.payEmiActionBtn}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.payEmiActionBtnText}>⚡ Pay Monthly EMI</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={[styles.paidOffNote, { color: theme.subtle }]}>✅ Fully repaid</Text>
+                    )}
 
                     <View style={styles.loanMicroActionsRow}>
                       <TouchableOpacity
@@ -1219,7 +1238,18 @@ const styles = StyleSheet.create({
     color: '#15803d',
     fontSize: 10,
     fontWeight: '900',
+  },  paidOffStatusPill: {
+    backgroundColor: 'rgba(148, 163, 184, 0.15)',
+    borderColor: 'rgba(148, 163, 184, 0.4)',
   },
+  paidOffStatusText: {
+    color: '#94a3b8',
+  },
+  paidOffNote: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+
   loanAmountsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',

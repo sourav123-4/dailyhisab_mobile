@@ -38,8 +38,8 @@ export function ProfileModal({
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const displayName = user?.displayName || (localOnly ? 'Guest User' : 'Sourav Mahanty');
-  const displayEmail = user?.email || (localOnly ? 'Offline Local Mode' : 'souravrasiknagar@gmail.com');
+  const displayName = user?.displayName || 'Guest User';
+  const displayEmail = user?.email || (localOnly ? 'Offline Local Mode' : '');
   const isSyncActive = !localOnly && user && !user.isAnonymous;
 
   // Detect if user logged in via Google

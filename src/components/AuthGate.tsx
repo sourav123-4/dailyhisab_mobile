@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   Keyboard,
@@ -17,18 +17,6 @@ import {
 import { AuthMode } from '../types';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';
-
-const getLocalAuth = () => {
-  try {
-    const mod = require('expo-local-authentication');
-    if (mod && typeof mod.hasHardwareAsync === 'function') {
-      return mod;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 export function AuthGate({
   mode,
@@ -60,71 +48,6 @@ export function AuthGate({
   const theme = useAppTheme();
   const { height } = useWindowDimensions();
   const [showPassword, setShowPassword] = useState(false);
-  const [keepSignedIn, setKeepSignedIn] = useState(true);
-
-  const handleBiometric = async (type: 'face' | 'fingerprint' = 'fingerprint') => {
-    try {
-      const LocalAuth = getLocalAuth();
-      if (!LocalAuth) {
-        return;
-      }
-      const hasHardware = await LocalAuth.hasHardwareAsync();
-      const isEnrolled = await LocalAuth.isEnrolledAsync();
-      if (hasHardware && isEnrolled) {
-        const res = await LocalAuth.authenticateAsync({
-          promptMessage: `Sign in with ${type === 'face' ? 'Face ID' : 'Fingerprint'}`,
-          fallbackLabel: 'Use Password',
-          disableDeviceFallback: false,
-          cancelLabel: 'Cancel',
-        });
-        if (res?.success) {
-          onLocal();
-        }
-      }
-    } catch (err) {
-      console.warn('Biometric authentication error:', err);
-    }
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const autoPromptBiometrics = async () => {
-      try {
-        const LocalAuth = getLocalAuth();
-        if (!LocalAuth) return;
-        const hasHardware = await LocalAuth.hasHardwareAsync();
-        const isEnrolled = await LocalAuth.isEnrolledAsync();
-        if (hasHardware && isEnrolled && isMounted) {
-          timer = setTimeout(async () => {
-            if (!isMounted) return;
-            const res = await LocalAuth.authenticateAsync({
-              promptMessage: 'Sign in with Fingerprint / Biometrics',
-              fallbackLabel: 'Use Password',
-              disableDeviceFallback: false,
-              cancelLabel: 'Cancel',
-            });
-            if (res?.success && isMounted) {
-              onLocal();
-            }
-          }, 350);
-        }
-      } catch (err) {
-        console.warn('Auto biometric prompt error:', err);
-      }
-    };
-
-    if (mode === 'login') {
-      autoPromptBiometrics();
-    }
-
-    return () => {
-      isMounted = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [mode]);
-
   const isSmall = height < 720;
 
   return (
@@ -145,7 +68,7 @@ export function AuthGate({
           <View style={styles.logoSection}>
             <View style={[styles.logoBadge, { backgroundColor: theme.surfaceAlt || '#090d16' }]}>
               <Image
-                source={require('../../assets/daily_hisab_logo.png')}
+                source={require('../../assets/app_logo.png')}
                 style={styles.logoImage}
                 resizeMode="cover"
               />
@@ -155,8 +78,8 @@ export function AuthGate({
             </Text>
             <Text style={[styles.subheadingText, { color: theme.subtle }]}>
               {mode === 'register'
-                ? 'Start your personal financial journey'
-                : 'Continue your financial journey'}
+                ? 'One app for your money and your fitness'
+                : 'Sign in to Wellth: your money and fitness'}
             </Text>
           </View>
 
@@ -251,31 +174,9 @@ export function AuthGate({
               </View>
             </View>
 
-            {/* Remember me & Forgot Password */}
             <View style={styles.optionsRow}>
-              <TouchableOpacity
-                onPress={() => setKeepSignedIn(!keepSignedIn)}
-                style={styles.rememberMeGroup}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      borderColor: keepSignedIn ? theme.primary : theme.border,
-                      backgroundColor: keepSignedIn ? theme.primary : 'transparent',
-                    },
-                  ]}
-                >
-                  {keepSignedIn && <AppIcon name="check" size={12} color="#ffffff" />}
-                </View>
-                <Text style={[styles.rememberMeText, { color: theme.muted }]}>
-                  Keep me signed in
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={onReset} activeOpacity={0.7}>
-                <Text style={[styles.forgotText, { color: theme.primary }]}>Forgot?</Text>
+              <TouchableOpacity onPress={onReset} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={[styles.forgotText, { color: theme.primary }]}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
 
@@ -303,39 +204,6 @@ export function AuthGate({
               <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
               <Text style={[styles.dividerText, { color: theme.subtle }]}>or</Text>
               <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-            </View>
-
-            {/* Biometric Quick Options */}
-            <View style={styles.biometricRow}>
-              <TouchableOpacity
-                onPress={() => handleBiometric('face')}
-                style={[
-                  styles.biometricCard,
-                  {
-                    backgroundColor: theme.surfaceAlt,
-                    borderColor: theme.border,
-                  },
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="faceid" size={22} color={theme.primary} />
-                <Text style={[styles.biometricLabel, { color: theme.text }]}>Face ID</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleBiometric('fingerprint')}
-                style={[
-                  styles.biometricCard,
-                  {
-                    backgroundColor: theme.surfaceAlt,
-                    borderColor: theme.border,
-                  },
-                ]}
-                activeOpacity={0.75}
-              >
-                <AppIcon name="fingerprint" size={22} color={theme.primary} />
-                <Text style={[styles.biometricLabel, { color: theme.text }]}>Fingerprint</Text>
-              </TouchableOpacity>
             </View>
 
             {/* Google Sign In & Offline Mode Buttons */}
@@ -482,26 +350,12 @@ const styles = StyleSheet.create({
   optionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     marginVertical: 12,
   },
-  rememberMeGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rememberMeText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+
+
+
   forgotText: {
     fontSize: 13,
     fontWeight: '700',
@@ -538,25 +392,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'lowercase',
   },
-  biometricRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  biometricCard: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  biometricLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+
+
+
   googleButton: {
     height: 46,
     borderRadius: 14,

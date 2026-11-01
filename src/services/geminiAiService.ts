@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AIChatMessage, UserProfile } from '../types/fitness';
 import { ACTIVE_ENV } from '../config/active-env';
+import { geminiGenerateContent, isAiProxyAvailable } from './aiProxy';
 
 const GEMINI_KEY_STORAGE = '@titan_gemini_api_key';
 
@@ -14,7 +15,8 @@ export interface FoodNutritionAnalysis {
 }
 
 /**
- * Get active Gemini API Key from storage, environment, or active-env config
+ * A Gemini key the user saved on this device. The app's own key never ships in the
+ * client; without a personal key, requests go through the server-side AI proxy.
  */
 export async function getActiveGeminiApiKey(): Promise<string> {
   try {
@@ -26,13 +28,12 @@ export async function getActiveGeminiApiKey(): Promise<string> {
     console.warn('Error reading stored Gemini key:', e);
   }
 
-  const envKey = (
-    process.env.EXPO_PUBLIC_GEMINI_API_KEY ||
-    ACTIVE_ENV.GEMINI_API_KEY ||
-    ''
-  ).trim();
+  return '';
+}
 
-  return envKey || String.fromCharCode(65,81,46,65,98,56,82,78,54,75,102,56,79,48,81,48,45,95,106,57,66,100,74,75,54,66,79,114,48,109,68,67,68,115,67,122,81,86,82,67,103,79,86,65,100,119,113,49,50,121,82,121,65);
+/** True when Gemini can be reached with a personal key or through the signed-in proxy. */
+export async function isGeminiConfigured(): Promise<boolean> {
+  return Boolean(await getActiveGeminiApiKey()) || isAiProxyAvailable();
 }
 
 /**
@@ -60,12 +61,12 @@ export async function generateFitnessAdviceWithGemini(
   const apiKey = await getActiveGeminiApiKey();
   const model = (ACTIVE_ENV.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
-  // If no Gemini API key is configured, return an intelligent science-based default response
-  if (!apiKey) {
+  // Without a personal key or a signed-in proxy session, answer from the built-in coaching engine
+  if (!apiKey && !isAiProxyAvailable()) {
     return generateSmartOfflineCoaching(prompt, profile);
   }
 
-  const systemInstructions = `You are TitanAI, an elite AI strength & conditioning coach, biomechanics specialist, and sports nutritionist for athlete ${profile.name || 'Sourav Mahanty'}. Never mention Google, Gemini, or any underlying third-party models; always refer to yourself exclusively as TitanAI or TitanFit AI Coach.
+  const systemInstructions = `You are TitanAI, an elite AI strength & conditioning coach, biomechanics specialist, and sports nutritionist for athlete ${profile.name || 'Athlete'}. Never mention Google, Gemini, or any underlying third-party models; always refer to yourself exclusively as TitanAI or TitanFit AI Coach.
 Athlete Profile:
 - Goal: ${profile.fitnessGoal} (${profile.fitnessGoal === 'weight_loss' ? 'Fat Loss / Cutting' : profile.fitnessGoal === 'muscle_gain' ? 'Hypertrophy / Lean Bulk' : 'Strength & Athletic Performance'})
 - Current Bodyweight: ${profile.currentWeightKg} kg (Target: ${profile.targetWeightKg} kg, Height: ${profile.heightCm} cm, Age: ${profile.age})
@@ -106,25 +107,16 @@ Coaching Guidelines:
 
   for (const curModel of tryModelList) {
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${curModel}:generateContent?key=${apiKey}`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
+      const response = await geminiGenerateContent(curModel, {
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 900,
         },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 900,
-          },
-        }),
-      });
+      }, apiKey);
 
       if (!response.ok) {
-        const errBody = await response.text();
-        console.warn(`Gemini API error with ${curModel} (${response.status}):`, errBody);
+        console.warn(`Gemini API error with ${curModel} (${response.status})`);
 
         if (response.status === 429) {
           return `⚡ AI engine rate limit reached temporarily. Progressive Overload Tip for ${profile.name}: Prioritize ${profile.targetProteinGrams}g daily protein and maintain 1-2 RIR (reps in reserve) across your main compound lifts!`;
@@ -135,14 +127,14 @@ Coaching Guidelines:
           continue;
         }
 
-        if (response.status === 400 || response.status === 403) {
+        if (response.status === 0 || response.status === 400 || response.status === 401 || response.status === 403) {
           return generateSmartOfflineCoaching(prompt, profile);
         }
 
         continue;
       }
 
-      const data = await response.json();
+      const data = response.data;
       const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (candidateText && candidateText.trim().length > 0) {
@@ -205,10 +197,10 @@ export async function analyzeFoodWithGemini(
   input: { textDescription?: string; base64Jpeg?: string }
 ): Promise<FoodNutritionAnalysis> {
   const apiKey = await getActiveGeminiApiKey();
-  const model = (ACTIVE_ENV.GEMINI_MODEL || 'gemini-1.5-flash').trim();
+  const model = (ACTIVE_ENV.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
-  // If Gemini key is available, send to Google Gemini multimodal endpoint
-  if (apiKey) {
+  // Send to Gemini (personal key or signed-in proxy); otherwise use heuristics below
+  if (apiKey || isAiProxyAvailable()) {
     try {
       const parts: any[] = [
         {
@@ -238,20 +230,13 @@ Ensure reasonable real-world macronutrient estimates. Do not include markdown ti
         });
       }
 
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        }
-      );
+      const res = await geminiGenerateContent(model, {
+        contents: [{ parts }],
+        generationConfig: { responseMimeType: 'application/json' },
+      }, apiKey);
 
       if (res.ok) {
-        const json = await res.json();
+        const json = res.data;
         const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawText) {
           const parsed = JSON.parse(rawText);

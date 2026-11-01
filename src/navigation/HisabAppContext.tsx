@@ -8,7 +8,15 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { StatusBar } from 'expo-status-bar';
-import { GoogleSignin, isCancelledResponse, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
+import { reloadAppAsync } from 'expo';
+import {
+  GoogleSignin,
+  isCancelledResponse,
+  isErrorWithCode,
+  isSuccessResponse,
+  isGoogleSigninNativeAvailable,
+  statusCodes,
+} from '../services/googleAuth';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -68,6 +76,11 @@ import {
 import { AuthGate } from '../components/AuthGate';
 import { AppToast, ToastConfig } from '../components/AppToast';
 import { getAppTheme } from '../theme/appTheme';
+import { isLoanActive } from '../utils/loans';
+import { localDateISO, localMonthISO } from '../utils/date';
+import { groqChatViaProxy, groqTranscribeViaProxy, isAiProxyAvailable } from '../services/aiProxy';
+import { normalizeAppLock, shouldRelockAfter } from '../services/appLock';
+import { LOCAL_DATA_OWNER, scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
 
 const STORAGE_KEY = 'dailyhisab.mobile.state.v2';
 const oldStorageKey = 'dailyhisab.mobile.state.v1';
@@ -145,6 +158,11 @@ export type HisabAppContextType = {
   openAuth: () => void;
   toggleVoiceEntry: () => void;
   unlock: () => void;
+  setAppLockPin: (pinHash: string | null) => void;
+  upgradePinHash: (pinHash: string) => void;
+  resetAppLockAfterVerification: () => void;
+  eraseLocalDataAndSignOut: () => Promise<void>;
+  pinNeedsUpdate?: boolean;
   getThemeBg: () => string;
   logoutUser: () => Promise<void>;
   saveProfile: (updated: { displayName: string }) => Promise<void>;
@@ -157,8 +175,11 @@ export type HisabAppContextType = {
   isRefreshing: boolean;
   onRefresh: () => Promise<void>;
   loaded: boolean;
+  /** True until this account's records have arrived (local load, then the first cloud snapshot). */
+  dataSettling: boolean;
+  /** Firebase uid, 'local' for offline mode, or null when signed out; TitanFit keys its storage by it. */
+  dataOwner: string | null;
   isTabReady: (tab: Tab) => boolean;
-  syncInBackground: (tab?: Tab) => void;
   unreadNotifCount: number;
   setUnreadNotifCount: (count: number) => void;
   quickText: string;
@@ -198,7 +219,7 @@ export type HisabAppContextType = {
   paySip: (inv: Investment) => void;
   removeInvestment: (id: string) => void;
   numeric: (value: string | number | undefined) => number;
-  addSalary: (customPayload?: Partial<SalaryRecord>) => void;
+  addSalary: (customPayload?: Partial<SalaryRecord>) => boolean;
   creditSalary: (record: SalaryRecord) => void;
   removeSalary: (id: string) => void;
   addDebt: (payload?: any) => void;
@@ -239,8 +260,8 @@ export function useHisabApp() {
 }
 
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const today = () => new Date().toISOString().slice(0, 10);
-const monthNow = () => new Date().toISOString().slice(0, 7);
+const today = () => localDateISO();
+const monthNow = () => localMonthISO();
 function normalizeDateToISO(dateStr?: string): string {
   if (!dateStr) return today();
   const trimmed = dateStr.trim();
@@ -249,7 +270,7 @@ function normalizeDateToISO(dateStr?: string): string {
   }
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return localDateISO(parsed);
   }
   return today();
 }
@@ -263,7 +284,7 @@ const defaultState: HisabState = {
   currency: '₹',
   theme: 'light',
   pinEnabled: false,
-  securityPin: '1234',
+  securityPin: '',
   biometricEnabled: true,
   groqKey: '',
   transactions: [],
@@ -274,28 +295,45 @@ const defaultState: HisabState = {
   recurringRules: [],
   creditCards: [],
   savingsGoals: [],
+  // Categories are listed so they can be edited, but no limit is set until the user chooses one.
   budgets: {
-    Food: 8000,
-    Bills: 10000,
-    Transport: 5000,
-    Shopping: 6000,
-    Entertainment: 3000,
-    Health: 3000,
+    Food: 0,
+    Bills: 0,
+    Transport: 0,
+    Shopping: 0,
+    Entertainment: 0,
+    Health: 0,
   },
 };
 
+// Whole-word keyword lists (an optional plural "s"/"es" is allowed), so "car" never matches
+// "card" and "bus" never matches "business". Order matters: earlier categories win.
+const CATEGORY_KEYWORDS: Array<[string, string[]]> = [
+  ['Income', ['salary', 'credited', 'income', 'bonus', 'freelance', 'client', 'stipend', 'dividend', 'refund', 'cashback', 'interest received']],
+  ['EMI', ['emi', 'loan', 'car loan', 'home loan', 'personal loan', 'credit card bill', 'card bill']],
+  ['Investment', ['sip', 'stock', 'mutual fund', 'mutual', 'gold', 'sgb', 'invest', 'investment', 'groww', 'zerodha', 'upstox', 'crypto', 'bitcoin', 'etf', 'ppf', 'fd', 'rd', 'nps']],
+  ['Transport', ['petrol', 'diesel', 'cng', 'fuel', 'uber', 'ola', 'rapido', 'taxi', 'cab', 'auto', 'rickshaw', 'toto', 'bus', 'train', 'irctc', 'metro', 'flight', 'parking', 'toll', 'fastag', 'bike service', 'car service', 'ticket']],
+  ['Food', [
+    'grocery', 'groceries', 'food', 'fish', 'mach', 'machh', 'chicken', 'mutton', 'egg', 'dim', 'meat', 'paneer', 'fruit', 'vegetable', 'veg', 'sabzi', 'sabji', 'sobji',
+    'doodh', 'milk', 'curd', 'dahi', 'bread', 'rice', 'chal', 'dal', 'atta', 'oil', 'sugar', 'salt', 'onion', 'potato', 'aloo', 'tomato', 'bazaar', 'bazar', 'market', 'kirana',
+    'restaurant', 'hotel', 'cafe', 'dhaba', 'canteen', 'swiggy', 'zomato', 'zepto', 'blinkit', 'instamart', 'bigbasket', 'dmart',
+    'tea', 'chai', 'coffee', 'snack', 'snacks', 'breakfast', 'lunch', 'dinner', 'tiffin', 'sweet', 'mishti', 'biryani', 'burger', 'pizza',
+    'idli', 'dosa', 'vada', 'samosa', 'roti', 'paratha', 'luchi', 'puri', 'momo', 'momos', 'chowmein', 'roll', 'thali', 'juice', 'cake', 'icecream', 'ice cream', 'water bottle',
+  ]],
+  ['Bills', ['bill', 'electricity', 'bijli', 'current bill', 'rent', 'ghar bhada', 'wifi', 'broadband', 'internet', 'jio', 'airtel', 'vi recharge', 'mobile recharge', 'recharge', 'cylinder', 'gas', 'indane', 'water bill', 'society', 'maintenance', 'dth']],
+  ['Health', ['medicine', 'medicines', 'doctor', 'hospital', 'health', 'pharmacy', 'chemist', 'apollo', 'medplus', 'clinic', 'lab test', 'blood test', 'dental', 'dentist', 'tablet', 'syrup', 'gym', 'protein']],
+  ['Entertainment', ['movie', 'netflix', 'prime', 'hotstar', 'spotify', 'youtube premium', 'game', 'entertainment', 'cinema', 'pvr', 'inox', 'theatre', 'outing', 'party', 'trip', 'vacation']],
+  ['Shopping', ['pant', 'jeans', 'shoe', 'shirt', 'tshirt', 'dress', 'saree', 'kurta', 'amazon', 'flipkart', 'myntra', 'meesho', 'ajio', 'shopping', 'clothes', 'cloth', 'sneaker', 'bag', 'cosmetics', 'makeup', 'mall', 'watch']],
+];
+
+const CATEGORY_PATTERNS = CATEGORY_KEYWORDS.map(([category, words]) => [
+  category,
+  new RegExp(`(^|[^a-z])(${words.map(w => w.replace(/ /g, '\\s+')).join('|')})(e?s)?(?![a-z])`, 'i'),
+] as const);
+
 function categoryFor(text: string): string {
   const source = text.toLowerCase();
-  if (/salary|credited|income|bonus|freelance|client|stipend|dividend|refund|cashback|interest received/.test(source)) return 'Income';
-  if (/petrol|diesel|cng|fuel|uber|ola|rapido|taxi|cab|auto|rickshaw|bus|train|irctc|metro|flight|air|parking|toll|fastag|bike|car/.test(source)) return 'Transport';
-  if (/grocery|groceries|food|fish|mach|chicken|mutton|egg|meat|paneer|fruit|vegetable|sabzi|doodh|milk|restaurant|cafe|dhaba|swiggy|zomato|zepto|blinkit|instamart|tea|chai|coffee|snacks|breakfast|lunch|dinner|sweet|mishti|biryani|burger|pizza/.test(source)) return 'Food';
-  if (/emi|loan|interest|car loan|home loan|personal loan|credit card bill|card bill/.test(source)) return 'EMI';
-  if (/sip|stock|mutual|fund|gold|sgb|invest|groww|zerodha|upstox|crypto|bitcoin|etf|ppf|fd|rd|nps/.test(source)) return 'Investment';
-  if (/bill|electricity|bijli|rent|ghar bhada|wifi|broadband|internet|jio|airtel|vi|mobile|recharge|cylinder|gas|indane|water|society|maintenance/.test(source)) return 'Bills';
-  if (/medicine|doctor|hospital|health|pharmacy|chemist|apollo|medplus|clinic|test|lab|dental|dentist|tablet|syrup|gym|protein/.test(source)) return 'Health';
-  if (/movie|netflix|prime|hotstar|spotify|youtube|game|entertainment|cinema|pvr|inox|theatre|outing|party|trip|vacation/.test(source)) return 'Entertainment';
-  if (/pant|shoe|shirt|dress|saree|tshirt|amazon|flipkart|myntra|meesho|shopping|clothes|cloth|sneakers|bag|cosmetics|makeup|mall/.test(source)) return 'Shopping';
-  return 'Others';
+  return CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(source))?.[0] ?? 'Others';
 }
 
 function parseHisab(text: string): Transaction[] {
@@ -420,17 +458,18 @@ function mergeById<T extends { id?: string }>(local: T[], cloud: T[], deletedIds
 function haveItemsChanged<T extends { id?: string }>(a: T[], b: T[]): boolean {
   if (a === b) return false;
   if (a.length !== b.length) return true;
-  for (let i = 0; i < a.length; i++) {
-    const itemA = a[i] as any;
-    const itemB = b[i] as any;
-    if (itemA?.id !== itemB?.id) return true;
-    if (itemA?.amount !== itemB?.amount) return true;
-    if (itemA?.date !== itemB?.date) return true;
-    if (itemA?.title !== itemB?.title) return true;
-    if (itemA?.updatedAt !== itemB?.updatedAt) return true;
-    if (itemA?.status !== itemB?.status) return true;
-  }
-  return false;
+  return a.some((itemA, i) => {
+    const itemB = b[i];
+    if (itemA === itemB) return false;
+    if (!itemA || !itemB) return true;
+    const keys = new Set([...Object.keys(itemA), ...Object.keys(itemB)]);
+    return Array.from(keys).some(key => {
+      const va = (itemA as any)[key];
+      const vb = (itemB as any)[key];
+      if (va === vb) return false;
+      return typeof va === 'object' && typeof vb === 'object' ? JSON.stringify(va) !== JSON.stringify(vb) : true;
+    });
+  });
 }
 
 function isDummyDataItem(_item: any) {
@@ -449,22 +488,7 @@ function hasDummyData(_data: HisabState) {
   return false;
 }
 
-function stableSyncString(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableSyncString).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .filter(key => key !== 'updatedAt' && key !== 'userId')
-      .sort()
-      .map(key => `${JSON.stringify(key)}:${stableSyncString((value as Record<string, unknown>)[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
 type CloudArrayKey = 'transactions' | 'salary' | 'loans' | 'investments' | 'debts' | 'recurringRules' | 'creditCards' | 'savingsGoals';
-type SyncedIds = Partial<Record<CloudArrayKey, string[]>>;
 
 const cloudArrayCollections: Array<[CloudArrayKey, CloudArrayKey]> = [
   ['transactions', 'transactions'],
@@ -477,50 +501,88 @@ const cloudArrayCollections: Array<[CloudArrayKey, CloudArrayKey]> = [
   ['savingsGoals', 'savingsGoals'],
 ];
 
-function cloudStateFingerprint(data: HisabState) {
-  return stableSyncString({
-    transactions: data.transactions,
-    salary: data.salary,
-    loans: data.loans,
-    investments: data.investments,
-    debts: data.debts,
-    recurringRules: data.recurringRules,
-    creditCards: data.creditCards,
-    savingsGoals: data.savingsGoals,
-    budgets: data.budgets,
+/**
+ * The exact objects last known to match the cloud. State updates are immutable, so an item whose
+ * reference is unchanged needs no upload; this keeps each sync proportional to what was edited
+ * instead of re-serialising every record.
+ */
+type SyncedItems = {
+  items: Record<CloudArrayKey, Map<string, unknown>>;
+  budgets: string;
+};
+
+// Budgets are one small object, compared by content so key order and merges don't matter.
+const budgetsKey = (budgets: Record<string, number> | undefined) =>
+  JSON.stringify(Object.keys(budgets || {}).sort().map(key => [key, budgets![key]]));
+
+function emptySyncedItems(): SyncedItems {
+  return {
+    items: Object.fromEntries(cloudArrayCollections.map(([, key]) => [key, new Map()])) as SyncedItems['items'],
+    budgets: '',
+  };
+}
+
+function hasUnsyncedChanges(data: HisabState, synced: SyncedItems) {
+  if (budgetsKey(data.budgets) !== synced.budgets) return true;
+  return cloudArrayCollections.some(([, key]) => {
+    const known = synced.items[key];
+    return data[key].length !== known.size || data[key].some(item => known.get(item.id) !== item);
   });
 }
 
-function syncedIdsFromState(data: HisabState): SyncedIds {
-  return cloudArrayCollections.reduce<SyncedIds>((acc, [, stateKey]) => {
-    acc[stateKey] = data[stateKey].map(item => item.id);
-    return acc;
-  }, {});
-}
-
-async function syncStateToCloud(data: HisabState, previousIds: SyncedIds = {}) {
+async function syncStateToCloud(data: HisabState, synced: SyncedItems) {
   const jobs: Promise<unknown>[] = [];
   cloudArrayCollections.forEach(([cloudName, stateKey]) => {
-    const currentItems = data[stateKey];
-    const currentIds = new Set(currentItems.map(item => item.id));
-    previousIds[stateKey]?.forEach(id => {
-      if (!currentIds.has(id)) jobs.push(deleteFromCloud(cloudName, id));
+    const known = synced.items[stateKey];
+    const currentIds = new Set<string>();
+    data[stateKey].forEach(item => {
+      currentIds.add(item.id);
+      if (known.get(item.id) === item) return;
+      jobs.push(saveToCloud(cloudName, item.id, item as unknown as Record<string, unknown>).then(saved => { if (saved) known.set(item.id, item); }));
     });
-    currentItems.forEach(item => jobs.push(saveToCloud(cloudName, item.id, item as unknown as Record<string, unknown>)));
+    Array.from(known.keys()).forEach(id => {
+      if (!currentIds.has(id)) jobs.push(deleteFromCloud(cloudName, id).then(deleted => { if (deleted) known.delete(id); }));
+    });
   });
-  jobs.push(saveToCloud('settings', 'budgets', { id: 'budgets', categories: data.budgets }));
+  const budgets = budgetsKey(data.budgets);
+  if (budgets !== synced.budgets) {
+    jobs.push(saveToCloud('settings', 'budgets', { id: 'budgets', categories: data.budgets }).then(saved => { if (saved) synced.budgets = budgets; }));
+  }
   await Promise.all(jobs);
 }
 
-
+/**
+ * Builds before per-account storage kept one shared copy on the phone. It belongs to whoever was
+ * signed in (or offline mode) at upgrade time; with nobody signed in it is dropped so the next
+ * account to sign in cannot see it.
+ */
+async function claimLegacyData(owner: string | null, legacyRaw: string | null) {
+  const fitnessKeys = Object.values(TITANFIT_STORAGE_KEYS);
+  const fitnessEntries = await AsyncStorage.multiGet(fitnessKeys);
+  if (!legacyRaw && fitnessEntries.every(([, value]) => value == null)) return;
+  if (owner) {
+    const moves: [string, string][] = [];
+    if (legacyRaw) moves.push([scopedStorageKey(STORAGE_KEY, owner), legacyRaw]);
+    fitnessEntries.forEach(([key, value]) => {
+      if (value != null) moves.push([scopedStorageKey(key, owner), value]);
+    });
+    await AsyncStorage.multiSet(moves);
+  }
+  await AsyncStorage.multiRemove([STORAGE_KEY, oldStorageKey, ...fitnessKeys]);
+}
 
 export function HisabAppProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [state, setState] = useState<HisabState>(defaultState);
   const [loaded, setLoaded] = useState(false);
+  // Whose records `state` holds: a Firebase uid, LOCAL_DATA_OWNER, or null when signed out.
+  const [dataOwner, setDataOwner] = useState<string | null>(null);
+  const dataOwnerRef = useRef<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<any>(null);
+  // The cached user is restored before Firebase Auth; cloud access waits until Auth confirms the same uid.
+  const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [authBusy, setAuthBusy] = useState(false);
@@ -547,9 +609,12 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
-  const applyingCloudRef = useRef(false);
-  const lastCloudSyncHashRef = useRef('');
-  const lastSyncedIdsRef = useRef<SyncedIds>({});
+  const syncedRef = useRef<SyncedItems>(emptySyncedItems());
+  // Collections whose first snapshot has arrived; uploads wait for all of them so a fresh launch
+  // compares against what the server holds instead of re-uploading every record.
+  const hydratedCollectionsRef = useRef<Set<string>>(new Set());
+  const [cloudHydrated, setCloudHydrated] = useState(false);
+  const hydratedRef = useRef(false);
   const deletedIdsRef = useRef<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastConfig | null>(null);
   const [actionLoading, setActionLoading] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
@@ -569,19 +634,6 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const isTabReady = useCallback((_tab: Tab) => {
     return loaded;
   }, [loaded]);
-
-  const syncInBackground = useCallback((_targetTab?: Tab) => {
-    if (!canUseCloudSync() || localOnly || !networkOnline || !user || user.isAnonymous) return;
-    const nextHash = cloudStateFingerprint(state);
-    if (lastCloudSyncHashRef.current !== nextHash) {
-      syncStateToCloud(state, lastSyncedIdsRef.current)
-        .then(() => {
-          lastCloudSyncHashRef.current = nextHash;
-          lastSyncedIdsRef.current = syncedIdsFromState(state);
-        })
-        .catch(() => undefined);
-    }
-  }, [localOnly, networkOnline, user, state]);
 
   const showToast = useCallback((config: ToastConfig) => {
     setToast(config);
@@ -614,15 +666,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     }
   }, [showToast]);
 
-  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const markIdDeleted = useCallback((collectionName: CloudArrayKey, id: string) => {
     if (!id) return;
     deletedIdsRef.current.add(id);
+    syncedRef.current.items[collectionName].delete(id);
     const trimmed = Array.from(deletedIdsRef.current).slice(-1000);
     AsyncStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(trimmed)).catch(() => undefined);
 
-    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous && dataOwnerRef.current === user.uid) {
       deleteFromCloud(collectionName, id).catch(() => undefined);
     }
   }, [localOnly, networkOnline, user]);
@@ -630,71 +681,38 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const syncItemToCloud = useCallback((collectionName: CloudArrayKey, item: { id: string; [key: string]: any }) => {
     if (!item?.id) return;
     deletedIdsRef.current.delete(item.id);
-    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+    if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous && dataOwnerRef.current === user.uid) {
       saveToCloud(collectionName, item.id, item).catch(() => undefined);
     }
   }, [localOnly, networkOnline, user]);
 
-  const triggerImmediateSync = useCallback((targetState: HisabState, immediate = false) => {
-    if (!canUseCloudSync() || localOnly || !networkOnline || !user || user.isAnonymous) {
+  // Cloud data arrives through live listeners, so pull-to-refresh only flushes local edits and
+  // reports where things stand; it never reloads storage over newer in-memory state.
+  const onRefresh = useCallback(async () => {
+    const signedIn = !localOnly && user && !user.isAnonymous;
+    if (!signedIn) {
+      showToast({ title: 'Saved on this phone', message: 'Sign in to back up and sync your records.', type: 'info' });
       return;
     }
-
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
+    if (!networkOnline) {
+      showToast({ title: "You're offline", message: 'Changes are saved and will sync when you reconnect.', type: 'info' });
+      return;
     }
-
-    const doSync = () => {
-      syncStateToCloud(targetState, lastSyncedIdsRef.current)
-        .then(() => {
-          lastCloudSyncHashRef.current = cloudStateFingerprint(targetState);
-          lastSyncedIdsRef.current = syncedIdsFromState(targetState);
-          setSyncStatus('Cloud Synced');
-        })
-        .catch(() => setSyncStatus('Local'));
-    };
-
-    if (immediate) {
-      doSync();
-    } else {
-      syncTimeoutRef.current = setTimeout(doSync, 600);
-    }
-  }, [localOnly, networkOnline, user]);
-
-  const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const nextState = removeDummyDataFromState(migrateState(parsed));
-        setState(nextState);
-      }
-      if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
+      if (canUseCloudSync() && cloudHydrated) {
         setSyncStatus('Syncing');
-        syncStateToCloud(state, lastSyncedIdsRef.current)
-          .then(() => {
-            lastCloudSyncHashRef.current = cloudStateFingerprint(state);
-            lastSyncedIdsRef.current = syncedIdsFromState(state);
-            setSyncStatus('Cloud Synced');
-          })
-          .catch(() => setSyncStatus('Local'));
+        await syncStateToCloud(state, syncedRef.current);
       }
-      showToast({
-        title: 'Reloaded & Synced',
-        message: 'All hisab records are up to date',
-        type: 'success',
-      });
+      setSyncStatus('Cloud Synced');
+      showToast({ title: 'Up to date', message: 'Your records sync automatically.', type: 'success' });
     } catch {
-      showToast({
-        title: 'Refreshed',
-        message: 'Screen data reloaded',
-        type: 'info',
-      });
+      setSyncStatus('Local');
+      showToast({ title: 'Sync paused', message: 'Changes are saved on this phone and will retry automatically.', type: 'warning' });
     } finally {
       setIsRefreshing(false);
     }
-  }, [localOnly, networkOnline, user, state, showToast]);
+  }, [localOnly, networkOnline, user, state, cloudHydrated, showToast]);
 
   const handleSetLocalOnly = useCallback((val: boolean) => {
     setLocalOnly(val);
@@ -703,6 +721,21 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     } else {
       AsyncStorage.removeItem(LOCAL_ONLY_KEY).catch(() => undefined);
     }
+  }, []);
+
+  const readOwnerState = useCallback(async (owner: string) => {
+    const raw = await AsyncStorage.getItem(scopedStorageKey(STORAGE_KEY, owner));
+    const nextState = normalizeAppLock(removeDummyDataFromState(migrateState(raw ? JSON.parse(raw) : null)));
+    if (deletedIdsRef.current.size > 0) {
+      cloudArrayCollections.forEach(([, stateKey]) => {
+        if (Array.isArray((nextState as any)[stateKey])) {
+          (nextState as any)[stateKey] = (nextState as any)[stateKey].filter(
+            (item: any) => !item?.id || !deletedIdsRef.current.has(item.id)
+          );
+        }
+      });
+    }
+    return nextState;
   }, []);
 
   useEffect(() => {
@@ -715,7 +748,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       AsyncStorage.getItem(DELETED_IDS_STORAGE_KEY),
       AsyncStorage.getItem(CACHED_USER_KEY),
     ])
-      .then(([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw, deletedRaw, cachedUserRaw]) => {
+      .then(async ([raw, oldRaw, localOnlyRaw, readRaw, dismissedRaw, deletedRaw, cachedUserRaw]) => {
         let cachedUser: any = null;
         if (cachedUserRaw) {
           try {
@@ -734,17 +767,11 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
             }
           } catch {}
         }
-        const parsed = raw ? JSON.parse(raw) : oldRaw ? JSON.parse(oldRaw) : null;
-        const nextState = removeDummyDataFromState(migrateState(parsed));
-        if (deletedIdsRef.current.size > 0) {
-          cloudArrayCollections.forEach(([, stateKey]) => {
-            if (Array.isArray((nextState as any)[stateKey])) {
-              (nextState as any)[stateKey] = (nextState as any)[stateKey].filter(
-                (item: any) => !item?.id || !deletedIdsRef.current.has(item.id)
-              );
-            }
-          });
-        }
+        const owner: string | null = cachedUser?.uid || (localOnlyRaw === 'true' ? LOCAL_DATA_OWNER : null);
+        await claimLegacyData(owner, raw || oldRaw).catch(() => undefined);
+        const nextState = owner ? await readOwnerState(owner).catch(() => defaultState) : defaultState;
+        dataOwnerRef.current = owner;
+        setDataOwner(owner);
         setState(nextState);
 
         const hasActiveSession = localOnlyRaw === 'true' || !!(cachedUser && cachedUser.uid);
@@ -764,7 +791,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
           let unread = 0;
           (nextState.loans || []).forEach(l => {
             const id = `loan-emi-${l.id}`;
-            if (l.status === 'Active' && l.monthlyEmi > 0 && !dismissedIds[id] && !readIds[id]) unread++;
+            if (isLoanActive(l) && l.monthlyEmi > 0 && !dismissedIds[id] && !readIds[id]) unread++;
           });
           (nextState.debts || []).forEach(d => {
             const id = `debt-${d.type || 'lent'}-${d.id}`;
@@ -782,16 +809,34 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const asyncStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !dataOwner) return;
     if (asyncStorageTimerRef.current) clearTimeout(asyncStorageTimerRef.current);
     asyncStorageTimerRef.current = setTimeout(() => {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+      AsyncStorage.setItem(scopedStorageKey(STORAGE_KEY, dataOwner), JSON.stringify(state)).catch(() => undefined);
     }, 400);
 
     return () => {
       if (asyncStorageTimerRef.current) clearTimeout(asyncStorageTimerRef.current);
     };
-  }, [loaded, state]);
+  }, [loaded, dataOwner, state]);
+
+  /** Saves the current account's records and loads the next account's (or a blank slate). */
+  const switchDataOwner = useCallback(async (owner: string | null) => {
+    const previous = dataOwnerRef.current;
+    if (previous === owner) return;
+    dataOwnerRef.current = owner;
+    const current = appStateSnapshotRef.current.state;
+    if (previous) {
+      await AsyncStorage.setItem(scopedStorageKey(STORAGE_KEY, previous), JSON.stringify(current)).catch(() => undefined);
+    }
+    const next = owner
+      ? await readOwnerState(owner).catch(() => defaultState)
+      : { ...defaultState, theme: current.theme };
+    // A newer switch started while this one was reading storage.
+    if (dataOwnerRef.current !== owner) return;
+    setState(next);
+    setDataOwner(owner);
+  }, [readOwnerState]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
@@ -802,6 +847,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         clearTimeout(timer);
         timer = null;
       }
+      setFirebaseUid(nextUser && !nextUser.isAnonymous ? nextUser.uid : null);
       if (nextUser && !nextUser.isAnonymous) {
         setUser(nextUser);
         setActiveCloudUid(nextUser.uid);
@@ -823,20 +869,34 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }, [handleSetLocalOnly]);
 
   useEffect(() => {
+    if (loaded && firebaseUid) switchDataOwner(firebaseUid);
+  }, [loaded, firebaseUid, switchDataOwner]);
+
+  // Read through a ref so the AppState listener is registered once instead of on every state change.
+  const appStateSnapshotRef = useRef({ state, localOnly, networkOnline, user });
+  appStateSnapshotRef.current = { state, localOnly, networkOnline, user };
+
+  useEffect(() => {
+    let backgroundedAt = 0;
     const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        const hasSession = localOnly || (user && !user.isAnonymous);
-        if (state.pinEnabled && hasSession) {
+      const { state: latest, localOnly: isLocalOnly, networkOnline: isOnline, user: currentUser } = appStateSnapshotRef.current;
+      if (nextAppState === 'background' && !backgroundedAt) backgroundedAt = Date.now();
+      // Only a real trip to the background locks; iOS 'inactive' (Control Centre, system prompts) should not.
+      if (nextAppState === 'active' && backgroundedAt) {
+        const awayMs = Date.now() - backgroundedAt;
+        backgroundedAt = 0;
+        const hasSession = isLocalOnly || (currentUser && !currentUser.isAnonymous);
+        if (latest.pinEnabled && hasSession && shouldRelockAfter(awayMs)) {
           setIsLocked(true);
         }
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (canUseCloudSync() && !localOnly && networkOnline && user && !user.isAnonymous) {
-          syncStateToCloud(state, lastSyncedIdsRef.current).catch(() => undefined);
+        if (canUseCloudSync() && hydratedRef.current && !isLocalOnly && isOnline && currentUser && !currentUser.isAnonymous) {
+          syncStateToCloud(latest, syncedRef.current).catch(() => undefined);
         }
       }
     });
     return () => subscription.remove();
-  }, [state, localOnly, networkOnline, user]);
+  }, []);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -869,51 +929,117 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Snapshots from the 9 collections arrive separately; applying them in one state update keeps
+  // a launch or login to a single re-render instead of one per collection.
+  const pendingCloudRef = useRef<{
+    arrays: Partial<Record<CloudArrayKey, { items: any[]; fromServer: boolean }>>;
+    budgets?: Record<string, number>;
+  }>({ arrays: {} });
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushCloudUpdates = useCallback(() => {
+    flushTimerRef.current = null;
+    const pending = pendingCloudRef.current;
+    pendingCloudRef.current = { arrays: {} };
+    // Bookkeeping happens here, outside the state updater, which React may run more than once.
+    const removedByKey: Partial<Record<CloudArrayKey, Set<string>>> = {};
+    cloudArrayCollections.forEach(([, stateKey]) => {
+      const update = pending.arrays[stateKey];
+      if (!update) return;
+      const known = syncedRef.current.items[stateKey];
+      const cloudIds = new Set(update.items.map(item => item?.id));
+      // A record this phone saw in the cloud that the server no longer has was deleted on
+      // another device. Cached snapshots can be partial, so only the server's word counts.
+      if (update.fromServer) {
+        const removed = new Set(Array.from(known.keys()).filter(id => !cloudIds.has(id)));
+        removed.forEach(id => known.delete(id));
+        if (removed.size) removedByKey[stateKey] = removed;
+      }
+      // Cloud objects are what the server holds, so they count as synced as-is.
+      update.items.forEach(item => item?.id && known.set(item.id, item));
+    });
+    setState(current => {
+      let next = current;
+      cloudArrayCollections.forEach(([, stateKey]) => {
+        const update = pending.arrays[stateKey];
+        if (!update) return;
+        const removed = removedByKey[stateKey];
+        const currentArray: any[] = (next as any)[stateKey] || [];
+        const remaining = removed ? currentArray.filter(item => !removed.has(item?.id)) : currentArray;
+        const merged = mergeById(remaining, update.items, deletedIdsRef.current);
+        if (haveItemsChanged(currentArray, merged)) next = { ...next, [stateKey]: merged };
+      });
+      if (pending.budgets) next = { ...next, budgets: { ...next.budgets, ...pending.budgets } };
+      return next === current ? current : removeDummyDataFromState(next);
+    });
+    if (pending.budgets) syncedRef.current.budgets = budgetsKey(pending.budgets);
+  }, []);
+
+  const queueCloudUpdate = useCallback((apply: (pending: typeof pendingCloudRef.current) => void, collectionName: string) => {
+    apply(pendingCloudRef.current);
+    hydratedCollectionsRef.current.add(collectionName);
+    if (hydratedCollectionsRef.current.size === cloudArrayCollections.length + 1) {
+      hydratedRef.current = true;
+      setCloudHydrated(true);
+    }
+    if (!flushTimerRef.current) flushTimerRef.current = setTimeout(flushCloudUpdates, 60);
+  }, [flushCloudUpdates]);
+
+  const cloudUid = firebaseUid && user && !user.isAnonymous && firebaseUid === user.uid ? firebaseUid : null;
+  // Cloud reads and writes wait until the records on screen belong to the signed-in account.
+  const cloudOwnerReady = !!cloudUid && dataOwner === cloudUid;
+
+  // Screens show placeholders instead of zeros until the first cloud snapshot lands; capped so a slow
+  // network never hides local data for long.
+  const waitingForCloud = loaded && !localOnly && networkOnline && !!cloudUid && !cloudHydrated;
+  const [cloudWaitExpired, setCloudWaitExpired] = useState(false);
   useEffect(() => {
-    if (!loaded || localOnly || !networkOnline || !user || user.isAnonymous) return;
+    setCloudWaitExpired(false);
+    if (!waitingForCloud) return;
+    const timer = setTimeout(() => setCloudWaitExpired(true), 6000);
+    return () => clearTimeout(timer);
+  }, [waitingForCloud]);
+  const dataSettling = !loaded || (waitingForCloud && !cloudWaitExpired);
+
+  useEffect(() => {
+    // A different (or no) account starts from a clean slate: nothing is known to be in its cloud yet.
+    syncedRef.current = emptySyncedItems();
+    hydratedCollectionsRef.current = new Set();
+    hydratedRef.current = false;
+    setCloudHydrated(false);
+  }, [cloudUid, dataOwner]);
+
+  useEffect(() => {
+    if (!loaded || localOnly || !networkOnline || !cloudOwnerReady) return;
     const unsubscribers = cloudArrayCollections.map(([cloudName, stateKey]) =>
-      subscribeToCloudCollection<any>(cloudName, items => {
+      subscribeToCloudCollection<any>(cloudName, (items, { fromServer }) => {
+        // Finish deletes made while offline: markIdDeleted could not reach the cloud at the time.
         items
-          .filter(item => item?.id && isDummyDataItem(item))
+          .filter(item => item?.id && (isDummyDataItem(item) || deletedIdsRef.current.has(item.id)))
           .forEach(item => deleteFromCloud(cloudName, item.id).catch(() => undefined));
         const cleanItems = removeDummyDataItems(items || []).filter(
           item => !item?.id || !deletedIdsRef.current.has(item.id)
         );
-        applyingCloudRef.current = true;
-        setState(current => {
-          const currentArray = (current as any)[stateKey] || [];
-          const nextMerged = mergeById(currentArray, cleanItems, deletedIdsRef.current);
-          if (!haveItemsChanged(currentArray, nextMerged)) {
-            return current;
-          }
-          const next = removeDummyDataFromState({
-            ...current,
-            [stateKey]: nextMerged,
-          });
-          lastCloudSyncHashRef.current = cloudStateFingerprint(next);
-          lastSyncedIdsRef.current = syncedIdsFromState(next);
-          return next;
-        });
-        setTimeout(() => { applyingCloudRef.current = false; }, 0);
+        queueCloudUpdate(pending => { pending.arrays[stateKey] = { items: cleanItems, fromServer }; }, cloudName);
       })
     );
     unsubscribers.push(subscribeToCloudCollection<any>('settings', items => {
       const budgetSettings = items.find(item => item.id === 'budgets' || item.categories);
-      if (!budgetSettings?.categories) return;
-      applyingCloudRef.current = true;
-      setState(current => {
-        const next = { ...current, budgets: { ...current.budgets, ...budgetSettings.categories } };
-        lastCloudSyncHashRef.current = cloudStateFingerprint(next);
-        lastSyncedIdsRef.current = syncedIdsFromState(next);
-        return next;
-      });
-      setTimeout(() => { applyingCloudRef.current = false; }, 0);
+      queueCloudUpdate(pending => {
+        if (budgetSettings?.categories) pending.budgets = budgetSettings.categories;
+      }, 'settings');
     }));
-    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
-  }, [loaded, localOnly, networkOnline, user?.uid, user?.isAnonymous]);
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushCloudUpdates();
+      }
+    };
+  }, [loaded, localOnly, networkOnline, cloudOwnerReady, queueCloudUpdate, flushCloudUpdates]);
 
   useEffect(() => {
-    if (!loaded || localOnly || !networkOnline || !user || user.isAnonymous || applyingCloudRef.current) {
+    if (!loaded || localOnly || !networkOnline || !cloudOwnerReady) {
       if (loaded && !networkOnline) setSyncStatus('Local');
       return;
     }
@@ -921,22 +1047,24 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       setSyncStatus('Local');
       return;
     }
+    if (!cloudHydrated) {
+      setSyncStatus('Syncing');
+      return;
+    }
 
     const timer = setTimeout(() => {
-      const nextHash = cloudStateFingerprint(state);
-      if (lastCloudSyncHashRef.current === nextHash) return;
+      if (!hasUnsyncedChanges(state, syncedRef.current)) {
+        setSyncStatus('Cloud Synced');
+        return;
+      }
       setSyncStatus('Syncing');
-      syncStateToCloud(state, lastSyncedIdsRef.current)
-        .then(() => {
-          lastCloudSyncHashRef.current = nextHash;
-          lastSyncedIdsRef.current = syncedIdsFromState(state);
-          setSyncStatus('Cloud Synced');
-        })
+      syncStateToCloud(state, syncedRef.current)
+        .then(() => setSyncStatus('Cloud Synced'))
         .catch(() => setSyncStatus('Local'));
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [loaded, localOnly, networkOnline, user?.uid, user?.isAnonymous, state]);
+  }, [loaded, localOnly, networkOnline, cloudOwnerReady, cloudHydrated, state]);
 
   const txs = useMemo(() => {
     return [...state.transactions]
@@ -972,8 +1100,8 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     const totalMoney = allTimeBalance + portfolio + goalsSaved;
 
     const sip = state.investments.reduce((s, i) => s + i.monthlySip, 0);
-    const emiDue = state.loans.filter(l => l.status === 'Active').reduce((s, l) => s + l.monthlyEmi, 0);
-    const outstanding = state.loans.filter(l => l.status === 'Active').reduce((s, l) => s + l.remainingAmount, 0);
+    const emiDue = state.loans.filter(isLoanActive).reduce((s, l) => s + l.monthlyEmi, 0);
+    const outstanding = state.loans.filter(isLoanActive).reduce((s, l) => s + l.remainingAmount, 0);
     const cardDue = state.creditCards.reduce((s, c) => s + c.currentOutstanding + getCreditCardSpend(c.id), 0);
     return {
       totalIncome,
@@ -1020,8 +1148,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
       insights.push({ severity: 'danger', title: 'Budget exceeded', detail: `${overBudget.map(item => item.category).slice(0, 3).join(', ')} crossed the monthly limit.` });
     } else if (nearBudget.length) {
       insights.push({ severity: 'warning', title: 'Budget watch', detail: `${nearBudget.map(item => item.category).slice(0, 3).join(', ')} is above 80% of limit.` });
-    } else if (categorySpend.length) {
+    } else if (categorySpend.some(item => item.limit > 0)) {
       insights.push({ severity: 'good', title: 'Budgets calm', detail: 'Recorded spending is within configured category limits.' });
+    } else if (categorySpend.length) {
+      insights.push({ severity: 'info', title: 'No budgets set', detail: 'Set monthly category limits in Settings to get budget alerts.' });
     }
 
     if (highestCategory?.spent) {
@@ -1045,10 +1175,11 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
   const billCalendarEvents = useMemo<BillCalendarEvent[]>(() => {
     return state.loans
-      .filter(loan => loan.status === 'Active' && loan.monthlyEmi > 0)
+      .filter(loan => isLoanActive(loan) && loan.monthlyEmi > 0)
       .map(loan => ({
         id: loan.id,
-        date: `${currentMonth}-${String(loan.emiDay).padStart(2, '0')}`,
+        // Day 29-31 EMIs fall on the month's last day in shorter months.
+        date: `${currentMonth}-${String(Math.min(loan.emiDay, new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0).getDate())).padStart(2, '0')}`,
         title: `EMI - ${loan.name}`,
         amount: loan.monthlyEmi,
         type: 'emi' as const,
@@ -1187,9 +1318,8 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }
 
   async function startRecording() {
-    const apiKey = (state.groqKey || process.env.EXPO_PUBLIC_GROQ_API_KEY || ACTIVE_ENV.GROQ_API_KEY || '').trim();
-    if (!apiKey) {
-      Alert.alert('Voice setup needed', 'Save your Groq API key in Settings first.');
+    if (!(state.groqKey || '').trim() && !isAiProxyAvailable()) {
+      Alert.alert('Voice setup needed', 'Sign in to use voice entry, or save your own Groq API key in Settings.');
       openTab('budgets');
       return;
     }
@@ -1305,13 +1435,14 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }
 
   async function transcribeAudio(rawUri: string): Promise<string> {
-    const apiKey = (state.groqKey || process.env.EXPO_PUBLIC_GROQ_API_KEY || ACTIVE_ENV.GROQ_API_KEY || '').trim();
-    if (!apiKey) {
-      throw new Error('Groq API key is missing. Please save it in Settings.');
-    }
+    const apiKey = (state.groqKey || '').trim();
     const uri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
     const model = ACTIVE_ENV.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
     const prompt = 'Daily hisab expense, income, petrol, groceries, chai, tea, coffee, UPI, cash, rupees, ₹, salary, EMI, SIP, rent, doodh, sabzi, bazaar, fish, dinner, lunch';
+    // Without a personal key the server-side proxy holds the Groq key.
+    if (!apiKey) {
+      return groqTranscribeViaProxy(uri, model, prompt);
+    }
 
     // Primary method: Read local audio file as Blob for Expo 57 WinterCG fetch
     try {
@@ -1406,8 +1537,8 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }
 
   async function parseVoiceToTransactions(text: string): Promise<Transaction[]> {
-    const apiKey = (state.groqKey || process.env.EXPO_PUBLIC_GROQ_API_KEY || ACTIVE_ENV.GROQ_API_KEY || '').trim();
-    if (apiKey) {
+    const apiKey = (state.groqKey || '').trim();
+    if (apiKey || isAiProxyAvailable()) {
       try {
         const prompt = `You are a financial hisab parser for an Indian daily expense tracking app.
 Convert this voice text into a JSON object with a "transactions" array.
@@ -1422,23 +1553,32 @@ Each item in "transactions" MUST have:
 
 Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500, "category": "Transport", "type": "expense", "paymentMethod": "UPI"}]}`;
 
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.1,
-            max_tokens: 450,
-            response_format: { type: 'json_object' },
-          }),
-        });
+        const body = {
+          // llama-3.3-70b-versatile was retired by Groq; low reasoning keeps the JSON from truncating
+          model: 'openai/gpt-oss-20b',
+          reasoning_effort: 'low',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 450,
+          response_format: { type: 'json_object' },
+        };
+        let json: any = null;
+        if (apiKey) {
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+          if (res.ok) json = await res.json();
+        } else {
+          const proxied = await groqChatViaProxy(body);
+          if (proxied.ok) json = proxied.data;
+        }
 
-        if (res.ok) {
-          const json = await res.json();
+        if (json) {
           const content = json.choices?.[0]?.message?.content || '';
           const parsed = JSON.parse(content);
           const list = Array.isArray(parsed) ? parsed : parsed.transactions || parsed.items || parsed.entries || [];
@@ -1533,8 +1673,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     };
     const txType: TxType = debt.type === 'lent' ? 'expense' : 'income';
     withActionLoader('Saving udhar...', () => {
-      patch({
-        debts: [debt, ...state.debts],
+      patch(current => ({
+        debts: [debt, ...current.debts],
         transactions: [
           {
             id: uid(),
@@ -1545,9 +1685,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
             type: txType,
             paymentMethod: 'Cash',
           },
-          ...state.transactions,
+          ...current.transactions,
         ],
-      });
+      }));
     }, {
       title: 'Udhar Recorded',
       message: `${debt.type === 'lent' ? 'Lent' : 'Borrowed'} ${money(amount, state.currency)} with ${debt.personName}`,
@@ -1562,10 +1702,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     const settledAmount = Math.min(debt.amount, debt.settledAmount + amount);
     const status: DebtStatus = settledAmount >= debt.amount ? 'settled' : settledAmount > 0 ? 'partially_paid' : 'pending';
     const txType: TxType = debt.type === 'lent' ? 'income' : 'expense';
-    patch({
-      debts: state.debts.map(d => d.id === id ? { ...d, settledAmount, status } : d),
-      transactions: [{ id: uid(), date: today(), title: `Debt settlement - ${debt.personName}`, amount, category: 'Others', type: txType, paymentMethod: 'UPI' }, ...state.transactions],
-    });
+    patch(current => ({
+      debts: current.debts.map(d => d.id === id ? { ...d, settledAmount, status } : d),
+      transactions: [{ id: uid(), date: today(), title: `Debt settlement - ${debt.personName}`, amount, category: 'Others', type: txType, paymentMethod: 'UPI' }, ...current.transactions],
+    }));
     showToast({
       title: 'Settled',
       message: `Recorded ${money(amount, state.currency)} settlement for ${debt.personName}`,
@@ -1606,8 +1746,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       status: ((customPayload?.status || form.invStatus) as 'active' | 'completed' | 'matured') || 'active',
       startDate: today(),
     };
-    patch({ investments: [inv, ...state.investments] });
-    setForm({ ...form, invName: '', invCurrent: '', invInvested: '', invSip: '', invType: '', invCategory: '', invPlatform: '' });
+    patch(current => ({ investments: [inv, ...current.investments] }));
+    setForm(current => ({ ...current, invName: '', invCurrent: '', invInvested: '', invSip: '', invType: '', invCategory: '', invPlatform: '' }));
     showToast({
       title: 'Investment Added',
       message: `${inv.name} added to portfolio`,
@@ -1619,10 +1759,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     const amount = inv.monthlySip || 0;
     if (!amount) return Alert.alert('SIP amount missing', 'Add a monthly SIP amount first.');
     const thisMonth = currentMonth || today().slice(0, 7);
-    patch({
-      investments: state.investments.map(item => item.id === inv.id ? { ...item, totalInvested: (item.totalInvested || 0) + amount, currentValue: (item.currentValue || 0) + amount, lastPaidMonth: thisMonth } : item),
-      transactions: [{ id: uid(), date: today(), title: `SIP - ${inv.name}`, amount, category: 'Investment', type: 'investment', paymentMethod: 'Auto-Debit' }, ...state.transactions],
-    });
+    patch(current => ({
+      investments: current.investments.map(item => item.id === inv.id ? { ...item, totalInvested: (item.totalInvested || 0) + amount, currentValue: (item.currentValue || 0) + amount, lastPaidMonth: thisMonth } : item),
+      transactions: [{ id: uid(), date: today(), title: `SIP - ${inv.name}`, amount, category: 'Investment', type: 'investment', paymentMethod: 'Auto-Debit' }, ...current.transactions],
+    }));
     showToast({
       title: 'SIP Recorded',
       message: `SIP installment of ${money(amount, state.currency)} logged for ${thisMonth}`,
@@ -1661,10 +1801,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       emiDay: clampDay(customPayload?.emiDay !== undefined ? customPayload.emiDay : numeric(form.loanDay || 5)),
       status: 'Active',
     };
-    patch({
-      loans: [newLoan, ...state.loans],
-    });
-    setForm({ ...form, loanName: '', loanLender: '', loanRemaining: '', loanPrincipal: '', loanEmi: '', loanRate: '', loanDay: '' });
+    patch(current => ({
+      loans: [newLoan, ...current.loans],
+    }));
+    setForm(current => ({ ...current, loanName: '', loanLender: '', loanRemaining: '', loanPrincipal: '', loanEmi: '', loanRate: '', loanDay: '' }));
     showToast({
       title: 'Loan Added',
       message: `${name} saved with ${money(newLoan.monthlyEmi, state.currency)} EMI`,
@@ -1674,10 +1814,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
 
   function payEmi(loan: Loan) {
     const paid = Math.min(loan.remainingAmount, loan.monthlyEmi || loan.remainingAmount);
-    patch({
-      loans: state.loans.map(l => l.id === loan.id ? { ...l, remainingAmount: Math.max(0, l.remainingAmount - paid), status: l.remainingAmount - paid <= 0 ? 'Paid Off' : 'Active' } : l),
-      transactions: [{ id: uid(), date: today(), title: `EMI - ${loan.name}`, amount: paid, category: 'EMI', type: 'emi', paymentMethod: 'Auto-Debit' }, ...state.transactions],
-    });
+    patch(current => ({
+      loans: current.loans.map(l => l.id === loan.id ? { ...l, remainingAmount: Math.max(0, l.remainingAmount - paid), status: l.remainingAmount - paid <= 0 ? 'Paid Off' : 'Active' } : l),
+      transactions: [{ id: uid(), date: today(), title: `EMI - ${loan.name}`, amount: paid, category: 'EMI', type: 'emi', paymentMethod: 'Auto-Debit' }, ...current.transactions],
+    }));
     showToast({
       title: 'EMI Paid',
       message: `Recorded ${money(paid, state.currency)} payment for ${loan.name}`,
@@ -1700,11 +1840,14 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     });
   }
 
-  function addSalary() {
+  function addSalary(): boolean {
     const gross = numeric(form.salGross);
     const deductions = numeric(form.salDeduct);
     const net = numeric(form.salNet || gross - deductions);
-    if (!net) return;
+    if (!net) {
+      Alert.alert('Salary amount needed', 'Enter the gross salary or the net amount you received.');
+      return false;
+    }
     const status = (form.salStatus as 'credited' | 'pending') || 'credited';
     const record: SalaryRecord = {
       id: uid(),
@@ -1716,26 +1859,27 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       receivedDate: status === 'credited' ? today() : '',
       status,
     };
-    patch({
-      salary: [record, ...state.salary],
+    patch(current => ({
+      salary: [record, ...current.salary],
       transactions: record.status === 'credited'
-        ? [{ id: uid(), date: today(), title: `Salary - ${record.company}`, amount: net, category: 'Income', type: 'income', paymentMethod: 'NetBanking' }, ...state.transactions]
-        : state.transactions,
-    });
-    setForm({ ...form, salCompany: '', salMonth: '', salGross: '', salDeduct: '', salNet: '', salStatus: '' });
+        ? [{ id: uid(), date: today(), title: `Salary - ${record.company}`, amount: net, category: 'Income', type: 'income', paymentMethod: 'NetBanking' }, ...current.transactions]
+        : current.transactions,
+    }));
+    setForm(current => ({ ...current, salCompany: '', salMonth: '', salGross: '', salDeduct: '', salNet: '', salStatus: '' }));
     showToast({
       title: 'Salary Added',
       message: `${record.company} salary of ${money(net, state.currency)} saved`,
       type: 'success',
     });
+    return true;
   }
 
   function creditSalary(record: SalaryRecord) {
     if (record.status === 'credited') return;
-    patch({
-      salary: state.salary.map(item => item.id === record.id ? { ...item, status: 'credited', receivedDate: today() } : item),
-      transactions: [{ id: uid(), date: today(), title: `Salary - ${record.company}`, amount: record.netAmount, category: 'Income', type: 'income', paymentMethod: 'NetBanking' }, ...state.transactions],
-    });
+    patch(current => ({
+      salary: current.salary.map(item => item.id === record.id ? { ...item, status: 'credited', receivedDate: today() } : item),
+      transactions: [{ id: uid(), date: today(), title: `Salary - ${record.company}`, amount: record.netAmount, category: 'Income', type: 'income', paymentMethod: 'NetBanking' }, ...current.transactions],
+    }));
     showToast({
       title: 'Salary Credited',
       message: `Credited ${money(record.netAmount, state.currency)} to ledger`,
@@ -1761,7 +1905,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function addRecurring() {
     const amount = numeric(form.recAmount);
     if (!form.recTitle || !amount) return;
-    patch({
+    patch(current => ({
       recurringRules: [{
         id: uid(),
         title: form.recTitle,
@@ -1772,9 +1916,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
         frequency: (form.recFreq as Frequency) || 'monthly',
         dayOfMonth: clampDay(numeric(form.recDay || 1)),
         active: true,
-      }, ...state.recurringRules],
-    });
-    setForm({ ...form, recTitle: '', recAmount: '', recDay: '', recCategory: '', recType: '', recPay: '', recFreq: '' });
+      }, ...current.recurringRules],
+    }));
+    setForm(current => ({ ...current, recTitle: '', recAmount: '', recDay: '', recCategory: '', recType: '', recPay: '', recFreq: '' }));
     showToast({
       title: 'Recurring Rule Added',
       message: `"${form.recTitle}" set to repeat monthly`,
@@ -1797,7 +1941,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
 
   function toggleRecurring(id: string) {
     const rule = state.recurringRules.find(r => r.id === id);
-    patch({ recurringRules: state.recurringRules.map(r => r.id === id ? { ...r, active: !r.active } : r) });
+    patch(current => ({ recurringRules: current.recurringRules.map(r => r.id === id ? { ...r, active: !r.active } : r) }));
     showToast({
       title: rule?.active ? 'Rule Paused' : 'Rule Resumed',
       message: `"${rule?.title}" is now ${rule?.active ? 'paused' : 'active'}`,
@@ -1823,7 +1967,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function addCreditCard() {
     const limit = numeric(form.cardLimit);
     if (!form.cardName || !limit) return;
-    patch({
+    patch(current => ({
       creditCards: [{
         id: uid(),
         name: form.cardName,
@@ -1832,9 +1976,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
         statementDay: clampDay(numeric(form.cardStatement || 1)),
         dueDay: clampDay(numeric(form.cardDue || 20)),
         currentOutstanding: numeric(form.cardOutstanding),
-      }, ...state.creditCards],
-    });
-    setForm({ ...form, cardName: '', cardBank: '', cardLimit: '', cardOutstanding: '', cardStatement: '', cardDue: '' });
+      }, ...current.creditCards],
+    }));
+    setForm(current => ({ ...current, cardName: '', cardBank: '', cardLimit: '', cardOutstanding: '', cardStatement: '', cardDue: '' }));
     showToast({
       title: 'Card Saved',
       message: `Credit card "${form.cardName}" added`,
@@ -1845,10 +1989,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function recordCardPayment(card: CreditCard) {
     const amount = card.currentOutstanding + getCreditCardSpend(card.id);
     if (!amount) return Alert.alert('No card due', 'No outstanding amount found for this card.');
-    patch({
-      creditCards: state.creditCards.map(item => item.id === card.id ? { ...item, currentOutstanding: 0 } : item),
-      transactions: [{ id: uid(), date: today(), title: `Credit card payment - ${card.name}`, amount, category: 'Bills', type: 'expense', paymentMethod: 'NetBanking' }, ...state.transactions],
-    });
+    patch(current => ({
+      creditCards: current.creditCards.map(item => item.id === card.id ? { ...item, currentOutstanding: 0 } : item),
+      transactions: [{ id: uid(), date: today(), title: `Credit card payment - ${card.name}`, amount, category: 'Bills', type: 'expense', paymentMethod: 'NetBanking' }, ...current.transactions],
+    }));
     showToast({
       title: 'Payment Recorded',
       message: `Recorded ${money(amount, state.currency)} for ${card.name}`,
@@ -1875,7 +2019,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     const targetAmount = numeric(form.goalTarget);
     if (!form.goalName || !targetAmount) return;
     const currentAmount = Math.min(targetAmount, numeric(form.goalCurrent));
-    patch({
+    patch(current => ({
       savingsGoals: [{
         id: uid(),
         name: form.goalName,
@@ -1884,9 +2028,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
         targetDate: form.goalDate || '',
         monthlyContribution: numeric(form.goalMonthly),
         status: currentAmount >= targetAmount ? 'completed' : 'active',
-      }, ...state.savingsGoals],
-    });
-    setForm({ ...form, goalName: '', goalTarget: '', goalCurrent: '', goalMonthly: '', goalDate: '' });
+      }, ...current.savingsGoals],
+    }));
+    setForm(current => ({ ...current, goalName: '', goalTarget: '', goalCurrent: '', goalMonthly: '', goalDate: '' }));
     showToast({
       title: 'Goal Created',
       message: `Savings goal "${form.goalName}" created`,
@@ -1897,10 +2041,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function contributeGoal(goal: SavingsGoal) {
     const amount = goal.monthlyContribution || Math.max(1, Math.round(goal.targetAmount * 0.05));
     const currentAmount = Math.min(goal.targetAmount, goal.currentAmount + amount);
-    patch({
-      savingsGoals: state.savingsGoals.map(g => g.id === goal.id ? { ...g, currentAmount, status: currentAmount >= g.targetAmount ? 'completed' : 'active' } : g),
-      transactions: [{ id: uid(), date: today(), title: `Goal contribution - ${goal.name}`, amount, category: 'Investment', type: 'investment', paymentMethod: 'UPI' }, ...state.transactions],
-    });
+    patch(current => ({
+      savingsGoals: current.savingsGoals.map(g => g.id === goal.id ? { ...g, currentAmount, status: currentAmount >= g.targetAmount ? 'completed' : 'active' } : g),
+      transactions: [{ id: uid(), date: today(), title: `Goal contribution - ${goal.name}`, amount, category: 'Investment', type: 'investment', paymentMethod: 'UPI' }, ...current.transactions],
+    }));
     showToast({
       title: 'Contributed',
       message: `Added ${money(amount, state.currency)} to ${goal.name}`,
@@ -1924,7 +2068,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }
 
   function buildBackup() {
-    const text = JSON.stringify(state, null, 2);
+    // The share sheet can send this anywhere, so the lock PIN and personal API key stay behind.
+    const { securityPin: _pin, groqKey: _groqKey, ...exportable } = state;
+    const text = JSON.stringify(exportable, null, 2);
     setBackupText(text);
     Share.share({ title: 'Daily Hisab Backup', message: text }).catch(() => undefined);
   }
@@ -1932,7 +2078,15 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   function importBackup() {
     try {
       const next = migrateState(JSON.parse(importText));
-      setState(next);
+      // Keep this phone's own lock and keys; a backup must not replace or remove them.
+      setState(current => ({
+        ...next,
+        pinEnabled: current.pinEnabled,
+        securityPin: current.securityPin,
+        pinNeedsUpdate: current.pinNeedsUpdate,
+        biometricEnabled: current.biometricEnabled,
+        groqKey: current.groqKey || next.groqKey,
+      }));
       setImportText('');
       showToast({
         title: 'Restored',
@@ -2013,8 +2167,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       notes: `Share for ${title}`,
       status: 'pending',
     }));
-    patch({ transactions: [transaction, ...state.transactions], debts: [...debts, ...state.debts] });
-    setForm({ ...form, splitTitle: '', splitAmount: '', splitPeople: '', splitDate: '', splitCategory: '', splitPayment: '' });
+    patch(current => ({ transactions: [transaction, ...current.transactions], debts: [...debts, ...current.debts] }));
+    setForm(current => ({ ...current, splitTitle: '', splitAmount: '', splitPeople: '', splitDate: '', splitCategory: '', splitPayment: '' }));
     showToast({
       title: 'Split Created',
       message: `Split of ${money(amount, state.currency)} saved with ${people.length} friends`,
@@ -2092,6 +2246,12 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   async function handleGoogleAuth() {
     Keyboard.dismiss();
     setAuthError('');
+    if (!isGoogleSigninNativeAvailable()) {
+      setAuthError(
+        'Google Sign-In requires a native development build (npx expo run:android) and cannot run inside the Expo Go app. Please use Email/Password sign-in in Expo Go or run the native build.',
+      );
+      return;
+    }
     if (Platform.OS === 'android' && !ACTIVE_ENV.GOOGLE_ANDROID_CLIENT_ID) {
       setAuthError(
         'Google sign-in needs the Android OAuth client in google-services.json for com.dailyhisab.mobile. Add this app SHA-1 in Firebase, download the new file, and rebuild.',
@@ -2142,12 +2302,13 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     handleSetLocalOnly(false);
     setUser(null);
     setIsLocked(false);
+    await switchDataOwner(null);
     showToast({
       title: 'Logged Out',
       message: 'You have been logged out successfully.',
       type: 'info',
     });
-  }, [handleSetLocalOnly, showToast]);
+  }, [handleSetLocalOnly, showToast, switchDataOwner]);
 
   const handleSaveProfile = useCallback(async ({ displayName }: { displayName: string }) => {
     try {
@@ -2206,6 +2367,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       onGoogle={handleGoogleAuth}
       onReset={handleResetPassword}
       onLocal={() => {
+        switchDataOwner(LOCAL_DATA_OWNER);
         handleSetLocalOnly(true);
         showToast({
           title: 'Offline Mode Active',
@@ -2222,7 +2384,51 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
   }, []);
 
   const unlock = useCallback(() => setIsLocked(false), []);
-  const lock = useCallback(() => setIsLocked(true), []);
+
+  /** Saves a new PIN hash and turns the lock on, or turns it off when given null. */
+  const setAppLockPin = useCallback((pinHash: string | null) => {
+    setState(current => ({
+      ...current,
+      pinEnabled: Boolean(pinHash),
+      securityPin: pinHash || '',
+      pinNeedsUpdate: false,
+    }));
+  }, []);
+
+  const upgradePinHash = useCallback((pinHash: string) => {
+    setState(current => (current.pinEnabled ? { ...current, securityPin: pinHash } : current));
+  }, []);
+
+  const resetAppLockAfterVerification = useCallback(() => {
+    setAppLockPin(null);
+    setIsLocked(false);
+    showToast({
+      title: 'App lock turned off',
+      message: 'Turn it on again in Settings with a new PIN.',
+      type: 'info',
+    });
+  }, [setAppLockPin, showToast]);
+
+  const eraseLocalDataAndSignOut = useCallback(async () => {
+    // Sign out first: every sync path is gated on a signed-in user, so emptying local data
+    // afterwards cannot be mistaken for deletions and pushed to the cloud.
+    syncedRef.current = emptySyncedItems();
+    await handleLogout();
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      await AsyncStorage.multiRemove(keys.filter(key => key.startsWith('dailyhisab.') || key.startsWith('@titan')));
+    } catch {
+      // Reloading below still clears in-memory state even if some keys remain.
+    }
+    await reloadAppAsync('Erased local data after a forgotten PIN').catch(() => {
+      setState(defaultState);
+      setIsLocked(false);
+    });
+  }, [handleLogout]);
+  // Never lock without a PIN to unlock with; screens offer PIN setup instead.
+  const lock = useCallback(() => {
+    if (appStateSnapshotRef.current.state.pinEnabled) setIsLocked(true);
+  }, []);
   const patchState = useCallback((partial: Partial<HisabState>) => {
     setState(prev => ({ ...prev, ...partial }));
   }, []);
@@ -2264,7 +2470,12 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     handleVoiceSuggestion,
     unlock,
     lock,
+    setAppLockPin,
+    upgradePinHash,
+    resetAppLockAfterVerification,
+    eraseLocalDataAndSignOut,
     pinEnabled: state.pinEnabled,
+    pinNeedsUpdate: state.pinNeedsUpdate,
     patchState,
     getThemeBg,
     logoutUser: handleLogout,
@@ -2278,8 +2489,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     isRefreshing,
     onRefresh,
     loaded,
+    dataSettling,
+    dataOwner,
     isTabReady,
-    syncInBackground,
     unreadNotifCount,
     setUnreadNotifCount,
     quickText,
@@ -2366,6 +2578,15 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     handleVoiceSuggestion,
     authReady,
     shouldShowAuthGate,
+    // renderAuthGate closes over these; without them the login form renders stale values
+    authForm,
+    authMode,
+    authBusy,
+    authError,
+    setAppLockPin,
+    upgradePinHash,
+    resetAppLockAfterVerification,
+    eraseLocalDataAndSignOut,
     openTab,
     setCurrentTab,
     openAuth,
@@ -2381,8 +2602,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     isRefreshing,
     onRefresh,
     loaded,
+    dataSettling,
+    dataOwner,
     isTabReady,
-    syncInBackground,
     unreadNotifCount,
     quickText,
     categoryFilter,

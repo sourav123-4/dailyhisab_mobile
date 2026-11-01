@@ -73,6 +73,11 @@ export type IconName =
   | 'calendar-clock'
   | 'download'
   | 'upload'
+  | 'dumbbell'
+  | 'spark'
+  | 'play'
+  | 'flame'
+  | 'scale'
   | 'general';
 
 interface AppIconProps {
@@ -346,6 +351,7 @@ export const AppIcon = React.memo(function AppIcon({
       );
 
     case 'close':
+    case 'x':
       return (
         <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'center' }}>
           <View
@@ -1461,6 +1467,102 @@ export const AppIcon = React.memo(function AppIcon({
             }}
           >
             <View style={{ width: 1, height: iconSize * 0.12, backgroundColor: color }} />
+          </View>
+        </View>
+      );
+
+    case 'dumbbell':
+      // Bar with a pair of plates on each side
+      return (
+        <View style={{ width: iconSize, height: iconSize, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: strokeWidth * 1.6, height: iconSize * 0.42, backgroundColor: color, borderRadius: 2 }} />
+          <View style={{ width: strokeWidth * 1.8, height: iconSize * 0.7, backgroundColor: color, borderRadius: 2, marginLeft: 1 }} />
+          <View style={{ flex: 1, maxWidth: iconSize * 0.34, height: strokeWidth, backgroundColor: color }} />
+          <View style={{ width: strokeWidth * 1.8, height: iconSize * 0.7, backgroundColor: color, borderRadius: 2, marginRight: 1 }} />
+          <View style={{ width: strokeWidth * 1.6, height: iconSize * 0.42, backgroundColor: color, borderRadius: 2 }} />
+        </View>
+      );
+
+    case 'spark': {
+      // Four-point sparkle used for the AI coach
+      const arm = iconSize * 0.9;
+      return (
+        <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', width: arm * 0.26, height: arm, backgroundColor: color, borderRadius: arm }} />
+          <View style={{ position: 'absolute', width: arm, height: arm * 0.26, backgroundColor: color, borderRadius: arm }} />
+          <View style={{ position: 'absolute', width: arm * 0.42, height: arm * 0.42, backgroundColor: color, transform: [{ rotate: '45deg' }], borderRadius: 2 }} />
+        </View>
+      );
+    }
+
+    case 'play':
+      return (
+        <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'center' }}>
+          <View
+            style={{
+              marginLeft: iconSize * 0.12,
+              width: 0,
+              height: 0,
+              borderTopWidth: iconSize * 0.36,
+              borderBottomWidth: iconSize * 0.36,
+              borderLeftWidth: iconSize * 0.6,
+              borderTopColor: 'transparent',
+              borderBottomColor: 'transparent',
+              borderLeftColor: color,
+            }}
+          />
+        </View>
+      );
+
+    case 'flame':
+      // Teardrop flame with a lighter core
+      return (
+        <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'flex-end' }}>
+          <View
+            style={{
+              width: iconSize * 0.64,
+              height: iconSize * 0.64,
+              marginBottom: iconSize * 0.08,
+              backgroundColor: color,
+              borderTopLeftRadius: iconSize * 0.32,
+              borderBottomLeftRadius: iconSize * 0.32,
+              borderBottomRightRadius: iconSize * 0.32,
+              transform: [{ rotate: '45deg' }],
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <View style={{ width: iconSize * 0.22, height: iconSize * 0.22, borderRadius: iconSize * 0.11, backgroundColor: '#ffffff', opacity: 0.55 }} />
+          </View>
+        </View>
+      );
+
+    case 'scale':
+      // Bathroom scale: rounded body with a dial
+      return (
+        <View style={{ width: iconSize, height: iconSize, alignItems: 'center', justifyContent: 'center' }}>
+          <View
+            style={{
+              width: iconSize * 0.86,
+              height: iconSize * 0.86,
+              borderRadius: iconSize * 0.2,
+              borderWidth: strokeWidth,
+              borderColor: color,
+              alignItems: 'center',
+              paddingTop: iconSize * 0.12,
+            }}
+          >
+            <View
+              style={{
+                width: iconSize * 0.4,
+                height: iconSize * 0.2,
+                borderTopLeftRadius: iconSize * 0.2,
+                borderTopRightRadius: iconSize * 0.2,
+                borderWidth: strokeWidth * 0.9,
+                borderBottomWidth: 0,
+                borderColor: color,
+              }}
+            />
           </View>
         </View>
       );

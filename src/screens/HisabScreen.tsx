@@ -19,56 +19,7 @@ import { Button, DatePickerField, Field, money, SelectField } from '../component
 import { useAppTheme } from '../theme/appTheme';
 import { HisabState, Transaction, TxType } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
-
-function formatRelativeDateBadge(dateStr?: string): { label: string; isToday: boolean; isYesterday: boolean } {
-  const dNow = new Date();
-  const dayNow = String(dNow.getDate()).padStart(2, '0');
-  const monthNowStr = dNow.toLocaleString('en-IN', { month: 'short' });
-  const fallbackLabel = `Today, ${dayNow} ${monthNowStr}`;
-
-  if (!dateStr) return { label: fallbackLabel, isToday: true, isYesterday: false };
-
-  const cleanDate = dateStr.trim().slice(0, 10);
-  const todayStr = dNow.toISOString().slice(0, 10);
-  const yDate = new Date();
-  yDate.setDate(yDate.getDate() - 1);
-  const yesterdayStr = yDate.toISOString().slice(0, 10);
-
-  let formattedDate = cleanDate;
-  let fullFormatted = cleanDate;
-  try {
-    const parts = cleanDate.split('-');
-    if (parts.length === 3) {
-      const y = Number(parts[0]);
-      const m = Number(parts[1]);
-      const d = Number(parts[2]);
-      if (y && m && d) {
-        const dateObj = new Date(y, m - 1, d);
-        const day = String(d).padStart(2, '0');
-        const monthName = dateObj.toLocaleString('en-IN', { month: 'short' });
-        formattedDate = `${day} ${monthName}`;
-        fullFormatted = `${day} ${monthName} ${y}`;
-      }
-    } else {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        const day = String(d.getDate()).padStart(2, '0');
-        const monthName = d.toLocaleString('en-IN', { month: 'short' });
-        formattedDate = `${day} ${monthName}`;
-        fullFormatted = `${day} ${monthName} ${d.getFullYear()}`;
-      }
-    }
-  } catch {}
-
-  if (cleanDate === todayStr) {
-    return { label: `Today, ${formattedDate}`, isToday: true, isYesterday: false };
-  }
-  if (cleanDate === yesterdayStr) {
-    return { label: `Yesterday, ${formattedDate}`, isToday: false, isYesterday: true };
-  }
-
-  return { label: fullFormatted, isToday: false, isYesterday: false };
-}
+import { formatRecordDate, localDateISO, localMonthISO } from '../utils/date';
 
 function getCategoryVisual(category: string, type: string, isDark: boolean) {
   const isIncome =
@@ -202,7 +153,7 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
 }) {
   const visual = getCategoryVisual(tx.category, tx.type, !!theme.dark);
   const isIncome = tx.type === 'income';
-  const dateInfo = formatRelativeDateBadge(tx.date);
+  const dateInfo = formatRecordDate(tx.date);
 
   return (
     <View
@@ -312,7 +263,7 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
               ]}
               numberOfLines={1}
             >
-              AI Smart Entry: "{tx.notes}"
+              "{tx.notes}"
             </Text>
           ) : null}
         </View>
@@ -647,7 +598,7 @@ export const HisabScreen = React.memo(function HisabScreen({
     setManual({
       title: '',
       amount: '',
-      date: new Date().toISOString().slice(0, 10),
+      date: localDateISO(),
       category: categories[0] || 'Food',
       paymentMethod: paymentMethods[0] || 'UPI',
       notes: '',
@@ -676,7 +627,7 @@ export const HisabScreen = React.memo(function HisabScreen({
     );
   }, [state.currency, removeTransaction]);
 
-  const currentMonthYear = currentMonth || new Date().toISOString().slice(0, 7) || '2026-09';
+  const currentMonthYear = currentMonth || localMonthISO();
 
   return (
     <View style={styles.container}>
@@ -1129,7 +1080,7 @@ export const HisabScreen = React.memo(function HisabScreen({
                 >
                   <AppIcon name="check" size={12} color={theme.dark ? '#34d399' : '#10b981'} />
                   <Text style={[styles.listEndText, { color: theme.subtle }]}>
-                    End of records • All {filteredTxs.length} items loaded
+                    {filteredTxs.length === 1 ? "1 record" : `${filteredTxs.length} records`} · end of list
                   </Text>
                 </View>
                 <View style={[styles.listEndDivider, { backgroundColor: theme.dark ? '#1e293b' : '#e2e8f0' }]} />

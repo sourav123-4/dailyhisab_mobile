@@ -53,7 +53,9 @@ const routeByTab: Record<Tab, string> = {
 };
 
 function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
-  if (!app.loaded) {
+  // Placeholders instead of zeros while this account's records are still arriving from the cloud.
+  const nothingCachedYet = !app.state.transactions.length && !app.state.loans.length;
+  if (!app.loaded || (app.dataSettling && nothingCachedYet)) {
     return <ScreenSkeleton tab={tab} />;
   }
   switch (tab) {
@@ -271,7 +273,17 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
     app.openTab(nextTab);
   }, [app.openTab, closeDrawer, tab]);
 
+  // On Android the tap that closes the payment sheet can land on the mic button beneath it as
+  // the sheet disappears; ignore mic presses right after the sheet closes.
+  const paySheetClosedAtRef = useRef(0);
+  const paySheetWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (paySheetWasOpenRef.current && !app.phonePeModalOpen) paySheetClosedAtRef.current = Date.now();
+    paySheetWasOpenRef.current = app.phonePeModalOpen;
+  }, [app.phonePeModalOpen]);
+
   const handleVoiceAction = useCallback(() => {
+    if (Date.now() - paySheetClosedAtRef.current < 700) return;
     app.resetVoiceState();
     app.setVoiceModalOpen(true);
   }, [app]);

@@ -15,8 +15,9 @@ import {
 import { Button, Field, money } from '../components/UI';
 import { AppIcon } from '../components/AppIcon';
 import { useAppTheme } from '../theme/appTheme';
-import { HisabState, Investment } from '../types';
+import { HisabPatch, HisabState, Investment } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { localMonthISO } from '../utils/date';
 
 export const InvestmentsScreen = React.memo(function InvestmentsScreen({
   state,
@@ -32,14 +33,14 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
   currentMonth?: string;
   form: any;
   setForm: (form: any) => void;
-  patch?: (delta: Partial<HisabState>) => void;
+  patch?: HisabPatch;
   addInvestment: (payload?: Partial<Investment>) => void;
   paySip: (inv: Investment) => void;
   removeInvestment: (id: string) => void;
 }) {
   const theme = useAppTheme();
   const { setActiveModalOpen } = useHisabApp();
-  const thisMonth = currentMonth || new Date().toISOString().slice(0, 7);
+  const thisMonth = currentMonth || localMonthISO();
   const [addModalVisible, setAddModalVisible] = useState(false);
 
   React.useEffect(() => {
@@ -151,12 +152,9 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
   const handleToggleStatus = (inv: Investment) => {
     const nextStatus: 'active' | 'completed' = inv.status === 'completed' ? 'active' : 'completed';
     if (patch) {
-      const currentList = state.investments?.length ? state.investments : displayInvestments;
-      const exists = currentList.some(i => i.id === inv.id);
-      const updated: Investment[] = exists
-        ? currentList.map(i => (i.id === inv.id ? { ...i, status: nextStatus } : i))
-        : [...currentList, { ...inv, status: nextStatus }];
-      patch({ investments: updated });
+      patch(current => ({
+        investments: current.investments.map(i => (i.id === inv.id ? { ...i, status: nextStatus } : i)),
+      }));
     }
     Alert.alert(
       nextStatus === 'completed' ? 'All Done! 🎉' : 'Reactivated 📈',
@@ -280,8 +278,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
     const sipVal = parseFloat(invForm.monthlySip) || 0;
 
     if (editingInvId && patch) {
-      const currentList = state.investments?.length ? state.investments : displayInvestments;
-      const updated = currentList.map(i =>
+      patch(current => ({ investments: current.investments.map(i =>
         i.id === editingInvId
           ? {
               ...i,
@@ -295,8 +292,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
               monthlySip: sipVal,
             }
           : i
-      );
-      patch({ investments: updated });
+      ) }));
       setAddModalVisible(false);
       return;
     }
@@ -358,7 +354,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
                 { color: portfolioStats.isPositive ? '#4ade80' : '#f87171' },
               ]}
             >
-              {portfolioStats.isPositive ? '▲ Live Profit' : '▼ Net Loss'}
+              {portfolioStats.isPositive ? '▲ In Profit' : '▼ Net Loss'}
             </Text>
           </View>
         </View>
@@ -535,7 +531,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
             {money(portfolioStats.netGain, state.currency)}
           </Text>
           <Text style={[styles.kpiSubText, { color: theme.subtle }]} numberOfLines={1}>
-            {portfolioStats.isPositive ? '+' : ''}{portfolioStats.returnPercent.toFixed(1)}% XIRR
+            {portfolioStats.isPositive ? '+' : ''}{portfolioStats.returnPercent.toFixed(1)}% return
           </Text>
         </View>
       </View>

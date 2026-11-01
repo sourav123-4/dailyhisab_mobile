@@ -13,6 +13,7 @@ import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
 import { RestTimerModal } from '../components/RestTimerModal';
 import { MUSCLE_GROUPS_META } from '../data/exercisesData';
+import { localDateISO, nextStreakDays } from '../utils/date';
 
 export const ActiveWorkoutScreen = ({ navigation }: any) => {
   const theme = useAppTheme();
@@ -47,11 +48,13 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
   }
 
   const handleFinish = async () => {
+    // Same rule the context applies: a second workout today keeps the streak, it doesn't add a day.
+    const streakAfter = nextStreakDays(profile.lastWorkoutDate, profile.streakDays, localDateISO());
     const finished = await finishActiveWorkout();
     if (finished) {
       Alert.alert(
         '🔥 Workout Crushed!',
-        `Total Volume Lifted: ${finished.totalVolumeKg} ${profile.unit}\nEstimated Burn: ${finished.caloriesBurned} kcal\nStreak: ${profile.streakDays + 1} Days`,
+        `Total Volume Lifted: ${finished.totalVolumeKg} ${profile.unit}\nEstimated Burn: ${finished.caloriesBurned} kcal\nStreak: ${streakAfter} day${streakAfter === 1 ? '' : 's'}`,
         [{ text: 'Awesome!', onPress: () => navigation.navigate('MainTabs', { screen: 'Today' }) }]
       );
     }
@@ -77,7 +80,7 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
 
         <View style={styles.headerCenter}>
           <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
-          <Text style={[styles.headerTitle, { color: theme.text }]}>LIVE GYM COMPANION</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>WORKOUT IN PROGRESS</Text>
         </View>
 
         <TouchableOpacity onPress={() => setRestTimerVisible(true)} style={[styles.restHeaderBtn, { backgroundColor: theme.surfaceAlt }]}>

@@ -1,27 +1,24 @@
 import React, { useState } from 'react';
 import {
-  Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme, AppThemeName } from '../theme/appTheme';
 import { useAppMode } from '../navigation/AppModeContext';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { PinSetupModal, PinSetupMode } from '../components/PinSetupModal';
+import { BodyStatsCard } from '../components/BodyStatsCard';
+import { BodyProfileModal } from '../components/BodyProfileModal';
 
 export const ProfileScreen = () => {
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
   const {
     profile,
-    updateProfile,
     themeName,
     setThemeName,
     workoutHistory,
@@ -32,63 +29,27 @@ export const ProfileScreen = () => {
     isLocked,
     lock,
     pinEnabled = false,
-    securityPin = '1234',
+    securityPin,
     biometricEnabled = true,
+    pinNeedsUpdate,
+    setAppLockPin,
     patchState,
-    saveProfile,
     user,
     localOnly,
   } = useHisabApp();
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(profile.name || 'Sourav Mahanty');
-  const [age, setAge] = useState(profile.age.toString());
-  const [height, setHeight] = useState(profile.heightCm.toString());
-  const [targetWeight, setTargetWeight] = useState(profile.targetWeightKg.toString());
+  const [editingBody, setEditingBody] = useState(false);
+  const [pinSetupMode, setPinSetupMode] = useState<PinSetupMode | null>(null);
 
-  // Security PIN Change Modal state
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [newPinInput, setNewPinInput] = useState('');
-
-  const displayName = profile.name || user?.displayName || 'Sourav Mahanty';
-  const displayEmail = user?.email || profile.email || 'souravrasiknagar@gmail.com';
+  // 'Athlete' is the placeholder profile name; the signed-in account's name is more accurate.
+  const displayName = (profile.name && profile.name !== 'Athlete' ? profile.name : '') || user?.displayName || 'Athlete';
+  const displayEmail = user?.email || profile.email || '';
 
   const getInitials = (n: string) => {
-    if (!n || n === 'Guest User') return 'SM';
+    if (!n || n === 'Guest User') return 'G';
     const parts = n.trim().split(/\s+/);
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return n.slice(0, 2).toUpperCase();
-  };
-
-  const handleSaveProfile = async () => {
-    const trimmedName = name.trim() || 'Sourav Mahanty';
-    await updateProfile({
-      name: trimmedName,
-      age: parseInt(age, 10) || 26,
-      heightCm: parseInt(height, 10) || 178,
-      targetWeightKg: parseFloat(targetWeight) || 80,
-    });
-    if (saveProfile) {
-      try {
-        await saveProfile({ displayName: trimmedName });
-      } catch (e) {
-        // silent fallback
-      }
-    }
-    setIsEditing(false);
-    Alert.alert('✅ Profile Synchronized', 'Identity saved across Daily Hisab and TitanFit.');
-  };
-
-  const handleSavePin = () => {
-    const clean = newPinInput.replace(/\D/g, '').slice(0, 4);
-    if (clean.length !== 4) {
-      Alert.alert('Invalid PIN', 'Please enter a 4-digit numeric PIN.');
-      return;
-    }
-    patchState({ securityPin: clean, pinEnabled: true });
-    setShowPinModal(false);
-    setNewPinInput('');
-    Alert.alert('✅ PIN Updated', `Your app security PIN is now updated.`);
   };
 
   const handleThemeChange = (newTheme: AppThemeName) => {
@@ -111,22 +72,18 @@ export const ProfileScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Clean Screen Header without Daily Hisab top row */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
+      {/* Toolbar under the shared TitanFit header */}
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: 10 }]}>
         <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>ATHLETE & ACCOUNT SETTINGS</Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>Profile & Security</Text>
-          </View>
+          <Text style={[styles.toolbarCaption, { color: theme.muted }]} numberOfLines={1}>Body stats & goals</Text>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              style={[styles.editBtn, { backgroundColor: isEditing ? theme.primary : theme.surfaceAlt }]}
-              onPress={isEditing ? handleSaveProfile : () => setIsEditing(true)}
+              style={[styles.editBtn, { backgroundColor: theme.primary }]}
+              onPress={() => setEditingBody(true)}
+              accessibilityLabel="Edit name, weight, height, age and goal"
             >
-              <Text style={[styles.editBtnText, { color: isEditing ? '#fff' : theme.accent }]}>
-                {isEditing ? 'SAVE' : 'EDIT'}
-              </Text>
+              <Text style={[styles.editBtnText, { color: '#fff' }]}>✎ EDIT PROFILE</Text>
             </TouchableOpacity>
 
             <View style={[styles.proAthletePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
@@ -143,21 +100,13 @@ export const ProfileScreen = () => {
             <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
           </View>
 
-          {isEditing ? (
-            <TextInput
-              style={[styles.nameInput, { color: theme.text, backgroundColor: theme.input, borderColor: theme.borderSoft }]}
-              value={name}
-              onChangeText={setName}
-            />
-          ) : (
-            <Text style={[styles.userName, { color: theme.text }]}>{displayName}</Text>
-          )}
+          <Text style={[styles.userName, { color: theme.text }]}>{displayName}</Text>
 
           <Text style={[styles.userEmailText, { color: theme.muted }]}>{displayEmail}</Text>
 
           <View style={[styles.badgePill, { backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: '#14B8A6' }]}>
             <Text style={[styles.badgePillText, { color: '#14B8A6' }]}>
-              {localOnly ? '⚡ OFFLINE LOCAL ACCOUNT' : '☁️ DAILY HISAB & TITANFIT SYNCED'}
+              {localOnly ? '⚡ OFFLINE LOCAL ACCOUNT' : '☁️ HISAB SYNCED · FITNESS SAVED ON THIS PHONE'}
             </Text>
           </View>
 
@@ -165,11 +114,11 @@ export const ProfileScreen = () => {
           <View style={styles.tripleStats}>
             <View style={[styles.statBox, { backgroundColor: theme.surfaceAlt }]}>
               <Text style={[styles.statLabel, { color: theme.muted }]}>CURRENT</Text>
-              <Text style={[styles.statVal, { color: theme.accent }]}>{profile.currentWeightKg} {profile.unit}</Text>
+              <Text style={[styles.statVal, { color: theme.accent }]}>{profile.currentWeightKg} kg</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: theme.surfaceAlt }]}>
               <Text style={[styles.statLabel, { color: theme.muted }]}>TARGET</Text>
-              <Text style={[styles.statVal, { color: theme.primary }]}>{profile.targetWeightKg} {profile.unit}</Text>
+              <Text style={[styles.statVal, { color: theme.primary }]}>{profile.targetWeightKg} kg</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: theme.surfaceAlt }]}>
               <Text style={[styles.statLabel, { color: theme.muted }]}>STREAK</Text>
@@ -194,7 +143,8 @@ export const ProfileScreen = () => {
           <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.lockNowButton, { backgroundColor: theme.surfaceAlt, borderColor: theme.danger }]}
-            onPress={() => lock()}
+            // Locking without a PIN would leave nothing to unlock with, so set one up first.
+            onPress={() => (pinEnabled ? lock() : setPinSetupMode('create'))}
           >
             <Text style={[styles.lockNowText, { color: theme.danger }]}>🔒 LOCK APP NOW</Text>
           </TouchableOpacity>
@@ -209,7 +159,10 @@ export const ProfileScreen = () => {
             </View>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => patchState({ pinEnabled: !pinEnabled })}
+              onPress={() => setPinSetupMode(pinEnabled ? 'disable' : 'create')}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: pinEnabled }}
+              accessibilityLabel="PIN protection"
               style={[
                 styles.toggleSwitch,
                 {
@@ -237,19 +190,23 @@ export const ProfileScreen = () => {
             </View>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => patchState({ biometricEnabled: !biometricEnabled })}
+              onPress={() => pinEnabled && patchState({ biometricEnabled: !biometricEnabled })}
+              disabled={!pinEnabled}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: pinEnabled && biometricEnabled, disabled: !pinEnabled }}
+              accessibilityLabel="Biometric unlock"
               style={[
                 styles.toggleSwitch,
                 {
-                  backgroundColor: biometricEnabled ? theme.accent : theme.surfaceAlt,
-                  borderColor: biometricEnabled ? theme.accent : theme.borderSoft,
+                  backgroundColor: pinEnabled && biometricEnabled ? theme.accent : theme.surfaceAlt,
+                  borderColor: pinEnabled && biometricEnabled ? theme.accent : theme.borderSoft,
                 },
               ]}
             >
               <View
                 style={[
                   styles.toggleThumb,
-                  { transform: [{ translateX: biometricEnabled ? 18 : 0 }] },
+                  { transform: [{ translateX: pinEnabled && biometricEnabled ? 18 : 0 }] },
                 ]}
               />
             </TouchableOpacity>
@@ -259,90 +216,20 @@ export const ProfileScreen = () => {
           <View style={[styles.rowField, { borderBottomWidth: 0 }]}>
             <View>
               <Text style={[styles.fieldLabel, { color: theme.text }]}>App Security PIN</Text>
-              <Text style={[styles.fieldSub, { color: theme.muted }]}>Current: ••••</Text>
+              <Text style={[styles.fieldSub, { color: pinNeedsUpdate ? theme.danger : theme.muted }]}>
+                {!pinEnabled ? 'Not set' : pinNeedsUpdate ? 'Weak PIN, change it' : 'Set'}
+              </Text>
             </View>
             <TouchableOpacity
               style={[styles.smallBtn, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
-              onPress={() => {
-                setNewPinInput('');
-                setShowPinModal(true);
-              }}
+              onPress={() => setPinSetupMode(pinEnabled ? 'change' : 'create')}
             >
-              <Text style={[styles.smallBtnText, { color: theme.accent }]}>CHANGE PIN</Text>
+              <Text style={[styles.smallBtnText, { color: theme.accent }]}>{pinEnabled ? 'CHANGE PIN' : 'SET PIN'}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Editable Body Specifications */}
-        <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>BIOMETRIC PROFILE</Text>
-
-          <View style={styles.rowField}>
-            <Text style={[styles.fieldLabel, { color: theme.muted }]}>Age</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.fieldInput, { color: theme.text, backgroundColor: theme.input }]}
-                keyboardType="numeric"
-                value={age}
-                onChangeText={setAge}
-              />
-            ) : (
-              <Text style={[styles.fieldVal, { color: theme.text }]}>{profile.age} yrs</Text>
-            )}
-          </View>
-
-          <View style={styles.rowField}>
-            <Text style={[styles.fieldLabel, { color: theme.muted }]}>Height</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.fieldInput, { color: theme.text, backgroundColor: theme.input }]}
-                keyboardType="numeric"
-                value={height}
-                onChangeText={setHeight}
-              />
-            ) : (
-              <Text style={[styles.fieldVal, { color: theme.text }]}>{profile.heightCm} cm</Text>
-            )}
-          </View>
-
-          <View style={styles.rowField}>
-            <Text style={[styles.fieldLabel, { color: theme.muted }]}>Target Weight</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.fieldInput, { color: theme.text, backgroundColor: theme.input }]}
-                keyboardType="numeric"
-                value={targetWeight}
-                onChangeText={setTargetWeight}
-              />
-            ) : (
-              <Text style={[styles.fieldVal, { color: theme.text }]}>{profile.targetWeightKg} {profile.unit}</Text>
-            )}
-          </View>
-
-          <View style={styles.rowField}>
-            <Text style={[styles.fieldLabel, { color: theme.muted }]}>Weight Unit</Text>
-            <View style={styles.unitToggleRow}>
-              <TouchableOpacity
-                style={[
-                  styles.unitPill,
-                  profile.unit === 'kg' && { backgroundColor: theme.primary },
-                ]}
-                onPress={() => updateProfile({ unit: 'kg' })}
-              >
-                <Text style={[styles.unitPillText, { color: profile.unit === 'kg' ? '#fff' : theme.muted }]}>KG</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.unitPill,
-                  profile.unit === 'lbs' && { backgroundColor: theme.primary },
-                ]}
-                onPress={() => updateProfile({ unit: 'lbs' })}
-              >
-                <Text style={[styles.unitPillText, { color: profile.unit === 'lbs' ? '#fff' : theme.muted }]}>LBS</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        <BodyStatsCard />
 
         {/* Lifetime Workout Stats */}
         <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
@@ -431,43 +318,18 @@ export const ProfileScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Change PIN Modal */}
-      <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.pinModalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.pinModalTitle, { color: theme.text }]}>Set 4-Digit Security PIN</Text>
-            <Text style={[styles.pinModalSub, { color: theme.muted }]}>
-              Enter a 4-digit code to protect Daily Hisab and TitanFit.
-            </Text>
+      <BodyProfileModal visible={editingBody} onClose={() => setEditingBody(false)} />
 
-            <TextInput
-              style={[styles.pinInput, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.primary }]}
-              placeholder="1234"
-              placeholderTextColor={theme.muted}
-              keyboardType="numeric"
-              maxLength={4}
-              secureTextEntry
-              value={newPinInput}
-              onChangeText={setNewPinInput}
-            />
-
-            <View style={styles.pinModalActions}>
-              <TouchableOpacity
-                style={[styles.pinCancelBtn, { borderColor: theme.borderSoft }]}
-                onPress={() => setShowPinModal(false)}
-              >
-                <Text style={{ color: theme.muted, fontWeight: '700' }}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pinSaveBtn, { backgroundColor: theme.primary }]}
-                onPress={handleSavePin}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>SAVE PIN</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <PinSetupModal
+        visible={pinSetupMode !== null}
+        mode={pinSetupMode || 'create'}
+        storedPin={securityPin}
+        onCancel={() => setPinSetupMode(null)}
+        onComplete={pinHash => {
+          setAppLockPin(pinHash);
+          setPinSetupMode(null);
+        }}
+      />
     </View>
   );
 };
@@ -534,6 +396,12 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 12,
     fontWeight: '800',
+  },
+  toolbarCaption: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginRight: 8,
   },
   headerBottomRow: {
     flexDirection: 'row',

@@ -1,0 +1,17 @@
+# Cloudflare Workers Free plan: 100,000 requests/day, no paid add-ons used.
+name = "dailyhisab-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Firebase project whose ID tokens are accepted (from google-services.json).
+FIREBASE_PROJECT_ID = "taskmanager-bbf73"
+
+# Optional per-user throttle. Uncomment if the Rate Limiting binding is available on
+# your plan; the worker uses it when present and skips it otherwise.
+# [[ratelimits]]
+# name = "AI_RATE_LIMITER"
+# namespace_id = "1001"
+#   [ratelimits.simple]
+#   limit = 20
+#   period = 60

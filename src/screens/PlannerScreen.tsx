@@ -16,6 +16,7 @@ import { BillCalendarEvent, CreditCard, FinanceInsight, HisabState, SavingsGoal 
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon, IconName } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { confirmDelete } from '../utils/confirm';
 
 type PlannerSection = 'calendar' | 'goals' | 'recurring' | 'cards' | 'split';
 
@@ -491,7 +492,7 @@ export const PlannerScreen = React.memo(function PlannerScreen({
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        onPress={() => removeGoal(goal.id)}
+                        onPress={() => confirmDelete(`goal "${goal.name}"`, () => removeGoal(goal.id))}
                         activeOpacity={0.8}
                         style={[styles.deleteIconBtn, { backgroundColor: theme.dangerSoft, borderColor: theme.danger }]}
                       >
@@ -579,7 +580,7 @@ export const PlannerScreen = React.memo(function PlannerScreen({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={() => removeRecurring(rule.id)}
+                      onPress={() => confirmDelete(`recurring payment "${rule.title}"`, () => removeRecurring(rule.id))}
                       activeOpacity={0.8}
                       style={[styles.deleteIconBtn, { backgroundColor: theme.dangerSoft, borderColor: theme.danger }]}
                     >
@@ -697,7 +698,7 @@ export const PlannerScreen = React.memo(function PlannerScreen({
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        onPress={() => removeCreditCard(card.id)}
+                        onPress={() => confirmDelete(`card "${card.name}"`, () => removeCreditCard(card.id))}
                         activeOpacity={0.8}
                         style={[styles.deleteIconBtn, { backgroundColor: theme.dangerSoft, borderColor: theme.danger }]}
                       >

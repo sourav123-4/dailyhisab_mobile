@@ -1,5 +1,6 @@
 import { FoodMealLog, MealType } from '../types/fitness';
 import { getActiveGeminiApiKey } from './geminiAiService';
+import { geminiGenerateContent, isAiProxyAvailable } from './aiProxy';
 
 export interface FoodAnalysisResult {
   name: string;
@@ -181,23 +182,12 @@ const FOOD_DATABASE: NutritionItem[] = [
 ];
 
 /**
- * Intelligent Text Parser: Computes exact macro & calorie breakdown from meal name / text.
+ * Offline nutrition lookup from the built-in food list. Returns null when nothing in the text is a
+ * known food, rather than guessing numbers.
  */
-export function analyzeFoodFromName(inputQuery: string): FoodAnalysisResult {
+export function analyzeFoodFromName(inputQuery: string): FoodAnalysisResult | null {
   const clean = inputQuery.trim().toLowerCase();
-  if (!clean) {
-    return {
-      name: 'Custom Fitness Meal',
-      portion: '1 serving',
-      calories: 350,
-      protein: 25,
-      carbs: 40,
-      fats: 10,
-      confidenceScore: 70,
-      detectedItems: ['Custom entry'],
-      healthNote: 'Balanced athletic meal estimate.',
-    };
-  }
+  if (!clean) return null;
 
   // Detect quantity multipliers (e.g. "200g chicken", "3 eggs", "2 rotis", "2 cups")
   let multiplier = 1.0;
@@ -226,28 +216,7 @@ export function analyzeFoodFromName(inputQuery: string): FoodAnalysisResult {
     }
   }
 
-  if (matchedItems.length === 0) {
-    // Fallback: sports science heuristic based on generic query length and food clues
-    const isProteinHeavy = clean.includes('meat') || clean.includes('fish') || clean.includes('shake') || clean.includes('protein') || clean.includes('paneer');
-    const isCarbHeavy = clean.includes('rice') || clean.includes('bread') || clean.includes('noodle') || clean.includes('roti') || clean.includes('sugar');
-
-    const protein = Math.round(isProteinHeavy ? 35 * multiplier : 18 * multiplier);
-    const carbs = Math.round(isCarbHeavy ? 55 * multiplier : 30 * multiplier);
-    const fats = Math.round(12 * multiplier);
-    const calories = Math.round(protein * 4 + carbs * 4 + fats * 9);
-
-    return {
-      name: inputQuery.charAt(0).toUpperCase() + inputQuery.slice(1),
-      portion: `${Math.round(150 * multiplier)}g serving`,
-      calories,
-      protein,
-      carbs,
-      fats,
-      confidenceScore: 78,
-      detectedItems: [inputQuery],
-      healthNote: 'Calculated using sports science metabolic macronutrient heuristics.',
-    };
-  }
+  if (matchedItems.length === 0) return null;
 
   // Aggregate matched items
   let totalCalories = 0;
@@ -280,149 +249,149 @@ export function analyzeFoodFromName(inputQuery: string): FoodAnalysisResult {
   };
 }
 
+/** The photo was analysed and shows something other than food or drink. */
+export class NotFoodError extends Error {
+  constructor(public readonly seen: string) {
+    super('not-food');
+  }
+}
+
+/** Photo analysis needs the AI (signed in + online, or the user's own Gemini key). */
+export class FoodScanUnavailableError extends Error {}
+
+const FOOD_PHOTO_PROMPT =
+  'You are a sports nutritionist looking at a photo a user took to log what they ate.\n' +
+  'First decide whether the photo shows food or drink that a person could eat (a meal, snack, fruit, packaged food, drink). ' +
+  'People, pets, objects, screens, documents, scenery, empty plates and non-edible items are NOT food.\n' +
+  'If it is not food, reply with JSON {"isFood": false, "seen": "<what the photo shows, 2-5 words>"}.\n' +
+  'If it is food, identify each item, estimate realistic portion sizes for what is visible (Indian home portions when the dish is Indian), ' +
+  'and reply with JSON:\n' +
+  '{"isFood": true, "name": "<short dish name>", "portion": "<e.g. 1 plate (~350 g)>", "calories": <kcal>, "protein": <g>, ' +
+  '"carbs": <g>, "fats": <g>, "confidence": <0-100, how sure you are about the items and portions>, ' +
+  '"detectedItems": ["<item with amount>", ...], "healthNote": "<one short sentence about this meal for someone training>"}\n' +
+  'Calories must roughly equal protein*4 + carbs*4 + fats*9. Numbers only, no ranges.';
+
+// Fast models first: "thinking" is switched off so a scan comes back in a couple of seconds.
+const VISION_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
 /**
- * Intelligent Image Scanner: Calls Gemini Vision API if key exists,
- * otherwise leverages smart computer-vision sports heuristics and verified preset matching.
+ * Reads calories and macros from a food photo with Gemini Vision. Throws NotFoodError when the
+ * photo is not food, and FoodScanUnavailableError when the AI can't be reached; it never invents
+ * numbers for a photo it could not read.
  */
-export async function analyzeFoodFromImage(
-  imageUri: string,
-  base64Data?: string,
-  optionalPrompt?: string
-): Promise<FoodAnalysisResult> {
+export async function analyzeFoodFromImage(imageUri: string, base64Data: string): Promise<FoodAnalysisResult> {
   const apiKey = await getActiveGeminiApiKey();
+  if (!apiKey && !isAiProxyAvailable()) {
+    throw new FoodScanUnavailableError('Sign in to scan food photos.');
+  }
+  const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
-  // If Gemini API Key is configured and we have base64 data, use Gemini Vision
-  if (apiKey && base64Data) {
-    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
-    const modelCandidates = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+  for (const model of VISION_MODELS) {
+    try {
+      const response = await geminiGenerateContent(model, {
+        contents: [{ parts: [{ text: FOOD_PHOTO_PROMPT }, { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }, apiKey);
+      const rawText = response.ok ? response.data?.candidates?.[0]?.content?.parts?.[0]?.text : null;
+      if (!rawText) continue;
+      const parsed = JSON.parse(rawText);
+      if (parsed.isFood === false) throw new NotFoodError(String(parsed.seen || 'something else'));
 
-    for (const model of modelCandidates) {
+      const protein = Math.max(0, Math.round(Number(parsed.protein) || 0));
+      const carbs = Math.max(0, Math.round(Number(parsed.carbs) || 0));
+      const fats = Math.max(0, Math.round(Number(parsed.fats) || 0));
+      const calories = Math.round(Number(parsed.calories) || protein * 4 + carbs * 4 + fats * 9);
+      return {
+        name: String(parsed.name || 'Meal'),
+        portion: String(parsed.portion || '1 serving'),
+        calories,
+        protein,
+        carbs,
+        fats,
+        confidenceScore: Math.min(100, Math.max(0, Math.round(Number(parsed.confidence) || 70))),
+        detectedItems: Array.isArray(parsed.detectedItems) && parsed.detectedItems.length > 0
+          ? parsed.detectedItems.map(String)
+          : [String(parsed.name || 'Meal')],
+        imageUri,
+        healthNote: parsed.healthNote ? String(parsed.healthNote) : undefined,
+      };
+    } catch (err) {
+      if (err instanceof NotFoodError) throw err;
+      // Try the next model.
+    }
+  }
+  throw new FoodScanUnavailableError("Couldn't read this photo right now. Check your internet and try again.");
+}
+
+/** Nutrition for one of the built-in sample meals (no AI call needed). */
+export function analyzePresetMeal(preset: PresetFoodMeal): FoodAnalysisResult {
+  return {
+    name: preset.name,
+    portion: preset.portion,
+    calories: preset.calories,
+    protein: preset.protein,
+    carbs: preset.carbs,
+    fats: preset.fats,
+    confidenceScore: 100,
+    detectedItems: [preset.category, preset.name],
+    imageUri: preset.imageUri,
+    healthNote: `${preset.category} · good for ${preset.mealType}.`,
+  };
+}
+
+const FOOD_TEXT_PROMPT =
+  'You are a sports nutritionist. The user typed what they ate. If the text does not describe food or drink ' +
+  '(e.g. objects, people, random words), reply with JSON {"isFood": false, "seen": "<what it is, 2-5 words>"}. ' +
+  'Otherwise reply with JSON {"isFood": true, "name": "<short meal name>", "portion": "<total portion>", "calories": <kcal>, ' +
+  '"protein": <g>, "carbs": <g>, "fats": <g>, "confidence": <0-100>, "detectedItems": ["<item with amount>", ...], ' +
+  '"healthNote": "<one short sentence>"}. Use stated quantities; otherwise typical Indian home portions. ' +
+  'Calories must roughly equal protein*4 + carbs*4 + fats*9.\n\nThe user typed: ';
+
+/**
+ * Nutrition for typed food ("2 roti, dal and 100 g paneer"). Uses the AI when available, otherwise
+ * the built-in food list. Throws NotFoodError for text that isn't food and FoodScanUnavailableError
+ * when nothing could be matched.
+ */
+export async function analyzeFoodFromText(inputQuery: string): Promise<FoodAnalysisResult> {
+  const query = inputQuery.trim().slice(0, 300);
+  const apiKey = await getActiveGeminiApiKey();
+  if (query && (apiKey || isAiProxyAvailable())) {
+    for (const model of VISION_MODELS) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey,
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text:
-                        'You are an elite sports nutrition scientist and fitness AI analyzing a real meal photo clicked by an athlete.\n' +
-                        'Inspect the visual image thoroughly:\n' +
-                        '1. Identify all food items, dishes, meats, grains, vegetables, and drinks visible in the photo.\n' +
-                        '2. Estimate the realistic portion weight (e.g. "200g chicken + 150g rice + salad").\n' +
-                        '3. Calculate precise nutrition values:\n' +
-                        '   - calories (total energy in kcal)\n' +
-                        '   - protein (grams of protein)\n' +
-                        '   - carbs (grams of total carbohydrates)\n' +
-                        '   - fats (grams of total dietary fats)\n' +
-                        '   Ensure calories roughly match (protein * 4 + carbs * 4 + fats * 9).\n' +
-                        '4. Provide a confidence score (between 85 and 99).\n' +
-                        '5. Output STRICT JSON ONLY with exact keys:\n' +
-                        '{\n' +
-                        '  "name": "Title of the primary dish/meal",\n' +
-                        '  "portion": "Estimated portion (e.g. 1 bowl / 300g)",\n' +
-                        '  "calories": 485,\n' +
-                        '  "protein": 42,\n' +
-                        '  "carbs": 50,\n' +
-                        '  "fats": 12,\n' +
-                        '  "confidenceScore": 95,\n' +
-                        '  "detectedItems": ["Item 1", "Item 2", "Item 3"],\n' +
-                        '  "healthNote": "Sports nutrition summary (e.g. High protein meal ideal for muscle repair)"\n' +
-                        '}',
-                    },
-                    {
-                      inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: cleanBase64,
-                      },
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                responseMimeType: 'application/json',
-                temperature: 0.2,
-              },
-            }),
-          }
-        );
-
-        if (response.ok) {
-          const json = await response.json();
-          const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = JSON.parse(rawText);
-            const cal = Math.round(Number(parsed.calories)) || 450;
-            const prot = Math.round(Number(parsed.protein)) || 35;
-            const carb = Math.round(Number(parsed.carbs)) || 40;
-            const fat = Math.round(Number(parsed.fats)) || 12;
-            return {
-              name: parsed.name || 'Scanned Meal',
-              portion: parsed.portion || '1 serving (~280g)',
-              calories: cal,
-              protein: prot,
-              carbs: carb,
-              fats: fat,
-              confidenceScore: Math.min(99, Math.max(82, Number(parsed.confidenceScore) || 94)),
-              detectedItems: Array.isArray(parsed.detectedItems) && parsed.detectedItems.length > 0
-                ? parsed.detectedItems
-                : [parsed.name || 'Macro-Balanced Meal'],
-              imageUri,
-              healthNote: parsed.healthNote || 'AI Vision analyzed photo and calculated caloric density.',
-            };
-          }
-        }
+        const response = await geminiGenerateContent(model, {
+          contents: [{ parts: [{ text: FOOD_TEXT_PROMPT + JSON.stringify(query) }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+        }, apiKey);
+        const rawText = response.ok ? response.data?.candidates?.[0]?.content?.parts?.[0]?.text : null;
+        if (!rawText) continue;
+        const parsed = JSON.parse(rawText);
+        if (parsed.isFood === false) throw new NotFoodError(String(parsed.seen || 'not a food'));
+        const protein = Math.max(0, Math.round(Number(parsed.protein) || 0));
+        const carbs = Math.max(0, Math.round(Number(parsed.carbs) || 0));
+        const fats = Math.max(0, Math.round(Number(parsed.fats) || 0));
+        return {
+          name: String(parsed.name || query),
+          portion: String(parsed.portion || '1 serving'),
+          calories: Math.round(Number(parsed.calories) || protein * 4 + carbs * 4 + fats * 9),
+          protein,
+          carbs,
+          fats,
+          confidenceScore: Math.min(100, Math.max(0, Math.round(Number(parsed.confidence) || 70))),
+          detectedItems: Array.isArray(parsed.detectedItems) && parsed.detectedItems.length ? parsed.detectedItems.map(String) : [query],
+          healthNote: parsed.healthNote ? String(parsed.healthNote) : undefined,
+        };
       } catch (err) {
-        console.warn(`Vision model ${model} attempt failed:`, err);
+        if (err instanceof NotFoodError) throw err;
       }
     }
   }
-
-  // Check if image matches any of our presets
-  const matchedPreset = PRESET_FITNESS_MEALS.find((m) => m.imageUri === imageUri);
-  if (matchedPreset) {
-    return {
-      name: matchedPreset.name,
-      portion: matchedPreset.portion,
-      calories: matchedPreset.calories,
-      protein: matchedPreset.protein,
-      carbs: matchedPreset.carbs,
-      fats: matchedPreset.fats,
-      confidenceScore: 98,
-      detectedItems: [matchedPreset.category, matchedPreset.name],
-      imageUri,
-      healthNote: `Verified ${matchedPreset.category} profile. Ideal for ${matchedPreset.mealType.toUpperCase()}.`,
-    };
-  }
-
-  // If prompt was passed with image (e.g. user typed a hint)
-  if (optionalPrompt && optionalPrompt.trim().length > 1) {
-    const result = analyzeFoodFromName(optionalPrompt);
-    return {
-      ...result,
-      imageUri,
-      confidenceScore: 92,
-      healthNote: 'Identified via photo visual cues and user description.',
-    };
-  }
-
-  // Default smart visual scan analysis (simulated high-accuracy fitness meal scan)
-  return {
-    name: 'Macro-Balanced Fitness Meal',
-    portion: '1 plate (~280g)',
-    calories: 460,
-    protein: 42,
-    carbs: 45,
-    fats: 11,
-    confidenceScore: 89,
-    detectedItems: ['Lean Protein', 'Complex Carbohydrates', 'Nutritional Fiber'],
-    imageUri,
-    healthNote: 'Optical photo analysis: High protein to calorie ratio suitable for hypertrophy.',
-  };
+  const local = analyzeFoodFromName(query);
+  if (local) return local;
+  throw new FoodScanUnavailableError(
+    "Couldn't recognise that as food. Try simple names like \"2 roti, dal and curd\" or \"200 g chicken with rice\"."
+  );
 }

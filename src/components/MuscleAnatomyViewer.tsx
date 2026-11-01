@@ -11,7 +11,7 @@ import {
 import { MuscleGroup } from '../types/fitness';
 import { MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META, EXERCISES_DATABASE } from '../data/exercisesData';
 import { useAppTheme } from '../theme/appTheme';
-import { Exercise3DVideoPlayer } from './Exercise3DVideoPlayer';
+import { ExerciseVideoPlayer } from './ExerciseVideoPlayer';
 
 interface MuscleAnatomyViewerProps {
   selectedMuscle: MuscleGroup;
@@ -97,7 +97,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
         <View style={styles.titleRow}>
           <View style={[styles.pulseDot, { backgroundColor: activeMeta.color }]} />
           <View>
-            <Text style={[styles.title, { color: theme.text }]}>3D Interactive Anatomy</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Exercise demo</Text>
             <Text style={[styles.activeMuscleLabel, { color: activeMeta.color }]}>
               {activeMeta.title.toUpperCase()} · ATLAS
             </Text>
@@ -119,7 +119,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
                 { color: viewMode === 'motion' ? '#fff' : theme.muted },
               ]}
             >
-              ⚡ 3D Motion
+              ▶ Demo
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -145,9 +145,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
       {/* Main Viewport Display: 3D Human Video or Map */}
       {viewMode === 'motion' ? (
         <View style={styles.motionStage}>
-          <Exercise3DVideoPlayer
-            exercise={representativeExercise}
-          />
+          <ExerciseVideoPlayer exercise={representativeExercise} compact />
         </View>
       ) : (
         <View style={styles.imageContainer}>

@@ -97,6 +97,8 @@ if (app) {
   try {
     firestoreInstance = initializeFirestore(app, {
       experimentalForceLongPolling: true,
+      // Optional fields such as `notes` are often undefined; without this setDoc rejects the whole record.
+      ignoreUndefinedProperties: true,
     });
   } catch {
     try {

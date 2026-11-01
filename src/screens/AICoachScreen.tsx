@@ -14,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
@@ -22,9 +21,11 @@ import { useAppTheme } from '../theme/appTheme';
 import { AIChatMessage } from '../types/fitness';
 import {
   getActiveGeminiApiKey,
+  isGeminiConfigured,
   saveGeminiApiKey,
   clearGeminiApiKey,
 } from '../services/geminiAiService';
+import { isAiProxyAvailable } from '../services/aiProxy';
 
 function TypingBubble({ theme }: { theme: any }) {
   const dot1 = useRef(new Animated.Value(0)).current;
@@ -82,8 +83,19 @@ function TypingBubble({ theme }: { theme: any }) {
   );
 }
 
+// AI replies use **bold** and leading "* " / "- " bullets; show them as formatting, not symbols.
+function renderInlineMarkdown(text: string) {
+  const normalized = text.replace(/^[ \t]*[*-][ \t]+/gm, '• ');
+  return normalized.split(/(\*\*[^*]+\*\*)/g).map((part, idx) =>
+    part.startsWith('**') && part.endsWith('**') && part.length > 4 ? (
+      <Text key={idx} style={{ fontWeight: '800' }}>{part.slice(2, -2)}</Text>
+    ) : (
+      part
+    )
+  );
+}
+
 export const AICoachScreen = () => {
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const navigation = useNavigation<any>();
   const { setAppMode } = useAppMode();
@@ -137,15 +149,16 @@ export const AICoachScreen = () => {
   }, [aiChatHistory.length]);
 
   const checkActiveKey = async () => {
+    // Only a personal key is ever shown in the input; the app's key lives server-side.
     const k = await getActiveGeminiApiKey();
-    setHasConfiguredKey(!!k && k.length > 5);
+    setHasConfiguredKey(await isGeminiConfigured());
     if (k) setGeminiKeyInput(k);
   };
 
   const handleSaveGeminiKey = async () => {
     if (!geminiKeyInput.trim()) {
       await clearGeminiApiKey();
-      setHasConfiguredKey(false);
+      setHasConfiguredKey(isAiProxyAvailable());
       setShowKeyModal(false);
       Alert.alert('Key Removed', 'Using TitanAI default sports physiology engine.');
       return;
@@ -200,7 +213,7 @@ export const AICoachScreen = () => {
           ]}
         >
           <Text style={[styles.msgText, { color: isUser ? '#FFFFFF' : theme.text }]}>
-            {item.text}
+            {renderInlineMarkdown(item.text)}
           </Text>
           <Text style={[styles.msgTime, { color: isUser ? 'rgba(255,255,255,0.7)' : theme.muted }]}>
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -216,15 +229,10 @@ export const AICoachScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Clean Screen Header without Daily Hisab top row */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
+      {/* Toolbar under the shared TitanFit header */}
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: 10 }]}>
         <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>
-              SPORTS SCIENCE & HYPERTROPHY
-            </Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>TitanAI Coach</Text>
-          </View>
+          <Text style={[styles.toolbarCaption, { color: theme.muted }]} numberOfLines={1}>Training, form & diet answers</Text>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
@@ -236,13 +244,13 @@ export const AICoachScreen = () => {
               onPress={() => setShowKeyModal(true)}
             >
               <Text style={[styles.modelBadgeText, { color: hasConfiguredKey ? '#00E5FF' : theme.accent, fontWeight: '800' }]}>
-                {hasConfiguredKey ? '✨ PRO AI' : '⚙️ AI KEY'}
+                {hasConfiguredKey ? '⚙️ AI settings' : '⚙️ Set up AI'}
               </Text>
             </TouchableOpacity>
 
             <View style={[styles.aiStatusBadge, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-              <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
-              <Text style={[styles.aiStatusText, { color: theme.text }]}>AI Active</Text>
+              <View style={[styles.statusDot, { backgroundColor: hasConfiguredKey ? '#10B981' : '#F59E0B' }]} />
+              <Text style={[styles.aiStatusText, { color: theme.text }]}>{hasConfiguredKey ? 'AI online' : 'Offline tips'}</Text>
             </View>
           </View>
         </View>
@@ -292,7 +300,8 @@ export const AICoachScreen = () => {
           {
             backgroundColor: theme.surface,
             borderTopColor: theme.borderSoft,
-            paddingBottom: 12,
+            // Clears the tab bar's raised Start button, which overlaps the bottom of this screen.
+            paddingBottom: 38,
             marginBottom: 0,
           },
         ]}
@@ -433,6 +442,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
+  },
+  toolbarCaption: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginRight: 8,
   },
   headerBottomRow: {
     flexDirection: 'row',

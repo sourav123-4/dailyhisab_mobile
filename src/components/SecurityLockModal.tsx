@@ -1,6 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../theme/appTheme';
+import { PinPad, usePinEntry } from './PinPad';
+import {
+  attemptsLeftMessage,
+  formatLockout,
+  getPinFailureCount,
+  getPinLockoutRemaining,
+  hashPin,
+  isPinHash,
+  recordPinFailure,
+  resetPinFailures,
+  verifyPin,
+} from '../services/appLock';
 
 const localAuthModule = (() => {
   try {
@@ -19,193 +31,163 @@ export function SecurityLockModal({
   storedPin,
   biometricEnabled,
   onUnlock,
+  onPinUpgrade,
+  onResetLock,
+  onEraseAndSignOut,
 }: {
   visible: boolean;
   storedPin?: string;
   biometricEnabled?: boolean;
   onUnlock: () => void;
+  /** Re-saves a pre-hash plain-text PIN in hashed form after it is entered correctly. */
+  onPinUpgrade: (pinHash: string) => void;
+  /** Turns the lock off after the phone's own screen lock confirmed the owner. */
+  onResetLock: () => void;
+  /** Last resort for a forgotten PIN on a phone with no screen lock. */
+  onEraseAndSignOut: () => void;
 }) {
   const theme = useAppTheme();
-  const [pin, setPin] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [lockoutMs, setLockoutMs] = useState(0);
+  const { value: pin, onDigit, onBackspace, clear: clearPin } = usePinEntry(entered => {
+    setErrorMsg('');
+    submitPin(entered);
+  }, busy || lockoutMs > 0);
 
-  const triggerBiometric = async (isManualTap = false) => {
+  const refreshLockout = useCallback(async () => {
+    const remaining = await getPinLockoutRemaining();
+    setLockoutMs(remaining);
+    return remaining;
+  }, []);
+
+  // Count down an active lockout once per second; no timer runs otherwise.
+  useEffect(() => {
+    if (!visible || lockoutMs <= 0) return;
+    const timer = setTimeout(refreshLockout, Math.min(1000, lockoutMs));
+    return () => clearTimeout(timer);
+  }, [visible, lockoutMs, refreshLockout]);
+
+  const triggerBiometric = useCallback(async (isManualTap = false) => {
     try {
       if (!localAuthModule) {
-        if (isManualTap) setErrorMsg('Biometrics unavailable on this device. Enter PIN.');
+        if (isManualTap) setErrorMsg('Biometrics are unavailable on this device. Enter your PIN.');
         return;
       }
-      const hasHardware = await localAuthModule.hasHardwareAsync();
-      const isEnrolled = await localAuthModule.isEnrolledAsync();
+      const [hasHardware, isEnrolled] = await Promise.all([localAuthModule.hasHardwareAsync(), localAuthModule.isEnrolledAsync()]);
       if (!hasHardware || !isEnrolled) {
-        if (isManualTap) {
-          setErrorMsg('No fingerprint enrolled. Enter 4-digit PIN (default: 1234).');
-        }
+        if (isManualTap) setErrorMsg('No fingerprint or face is enrolled on this phone. Enter your PIN.');
         return;
       }
-      setIsAuthenticating(true);
-      setStatusMessage('Verifying Biometrics & Decrypting...');
+      setBusy(true);
       const res = await localAuthModule.authenticateAsync({
-        promptMessage: 'Unlock Daily Hisab & TitanFit',
+        promptMessage: 'Unlock Wellth',
         fallbackLabel: 'Use PIN',
         disableDeviceFallback: false,
       });
       if (res?.success) {
-        setStatusMessage('Access Granted. Loading Dashboard...');
-        setPin('');
+        clearPin();
         setErrorMsg('');
-        setTimeout(() => {
-          onUnlock();
-          setIsAuthenticating(false);
-          setStatusMessage('');
-        }, 150);
-      } else {
-        setIsAuthenticating(false);
-        setStatusMessage('');
+        await resetPinFailures();
+        onUnlock();
       }
     } catch {
-      setIsAuthenticating(false);
-      setStatusMessage('');
+      // A cancelled or failed prompt simply leaves the PIN pad available.
+    } finally {
+      setBusy(false);
     }
-  };
+  }, [onUnlock, clearPin]);
 
   useEffect(() => {
-    if (visible && biometricEnabled !== false) {
-      triggerBiometric();
-    }
-  }, [visible, biometricEnabled]);
+    if (!visible) return;
+    clearPin();
+    setErrorMsg('');
+    refreshLockout().then(remaining => {
+      if (remaining <= 0 && biometricEnabled !== false) triggerBiometric();
+    });
+  }, [visible, biometricEnabled, refreshLockout, triggerBiometric, clearPin]);
 
-  const handleKeyPress = (num: string) => {
-    if (isAuthenticating) return;
-    if (pin.length < 4) {
-      const nextPin = pin + num;
-      setPin(nextPin);
-      setErrorMsg('');
-      if (nextPin.length === 4) {
-        if (nextPin === storedPin || nextPin === '1234' || !storedPin) {
-          setIsAuthenticating(true);
-          setStatusMessage('PIN Verified. Decrypting Data...');
-          setPin('');
-          setTimeout(() => {
-            onUnlock();
-            setIsAuthenticating(false);
-            setStatusMessage('');
-          }, 150);
-        } else {
-          setErrorMsg('Incorrect PIN. Try again.');
-          setPin('');
-        }
+  const submitPin = async (entered: string) => {
+    setBusy(true);
+    try {
+      if ((await refreshLockout()) > 0) return;
+      if (await verifyPin(entered, storedPin)) {
+        await resetPinFailures();
+        if (!isPinHash(storedPin)) onPinUpgrade(await hashPin(entered));
+        setErrorMsg('');
+        onUnlock();
+        return;
       }
+      const nextLockout = await recordPinFailure();
+      setLockoutMs(nextLockout);
+      setErrorMsg(nextLockout ? '' : attemptsLeftMessage(await getPinFailureCount()));
+    } finally {
+      clearPin();
+      setBusy(false);
     }
   };
 
-  const handleBackspace = () => {
-    if (isAuthenticating) return;
-    if (pin.length > 0) {
-      setPin(pin.slice(0, -1));
-      setErrorMsg('');
+  const handleForgotPin = async () => {
+    const level = localAuthModule ? await localAuthModule.getEnrolledLevelAsync().catch(() => 0) : 0;
+    if (level > 0) {
+      const res = await localAuthModule.authenticateAsync({
+        promptMessage: "Confirm it's you to reset the app PIN",
+        disableDeviceFallback: false,
+      }).catch(() => null);
+      if (res?.success) {
+        await resetPinFailures();
+        onResetLock();
+      }
+      return;
     }
+    Alert.alert(
+      'Reset app lock',
+      "This phone has no screen lock, so Wellth can't confirm it's you. You can sign out and erase this app's data on this phone. Records synced to your account return when you sign in again; offline-only records will be lost.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out & erase', style: 'destructive', onPress: onEraseAndSignOut },
+      ],
+    );
   };
 
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent={false}
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={() => {}}
-    >
+    <Modal visible={visible} transparent={false} animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
       <View style={[styles.overlay, { backgroundColor: theme.bg }]}>
         <View style={styles.lockContainer}>
           <View style={[styles.iconCircle, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}>
             <Text style={styles.lockIcon}>🔒</Text>
           </View>
-          <Text style={[styles.title, { color: theme.text }]}>Daily Hisab & TitanFit Locked</Text>
-          <Text style={[styles.subtitle, { color: theme.muted }]}>Enter 4-digit PIN or use Biometrics</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Wellth is locked</Text>
+          <Text style={[styles.subtitle, { color: theme.muted }]}>
+            {biometricEnabled !== false ? 'Enter your PIN or use biometrics' : 'Enter your PIN'}
+          </Text>
 
-          <View style={styles.dotsRow}>
-            {[0, 1, 2, 3].map(index => (
-              <View
-                key={index}
-                style={[
-                  styles.dot,
-                  { borderColor: theme.border },
-                  pin.length > index && { backgroundColor: theme.primary, borderColor: theme.primary },
-                ]}
-              />
-            ))}
+          <PinPad
+            value={pin}
+            onDigit={onDigit}
+            onBackspace={onBackspace}
+            disabled={busy || lockoutMs > 0}
+            leftKey={biometricEnabled !== false ? { icon: '👆', accessibilityLabel: 'Unlock with biometrics', onPress: () => triggerBiometric(true) } : undefined}
+          />
+
+          <View style={styles.statusRow}>
+            {busy ? <ActivityIndicator size="small" color={theme.primary} /> : null}
+            {lockoutMs > 0 ? (
+              <Text style={[styles.errorText, { color: theme.danger }]}>Too many wrong attempts. Try again in {formatLockout(lockoutMs)}.</Text>
+            ) : errorMsg ? (
+              <Text style={[styles.errorText, { color: theme.danger }]}>{errorMsg}</Text>
+            ) : null}
           </View>
 
-          {isAuthenticating ? (
-            <View style={[styles.loadingBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-              <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.loadingText, { color: theme.text }]}>
-                {statusMessage || 'Verifying credentials...'}
-              </Text>
-            </View>
-          ) : null}
-
-          {errorMsg ? <Text style={[styles.errorText, { color: theme.danger }]}>{errorMsg}</Text> : null}
-
-        <View style={styles.keypad}>
-          {[
-            ['1', '2', '3'],
-            ['4', '5', '6'],
-            ['7', '8', '9'],
-          ].map((row, rIdx) => (
-            <View key={rIdx} style={styles.keyRow}>
-              {row.map(num => (
-                <TouchableOpacity
-                  key={num}
-                  style={[styles.keyButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                  onPress={() => handleKeyPress(num)}
-                  delayPressIn={0}
-                  activeOpacity={0.4}
-                  accessibilityLabel={`Key ${num}`}
-                >
-                  <Text style={[styles.keyText, { color: theme.text }]}>{num}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-          <View style={styles.keyRow}>
-            <TouchableOpacity
-              style={[styles.keyButtonSpecial, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
-              onPress={() => triggerBiometric(true)}
-              delayPressIn={0}
-              activeOpacity={0.4}
-              accessibilityLabel="Biometric Unlock"
-            >
-              <Text style={[styles.specialIcon, { color: theme.muted }]}>👆</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.keyButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => handleKeyPress('0')}
-              delayPressIn={0}
-              activeOpacity={0.4}
-              accessibilityLabel="Key 0"
-            >
-              <Text style={[styles.keyText, { color: theme.text }]}>0</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.keyButtonSpecial, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
-              onPress={handleBackspace}
-              delayPressIn={0}
-              activeOpacity={0.4}
-              accessibilityLabel="Backspace"
-            >
-              <Text style={[styles.specialIcon, { color: theme.muted }]}>⌫</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={handleForgotPin} disabled={busy} accessibilityRole="button" hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}>
+            <Text style={[styles.forgotText, { color: theme.primary }]}>Forgot PIN?</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -233,47 +215,7 @@ const styles = StyleSheet.create({
   lockIcon: { fontSize: 25 },
   title: { fontSize: 22, lineHeight: 28, fontWeight: '900', marginBottom: 6, textAlign: 'center' },
   subtitle: { fontSize: 12.5, lineHeight: 17, fontWeight: '700', marginBottom: 24, textAlign: 'center' },
-  dotsRow: { flexDirection: 'row', gap: 14, marginBottom: 16 },
-  loadingBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 8,
-    marginBottom: 16,
-  },
-  loadingText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  errorText: { fontWeight: '800', marginBottom: 12 },
-  keypad: { width: '100%', gap: 12, marginTop: 8 },
-  keyRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  keyButton: {
-    width: 88,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyButtonSpecial: {
-    width: 88,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyText: { fontSize: 22, fontWeight: '800' },
-  specialIcon: { fontSize: 20 },
+  statusRow: { minHeight: 40, marginTop: 14, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  errorText: { fontSize: 12.5, fontWeight: '800', textAlign: 'center' },
+  forgotText: { fontSize: 13.5, fontWeight: '800', marginTop: 4 },
 });

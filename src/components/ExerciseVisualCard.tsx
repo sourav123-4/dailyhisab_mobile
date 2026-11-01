@@ -58,12 +58,12 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
             resizeMode="cover"
           />
 
-          <View style={styles.playOverlayBadge}>
-            <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
-            <Text style={styles.playOverlayText}>
-              {exercise.videoUrl || exercise.youtubeId ? 'HD VIDEO' : '3D VIDEO'}
-            </Text>
-          </View>
+          {localMedia ? (
+            <View style={styles.playOverlayBadge}>
+              <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
+              <Text style={styles.playOverlayText}>DEMO</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Exercise Information */}
@@ -74,9 +74,9 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
                 {exercise.muscleGroup.toUpperCase()}
               </Text>
             </View>
-            <View style={[styles.badge, { backgroundColor: 'rgba(0, 229, 255, 0.12)' }]}>
-              <Text style={[styles.badgeText, { color: theme.accent }]}>
-                ⚡ 3D HUMAN
+            <View style={[styles.badge, { backgroundColor: theme.surfaceAlt }]}>
+              <Text style={[styles.badgeText, { color: theme.muted }]}>
+                {exercise.equipment.toUpperCase()}
               </Text>
             </View>
           </View>

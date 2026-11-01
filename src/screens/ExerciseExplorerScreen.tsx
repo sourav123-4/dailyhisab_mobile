@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
@@ -29,7 +28,6 @@ const muscleCategories: { id: MuscleGroup; label: string; emoji: string }[] = [
 ];
 
 export const ExerciseExplorerScreen = () => {
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
   const { exercises, addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
@@ -75,22 +73,6 @@ export const ExerciseExplorerScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Two-Tier Dashboard Header */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
-        {/* Clean Screen Header without Daily Hisab top row */}
-        <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>3D MUSCULOSKELETAL ATLAS</Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>Anatomy & Biomechanics</Text>
-          </View>
-          <View style={[styles.badgePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.badgePillText, { color: theme.primary }]}>
-              {filteredExercises.length} Drills
-            </Text>
-          </View>
-        </View>
-      </View>
-
       <FlatList
         data={filteredExercises}
         keyExtractor={(item) => item.id}

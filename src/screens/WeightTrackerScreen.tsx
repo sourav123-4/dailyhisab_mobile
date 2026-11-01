@@ -13,17 +13,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
 import { WeightTrendChart } from '../components/WeightTrendChart';
 import { MacroPlanModal } from '../components/MacroPlanModal';
 import { FoodScannerModal } from '../components/FoodScannerModal';
+import { BodyStatsCard } from '../components/BodyStatsCard';
 import { MealType, WeightGoal } from '../types/fitness';
 
 export const WeightTrackerScreen = () => {
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
   const {
@@ -123,13 +122,10 @@ export const WeightTrackerScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Clean Screen Header without Daily Hisab top row */}
-      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: Math.max(insets.top, 14) }]}>
+      {/* Toolbar under the shared TitanFit header */}
+      <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: 10 }]}>
         <View style={styles.headerBottomRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.greetingText, { color: theme.muted }]}>BODY COMPOSITION & MACROS</Text>
-            <Text style={[styles.mainHeading, { color: theme.text }]}>Weight & Nutrition</Text>
-          </View>
+          <Text style={[styles.toolbarCaption, { color: theme.muted }]} numberOfLines={1}>Weight, meals & macros</Text>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
@@ -193,6 +189,8 @@ export const WeightTrackerScreen = () => {
             })}
           </View>
         </View>
+
+        <BodyStatsCard style={{ marginHorizontal: 0 }} />
 
         {/* Weight Trend Progress Chart */}
         <WeightTrendChart
@@ -683,6 +681,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '800',
+  },
+  toolbarCaption: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginRight: 8,
   },
   headerBottomRow: {
     flexDirection: 'row',

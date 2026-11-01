@@ -1,17 +1,12 @@
 {
   "expo": {
-    "name": "DailyPulse AI",
+    "name": "Wellth",
     "slug": "dailyhisab",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "dailyhisab",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#080B12"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dailyhisab.mobile",
@@ -28,24 +23,38 @@
         "RECORD_AUDIO"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#080B12",
+        "backgroundColor": "#0F172A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "splash": {
-        "image": "./assets/splash.png",
-        "resizeMode": "cover",
-        "backgroundColor": "#080B12"
-      },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0F172A"
+        }
+      ],
       "@react-native-google-signin/google-signin",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false,
+          "microphonePermission": "DailyHisab uses microphone for voice-assisted hisab financial entries and workout logging."
+        }
+      ],
       "expo-asset",
       "@react-native-community/datetimepicker",
       [
@@ -54,7 +63,22 @@
           "photosPermission": "TitanFit needs access to your photo library to select food and meal photos for macro calculation.",
           "cameraPermission": "TitanFit needs access to your camera to take photos of your meals to calculate calories, protein, carbs and fats."
         }
-      ]
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Wellth uses Face ID to unlock your private finance and fitness data."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Wellth uses the camera to scan UPI QR codes and photograph meals.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "./plugins/withUpiAppQueries",
+      "expo-video"
     ]
   }
 }
