@@ -54,6 +54,15 @@ export type SalaryRecord = {
   status: 'credited' | 'pending';
 };
 
+export type DebtPayment = {
+  id: string;
+  date: string;
+  amount: number;
+  note?: string;
+  /** Ledger entry created for this payment, removed again if the payment is deleted. */
+  txId?: string;
+};
+
 export type DebtRecord = {
   id: string;
   personName: string;
@@ -64,6 +73,10 @@ export type DebtRecord = {
   dueDate?: string;
   notes?: string;
   status: DebtStatus;
+  /** Ledger entry for the original lend/borrow, kept in step when the record is edited. */
+  txId?: string;
+  /** Individual repayments; older records only have settledAmount. */
+  payments?: DebtPayment[];
 };
 
 export type RecurringRule = {

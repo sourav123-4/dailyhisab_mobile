@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -14,12 +13,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { AppIcon } from '../components/AppIcon';
 import { Button, DatePickerField, Field, money, SelectField } from '../components/UI';
 import { useAppTheme } from '../theme/appTheme';
 import { HisabState, Transaction, TxType } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { MonthSwitcher } from '../components/MonthSwitcher';
 import { formatRecordDate, localDateISO, localMonthISO } from '../utils/date';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 function getCategoryVisual(category: string, type: string, isDark: boolean) {
   const isIncome =
@@ -237,7 +239,13 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
                 },
               ]}
             >
+              <AppIcon
+                name="planner"
+                size={10}
+                color={dateInfo.isToday ? (theme.dark ? '#6ee7b7' : '#15803d') : dateInfo.isYesterday ? (theme.dark ? '#a5b4fc' : '#4338ca') : (theme.dark ? '#94a3b8' : '#64748b')}
+              />
               <Text
+                numberOfLines={1}
                 style={[
                   styles.datePillText,
                   {
@@ -250,7 +258,7 @@ const TransactionRowCard = React.memo(function TransactionRowCard({
                   },
                 ]}
               >
-                📅 {dateInfo.label}
+                {dateInfo.label}
               </Text>
             </View>
           </View>
@@ -348,6 +356,8 @@ export const HisabScreen = React.memo(function HisabScreen({
   removeTransaction,
   parseHisab,
   currentMonth,
+  shiftMonth,
+  setMonth,
   categoryFilter = 'all',
   typeFilter = 'all',
   filterTrigger = 0,
@@ -356,6 +366,8 @@ export const HisabScreen = React.memo(function HisabScreen({
   state: HisabState;
   txs: Transaction[];
   currentMonth?: string;
+  shiftMonth?: (delta: number) => void;
+  setMonth?: (monthYear: string) => void;
   quickText: string;
   setQuickText: (text: string) => void;
   form: any;
@@ -380,6 +392,7 @@ export const HisabScreen = React.memo(function HisabScreen({
   onSelectCategory?: (category: string, type?: string) => void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { setActiveModalOpen, setPhonePeModalOpen } = useHisabApp();
 
   // Filters State
@@ -747,6 +760,10 @@ export const HisabScreen = React.memo(function HisabScreen({
           </TouchableOpacity>
         </View>
       </View>
+
+      {shiftMonth && setMonth ? (
+        <MonthSwitcher month={currentMonthYear} onShift={shiftMonth} onSelect={setMonth} />
+      ) : null}
 
       {/* 2. TOP 3 KPI SUMMARY CARDS - CLEAN VERTICAL STACK & NO OVERLAP */}
       <View style={styles.kpiCardsRow}>
@@ -1133,11 +1150,11 @@ export const HisabScreen = React.memo(function HisabScreen({
         visible={filterModalVisible}
         animationType="slide"
         transparent
-        statusBarTranslucent
+        statusBarTranslucent navigationBarTranslucent
         onRequestClose={() => setFilterModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalBackdrop}
         >
           <Pressable
@@ -1151,7 +1168,7 @@ export const HisabScreen = React.memo(function HisabScreen({
             style={[
               styles.filterSheetContainer,
               {
-                backgroundColor: theme.surface,
+                paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                 borderColor: theme.borderSoft || theme.border,
               },
             ]}
@@ -1419,41 +1436,10 @@ export const HisabScreen = React.memo(function HisabScreen({
                 </Text>
                 <View style={styles.modalInputsTwoCol}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalFieldSubLabel, { color: theme.subtle }]}>Start Date</Text>
-                    <View
-                      style={[
-                        styles.modalTextInputBox,
-                        { backgroundColor: theme.dark ? '#131b2e' : '#ffffff', borderColor: theme.dark ? '#1e293b' : '#e2e8f0' },
-                      ]}
-                    >
-                      <TextInput
-                        style={[styles.modalTextInput, { color: theme.text }]}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={theme.subtle}
-                        value={startDate}
-                        onChangeText={setStartDate}
-                      />
-                      <AppIcon name="planner" size={13} color={theme.subtle} />
-                    </View>
+                    <DatePickerField label="From" value={startDate} placeholder="Any date" onChange={setStartDate} />
                   </View>
-
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalFieldSubLabel, { color: theme.subtle }]}>End Date</Text>
-                    <View
-                      style={[
-                        styles.modalTextInputBox,
-                        { backgroundColor: theme.dark ? '#131b2e' : '#ffffff', borderColor: theme.dark ? '#1e293b' : '#e2e8f0' },
-                      ]}
-                    >
-                      <TextInput
-                        style={[styles.modalTextInput, { color: theme.text }]}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={theme.subtle}
-                        value={endDate}
-                        onChangeText={setEndDate}
-                      />
-                      <AppIcon name="planner" size={13} color={theme.subtle} />
-                    </View>
+                    <DatePickerField label="To" value={endDate} placeholder="Any date" onChange={setEndDate} />
                   </View>
                 </View>
               </View>
@@ -1540,14 +1526,14 @@ export const HisabScreen = React.memo(function HisabScreen({
         visible={manualModalVisible}
         animationType="slide"
         transparent
-        statusBarTranslucent
+        statusBarTranslucent navigationBarTranslucent
         onRequestClose={() => {
           cancelManualEdit();
           setManualModalVisible(false);
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalBackdrop}
         >
           <Pressable
@@ -1561,7 +1547,7 @@ export const HisabScreen = React.memo(function HisabScreen({
             style={[
               styles.modalSheet,
               {
-                backgroundColor: theme.surface,
+                paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                 borderColor: theme.borderSoft || theme.border,
               },
             ]}
@@ -2089,7 +2075,9 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontSize: 10.5,
+    lineHeight: 14,
     fontWeight: '700',
+    includeFontPadding: false,
   },
   methodPill: {
     paddingHorizontal: 6,
@@ -2098,7 +2086,9 @@ const styles = StyleSheet.create({
   },
   methodPillText: {
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: '600',
+    includeFontPadding: false,
   },
   ledgerDateText: {
     fontSize: 10.5,
@@ -2162,14 +2152,19 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   datePill: {
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
   },
   datePillText: {
     fontSize: 11,
-    letterSpacing: -0.1,
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   listEndContainer: {
     flexDirection: 'row',

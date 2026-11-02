@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -12,11 +11,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Button, Field, money } from '../components/UI';
-import { DebtRecord, HisabState } from '../types';
+import { DatePickerField } from '../components/DatePickerField';
+import { DebtPayment, DebtRecord, HisabState } from '../types';
+import { formatRecordDate, localDateISO } from '../utils/date';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 export const DebtsScreen = React.memo(function DebtsScreen({
   state,
@@ -24,6 +27,8 @@ export const DebtsScreen = React.memo(function DebtsScreen({
   setForm,
   addDebt,
   settleDebt,
+  updateDebt,
+  removeDebtPayment,
   removeDebt,
 }: {
   state: HisabState;
@@ -36,19 +41,27 @@ export const DebtsScreen = React.memo(function DebtsScreen({
     dueDate?: string;
     notes?: string;
   }) => void;
-  settleDebt: (id: string, amount: number) => void;
+  settleDebt: (id: string, amount: number, details?: { date?: string; note?: string }) => void;
+  updateDebt: (id: string, changes: { personName?: string; amount?: number | string; type?: 'lent' | 'borrowed'; dueDate?: string; notes?: string }) => void;
+  removeDebtPayment: (debtId: string, paymentId: string) => void;
   removeDebt: (id: string) => void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { setActiveModalOpen } = useHisabApp();
   const [addModalVisible, setAddModalVisible] = useState(false);
+  // null = adding a new record; otherwise the record being edited
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [paymentDebt, setPaymentDebt] = useState<DebtRecord | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ amount: '', date: localDateISO(), note: '' });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   React.useEffect(() => {
-    setActiveModalOpen(addModalVisible);
+    setActiveModalOpen(addModalVisible || !!paymentDebt);
     return () => {
       setActiveModalOpen(false);
     };
-  }, [addModalVisible, setActiveModalOpen]);
+  }, [addModalVisible, paymentDebt, setActiveModalOpen]);
 
   const [activeSubTab, setActiveSubTab] = useState<'all' | 'receive' | 'pay' | 'settled'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,6 +140,7 @@ export const DebtsScreen = React.memo(function DebtsScreen({
   }, [displayDebts, activeSubTab, searchQuery]);
 
   const openAddModal = (type: 'lent' | 'borrowed' = 'lent') => {
+    setEditingId(null);
     setDebtForm({
       personName: '',
       type,
@@ -145,27 +159,55 @@ export const DebtsScreen = React.memo(function DebtsScreen({
       return;
     }
 
-    addDebt({
-      personName: person,
-      type: debtForm.type,
-      amount: amt,
-      dueDate: debtForm.dueDate,
-      notes: debtForm.notes,
-    });
+    const record = { personName: person, type: debtForm.type, amount: amt, dueDate: debtForm.dueDate, notes: debtForm.notes };
+    if (editingId) updateDebt(editingId, record);
+    else addDebt(record);
     setAddModalVisible(false);
+    setEditingId(null);
   };
 
-  const handleSettleDebtAction = (debt: DebtRecord) => {
+  const openEditModal = (debt: DebtRecord) => {
+    setEditingId(debt.id);
+    setDebtForm({
+      personName: debt.personName,
+      type: debt.type,
+      amount: String(debt.amount),
+      dueDate: debt.dueDate || 'Anytime',
+      notes: debt.notes || '',
+    });
+    setAddModalVisible(true);
+  };
+
+  const openPaymentSheet = (debt: DebtRecord) => {
     const remaining = Math.max(0, debt.amount - (debt.settledAmount || 0));
+    setPaymentForm({ amount: String(remaining), date: localDateISO(), note: '' });
+    setPaymentDebt(debt);
+  };
+
+  const paymentRemaining = paymentDebt ? Math.max(0, paymentDebt.amount - (paymentDebt.settledAmount || 0)) : 0;
+
+  const handleSavePayment = () => {
+    if (!paymentDebt) return;
+    const amt = Number(paymentForm.amount.replace(/[^0-9.]/g, ''));
+    if (!amt || amt <= 0) {
+      Alert.alert('Enter amount', 'How much was paid?');
+      return;
+    }
+    if (amt > paymentRemaining + 0.001) {
+      Alert.alert('Too much', `Only ${money(paymentRemaining, state.currency)} is pending for ${paymentDebt.personName}.`);
+      return;
+    }
+    settleDebt(paymentDebt.id, amt, { date: paymentForm.date, note: paymentForm.note });
+    setPaymentDebt(null);
+  };
+
+  const handleRemovePayment = (debt: DebtRecord, payment: DebtPayment) => {
     Alert.alert(
-      'Settle Udhar / Debt',
-      `Mark "${debt.personName}" as fully settled (${money(remaining, state.currency)})?`,
+      'Remove this payment?',
+      `${money(payment.amount, state.currency)} on ${formatRecordDate(payment.date).label} will be removed and the pending amount goes back up.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Settle Full',
-          onPress: () => settleDebt(debt.id, remaining),
-        },
+        { text: 'Remove', style: 'destructive', onPress: () => removeDebtPayment(debt.id, payment.id) },
       ]
     );
   };
@@ -470,6 +512,8 @@ export const DebtsScreen = React.memo(function DebtsScreen({
             const isLent = debt.type === 'lent';
             const isSettled = debt.status === 'settled';
             const remaining = Math.max(0, debt.amount - (debt.settledAmount || 0));
+            const payments: DebtPayment[] =
+              debt.payments || (debt.settledAmount > 0 ? [{ id: `${debt.id}_legacy`, date: debt.date, amount: debt.settledAmount }] : []);
 
             return (
               <View
@@ -574,11 +618,28 @@ export const DebtsScreen = React.memo(function DebtsScreen({
                           { color: isSettled ? '#15803d' : '#d97706' },
                         ]}
                       >
-                        {isSettled ? 'Settled' : 'Pending'}
+                        {isSettled ? 'Settled' : debt.settledAmount > 0 ? 'Part paid' : 'Pending'}
                       </Text>
                     </View>
                   </View>
                 </View>
+
+                {/* Repayment progress */}
+                {debt.settledAmount > 0 ? (
+                  <View style={styles.progressWrap}>
+                    <View style={[styles.progressTrack, { backgroundColor: theme.surfaceAlt }]}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${Math.min(100, (debt.settledAmount / debt.amount) * 100)}%`, backgroundColor: isSettled ? '#10b981' : '#f59e0b' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.progressText, { color: theme.subtle }]}>
+                      {money(debt.settledAmount, state.currency)} of {money(debt.amount, state.currency)} {isLent ? 'received' : 'paid back'}
+                    </Text>
+                  </View>
+                ) : null}
 
                 {/* Bottom Action Strip */}
                 <View
@@ -587,21 +648,39 @@ export const DebtsScreen = React.memo(function DebtsScreen({
                     { borderTopColor: theme.borderSoft || 'rgba(148, 163, 184, 0.12)' },
                   ]}
                 >
-                  <Text style={[styles.debtOriginalText, { color: theme.subtle }]}>
-                    Total: {money(debt.amount, state.currency)}
-                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setExpandedId(expandedId === debt.id ? null : debt.id)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                  >
+                    <Text style={[styles.debtOriginalText, { color: theme.primary }]}>
+                      {payments.length ? `History (${payments.length}) ${expandedId === debt.id ? '▴' : '▾'}` : `Total: ${money(debt.amount, state.currency)}`}
+                    </Text>
+                  </TouchableOpacity>
 
                   <View style={styles.debtActionsRow}>
                     {!isSettled && (
                       <TouchableOpacity
-                        onPress={() => handleSettleDebtAction(debt)}
+                        onPress={() => openPaymentSheet(debt)}
                         style={styles.settleActionBtn}
                         activeOpacity={0.85}
                       >
                         <AppIcon name="check" size={11} color="#15803d" />
-                        <Text style={styles.settleActionBtnText}>Settle Full</Text>
+                        <Text style={styles.settleActionBtnText}>{isLent ? 'Got paid' : 'Paid back'}</Text>
                       </TouchableOpacity>
                     )}
+
+                    <TouchableOpacity
+                      onPress={() => openEditModal(debt)}
+                      style={[
+                        styles.iconOnlyActionBtn,
+                        { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft || theme.border },
+                      ]}
+                      activeOpacity={0.7}
+                      accessibilityLabel={`Edit ${debt.personName}`}
+                    >
+                      <AppIcon name="edit" size={11} color={theme.primary} />
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => handleDeleteDebtAction(debt)}
@@ -613,11 +692,39 @@ export const DebtsScreen = React.memo(function DebtsScreen({
                         },
                       ]}
                       activeOpacity={0.7}
+                      accessibilityLabel={`Delete ${debt.personName}`}
                     >
                       <AppIcon name="trash" size={11} color="#ef4444" />
                     </TouchableOpacity>
                   </View>
                 </View>
+
+                {/* Payment history */}
+                {expandedId === debt.id && payments.length > 0 ? (
+                  <View style={[styles.historyBox, { borderTopColor: theme.borderSoft || theme.border }]}>
+                    {payments.map(payment => (
+                      <View key={payment.id} style={styles.historyRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.historyAmount, { color: theme.text }]}>
+                            {money(payment.amount, state.currency)}
+                          </Text>
+                          <Text style={[styles.historyMeta, { color: theme.subtle }]} numberOfLines={1}>
+                            {formatRecordDate(payment.date).label}
+                            {payment.note ? ` · ${payment.note}` : ''}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleRemovePayment(debt, payment)}
+                          style={styles.historyRemove}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Remove this payment"
+                        >
+                          <AppIcon name="close" size={11} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             );
           })
@@ -629,11 +736,11 @@ export const DebtsScreen = React.memo(function DebtsScreen({
         visible={addModalVisible}
         animationType="slide"
         transparent
-        statusBarTranslucent
+        statusBarTranslucent navigationBarTranslucent
         onRequestClose={() => setAddModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalBackdrop}
         >
           <Pressable
@@ -644,7 +751,7 @@ export const DebtsScreen = React.memo(function DebtsScreen({
             style={[
               styles.modalSheet,
               {
-                backgroundColor: theme.surface,
+                paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                 borderColor: theme.borderSoft || theme.border,
               },
             ]}
@@ -653,7 +760,7 @@ export const DebtsScreen = React.memo(function DebtsScreen({
 
             <View style={styles.modalHeader}>
               <View>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Add Udhar Record</Text>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>{editingId ? 'Edit Udhar Record' : 'Add Udhar Record'}</Text>
                 <Text style={[styles.modalSub, { color: theme.subtle }]}>
                   Track money given to or taken from friends and family
                   </Text>
@@ -722,7 +829,7 @@ export const DebtsScreen = React.memo(function DebtsScreen({
                   value={debtForm.personName}
                   onChangeText={v => setDebtForm({ ...debtForm, personName: v })}
                   placeholder="e.g. Tapas Mamu, Rahul Sharma..."
-                  autoFocus
+                  autoFocus={!editingId}
                 />
 
                 {/* Amount */}
@@ -772,13 +879,89 @@ export const DebtsScreen = React.memo(function DebtsScreen({
 
                 <View style={{ marginTop: 16, marginBottom: 24 }}>
                   <Button
-                    label="Save Udhar Record"
+                    label={editingId ? 'Save Changes' : 'Save Udhar Record'}
                     onPress={handleSaveDebt}
                     tone="primary"
                   />
                 </View>
               </ScrollView>
             </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 6. RECORD A (PARTIAL) PAYMENT */}
+      <Modal
+        visible={!!paymentDebt}
+        animationType="slide"
+        transparent
+        statusBarTranslucent navigationBarTranslucent
+        onRequestClose={() => setPaymentDebt(null)}
+      >
+        <KeyboardAvoidingView behavior="padding" style={styles.modalBackdrop}>
+          <Pressable style={styles.modalBackdropPressable} onPress={() => setPaymentDebt(null)} />
+          <View style={[styles.modalSheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft || theme.border }]}>
+            <View style={styles.modalHandleBar} />
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>
+                  {paymentDebt?.type === 'lent' ? `Got paid by ${paymentDebt?.personName}` : `Paid back ${paymentDebt?.personName || ''}`}
+                </Text>
+                <Text style={[styles.modalSub, { color: theme.subtle }]}>
+                  Pending: {money(paymentRemaining, state.currency)} · enter a part or the full amount
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setPaymentDebt(null)}
+                style={[styles.modalCloseBtn, { backgroundColor: theme.surfaceAlt || 'rgba(0,0,0,0.05)' }]}
+              >
+                <AppIcon name="close" size={13} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: 32 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Field
+                label="Amount (₹) *"
+                value={paymentForm.amount}
+                onChangeText={v => setPaymentForm({ ...paymentForm, amount: v })}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+              />
+              <View style={styles.quickPresetsRow}>
+                {[
+                  { label: 'Full', value: paymentRemaining },
+                  { label: 'Half', value: Math.round(paymentRemaining / 2) },
+                ].map(chip => (
+                  <TouchableOpacity
+                    key={chip.label}
+                    onPress={() => setPaymentForm({ ...paymentForm, amount: String(chip.value) })}
+                    style={[
+                      styles.quickPresetChip,
+                      { backgroundColor: theme.surfaceAlt || 'rgba(148, 163, 184, 0.08)', borderColor: theme.borderSoft || theme.border },
+                    ]}
+                  >
+                    <Text style={[styles.quickPresetText, { color: theme.text }]}>
+                      {chip.label} · {money(chip.value, state.currency)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <DatePickerField label="Date" value={paymentForm.date} onChange={date => setPaymentForm({ ...paymentForm, date })} />
+              <Field
+                label="Note"
+                value={paymentForm.note}
+                onChangeText={v => setPaymentForm({ ...paymentForm, note: v })}
+                placeholder="e.g. Paid by UPI, cash..."
+              />
+              <View style={{ marginTop: 16, marginBottom: 24 }}>
+                <Button label="Save Payment" onPress={handleSavePayment} tone="primary" />
+              </View>
+            </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -790,6 +973,15 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 24,
   },
+  progressWrap: { marginTop: 10, gap: 4 },
+  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressText: { fontSize: 11.5, fontWeight: '600' },
+  historyBox: { borderTopWidth: 1, marginTop: 10, paddingTop: 6, gap: 2 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
+  historyAmount: { fontSize: 13.5, fontWeight: '800' },
+  historyMeta: { fontSize: 11.5, marginTop: 1 },
+  historyRemove: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(239,68,68,0.1)' },
 
   /* 1. HERO OVERVIEW CARD */
   heroCard: {

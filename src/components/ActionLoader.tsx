@@ -20,7 +20,7 @@ export function ActionLoader({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent>
       <View style={styles.backdrop}>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <ActivityIndicator size="large" color={theme.primary} />

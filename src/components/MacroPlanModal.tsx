@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -11,9 +10,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { UserProfile, WeightGoal } from '../types/fitness';
 import { useAppTheme } from '../theme/appTheme';
 import { analyzeFoodWithGemini, FoodNutritionAnalysis } from '../services/geminiAiService';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 interface MacroPlanModalProps {
   visible: boolean;
@@ -34,6 +35,7 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
   onSaveTargets,
 }) => {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const [activeTab, setActiveTab] = useState<'calculator' | 'food_scanner'>('calculator');
 
   // Food Scanner state (Gemini powered)
@@ -115,12 +117,12 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.overlay}
       >
-        <View style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+        <View style={[styles.sheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           {/* Header */}
           <View style={styles.header}>
             <View>

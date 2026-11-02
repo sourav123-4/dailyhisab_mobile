@@ -15,6 +15,7 @@ import {
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';
 import { Transaction } from '../types';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 interface VoiceAssistantModalProps {
   visible: boolean;
@@ -48,6 +49,7 @@ export const VoiceAssistantModal = React.memo(function VoiceAssistantModal({
   onSelectSuggestion,
 }: VoiceAssistantModalProps) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -185,7 +187,7 @@ export const VoiceAssistantModal = React.memo(function VoiceAssistantModal({
     <Modal
       visible={visible}
       transparent
-      statusBarTranslucent
+      statusBarTranslucent navigationBarTranslucent
       animationType="slide"
       onRequestClose={onClose}
     >
@@ -200,7 +202,7 @@ export const VoiceAssistantModal = React.memo(function VoiceAssistantModal({
           style={[
             styles.modalCard,
             {
-              backgroundColor: theme.surface,
+              paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
               borderColor: theme.borderSoft || theme.border,
             },
           ]}

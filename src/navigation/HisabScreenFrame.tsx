@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppThemeProvider, getAppTheme } from '../theme/appTheme';
@@ -74,6 +74,7 @@ function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
           startRecording={app.startRecording}
           stopRecording={app.stopRecording}
           shiftMonth={app.shiftMonth}
+          setMonth={app.setMonth}
           removeTransaction={app.removeTransaction}
           editTransaction={app.editTransaction}
           insights={app.monthlyInsights}
@@ -90,6 +91,8 @@ function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
           state={app.state}
           txs={app.txs}
           currentMonth={app.currentMonth}
+          shiftMonth={app.shiftMonth}
+          setMonth={app.setMonth}
           quickText={app.quickText}
           setQuickText={app.setQuickText}
           form={app.form}
@@ -160,6 +163,8 @@ function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
           setForm={app.setForm}
           addDebt={app.addDebt}
           settleDebt={app.settleDebt}
+          updateDebt={app.updateDebt}
+          removeDebtPayment={app.removeDebtPayment}
           removeDebt={app.removeDebt}
         />
       );
@@ -299,7 +304,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
   return (
     <AppThemeProvider themeName={app.theme}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={[styles.app, { backgroundColor: theme.bg }]}
       >
         <StatusBar style={theme.dark ? 'light' : 'dark'} />

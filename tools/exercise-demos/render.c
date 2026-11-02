@@ -199,11 +199,6 @@ static float ambientOcc(v3 p, v3 n) {
   return clampf(1.0f - 2.8f * occ, 0.0f, 1.0f);
 }
 
-static float hash1(float n) {
-  float s = sinf(n) * 43758.5453f;
-  return s - floorf(s);
-}
-
 static v3 shade(v3 p, v3 n, v3 rd, v3 base, float spec, float gloss, float ao) {
   float sh = softShadow(add(p, mul(n, 0.003f)), lightDir);
   float dif = clampf(dot(n, lightDir), 0.0f, 1.0f) * sh;
@@ -219,35 +214,26 @@ static v3 shade(v3 p, v3 n, v3 rd, v3 base, float spec, float gloss, float ao) {
   float aoS = 0.35f + 0.65f * ao;
   float bounce = clampf(0.5f - 0.5f * n.y, 0.0f, 1.0f);
   v3 lin = mul(V(0.55f, 0.42f, 0.32f), 0.38f * bounce * aoS);
-  lin = add(lin, mul(V(1.30f, 1.22f, 1.12f), 1.65f * dif));
-  lin = add(lin, mul(V(0.55f, 0.58f, 0.66f), 0.42f * fill * aoS));
-  lin = add(lin, mul(V(0.62f, 0.64f, 0.70f), 0.34f * sky * aoS));
+  lin = add(lin, mul(V(1.30f, 1.22f, 1.12f), 2.0f * dif));
+  lin = add(lin, mul(V(0.55f, 0.58f, 0.66f), 0.3f * fill * aoS));
+  lin = add(lin, mul(V(0.62f, 0.64f, 0.70f), 0.26f * sky * aoS));
   v3 col = vmul(base, lin);
   col = add(col, mul(V(1.0f, 1.0f, 1.0f), spe));
   col = add(col, mul(V(0.75f, 0.78f, 0.85f), 0.35f * rim * ao));
   return col;
 }
 
-static v3 floorColor(v3 p) {
-  float plank = floorf(p.x / 0.16f);
-  float off = hash1(plank * 7.13f) * 3.0f;
-  float seg = floorf((p.z + off) / 1.2f);
-  float v = hash1(plank * 3.7f + seg * 11.1f);
-  float grain = 0.5f + 0.5f * sinf(p.z * 9.0f + sinf(p.z * 2.3f + plank) * 2.0f + plank * 5.0f);
-  v3 c = mixv(V(0.42f, 0.22f, 0.10f), V(0.60f, 0.35f, 0.17f), 0.35f + 0.45f * v);
-  c = mul(c, 0.9f + 0.12f * grain);
-  float ex = fabsf(p.x / 0.16f - plank - 0.5f);
-  float ez = fabsf((p.z + off) / 1.2f - seg - 0.5f);
-  if (ex > 0.485f || ez > 0.497f) c = mul(c, 0.55f);
-  return c;
-}
+// Per-sample outputs of render(): hit distance and the primitive that owns the pixel
+// (-1 = floor, -2 = empty background). The outline pass draws lines where these change.
+static float gDepth;
+static int gPid;
 
 static v3 render(v3 ro, v3 rd) {
   int cand[MAXP];
+  gDepth = 1e9f;
+  gPid = -2;
   float tFloor = rd.y < 0 ? -ro.y / rd.y : 1e9f;
-  float denom = dot(wallN, rd);
-  float tWall = denom < -1e-4f ? (wallD - dot(wallN, ro)) / denom : 1e9f;
-  float tEnv = fminf(tFloor, tWall);
+  float tEnv = tFloor;
 
   float tn, tf;
   int nc = gatherRay(ro, rd, tEnv, cand, &tn, &tf);
@@ -288,13 +274,23 @@ static v3 render(v3 ro, v3 rd) {
       else if (d < d2) d2 = d;
     }
     int bodyHit = i1 >= 0 && d1 < 0.004f;
+    gDepth = t;
+    if (bodyHit) {
+      gPid = i1;
+    } else {
+      float best = 1e9f;
+      for (int i = 0; i < nn; i++) {
+        float d = primDist(&prims[nearC[i]], p);
+        if (d < best) { best = d; gPid = nearC[i]; }
+      }
+    }
     if (bodyHit) {
       float gap = d2 - d1;
-      float t = clampf(gap / 0.0075f, 0.0f, 1.0f);
+      float t = clampf(gap / 0.006f, 0.0f, 1.0f);
       float seam = 1.0f - t * t * (3.0f - 2.0f * t);
-      base = mul(base, 1.0f - 0.7f * seam);
+      base = mul(base, 1.0f - 0.35f * seam);
       const Prim *P = &prims[i1];
-      if (P->tex && P->type == ELLIPSOID) {
+      if (P->tex == 1 && P->type == ELLIPSOID) {
         v3 l = toLocal(P, p);
         v3 q = V(l.x / P->s.x, l.y / P->s.y, l.z / P->s.z);
         float circ = 3.14159f * (P->s.x + P->s.z);
@@ -312,31 +308,22 @@ static v3 render(v3 ro, v3 rd) {
     if (bodyHit) {
       float facing = clampf(dot(n, mul(rd, -1.0f)), 0.0f, 1.0f);
       float edge = clampf(facing / 0.32f, 0.0f, 1.0f);
-      col = mul(col, 0.45f + 0.55f * edge);
+      col = mul(col, 0.62f + 0.38f * edge);
     }
     return col;
   }
 
-  if (tFloor < tWall) {
+  // Illustration backdrop: plain white, with a soft contact shadow on the floor.
+  if (rd.y < 0) {
     v3 p = add(ro, mul(rd, tFloor));
-    v3 n = V(0, 1, 0);
-    v3 base = floorColor(p);
-    float ao = ambientOcc(p, n);
-    v3 c = shade(p, n, rd, base, 0.25f, 40.0f, ao);
-    // Reflection-ish sheen near the horizon and a gentle falloff with distance.
-    float fall = clampf(1.0f - (tFloor - 3.0f) * 0.05f, 0.6f, 1.0f);
-    return mul(c, fall * 0.85f);
+    gDepth = tFloor;
+    gPid = -1;
+    float sh = softShadow(add(p, V(0, 0.002f, 0)), V(0, 1, 0));
+    float ao = ambientOcc(p, V(0, 1, 0));
+    float shade = (0.80f + 0.20f * sh) * (0.55f + 0.45f * ao);
+    return mul(V(3.0f, 3.0f, 3.0f), shade);
   }
-  if (tWall < 1e8f) {
-    v3 p = add(ro, mul(rd, tWall));
-    float g = clampf(1.0f - fabsf(p.y - 1.3f) * 0.32f, 0.0f, 1.0f);
-    v3 c = mixv(V(0.16f, 0.16f, 0.165f), V(0.46f, 0.46f, 0.47f), g);
-    float floorAo = clampf(p.y * 2.5f, 0.55f, 1.0f);
-    // Soft shadow of the figure on the wall.
-    float sh = softShadow(add(p, mul(wallN, 0.01f)), lightDir);
-    return mul(c, floorAo * (0.72f + 0.28f * sh));
-  }
-  return V(0.05f, 0.05f, 0.055f);
+  return V(3.0f, 3.0f, 3.0f);
 }
 
 static float tonemap(float x) {
@@ -377,8 +364,8 @@ int main(int argc, char **argv) {
   FILE *f = fopen(argv[1], "r");
   if (!f) { perror("scene"); return 1; }
 
-  setMat(0, 0.48f, 0.48f, 0.50f, 0.30f, 20.0f);   // skin (grey anatomy model)
-  setMat(1, 0.80f, 0.12f, 0.06f, 0.35f, 28.0f);   // target muscle
+  setMat(0, 0.56f, 0.56f, 0.58f, 0.25f, 18.0f);   // skin (grey anatomy model)
+  setMat(1, 0.92f, 0.16f, 0.07f, 0.30f, 24.0f);   // target muscle
   setMat(2, 0.86f, 0.36f, 0.20f, 0.40f, 28.0f);   // secondary muscle
   setMat(3, 0.025f, 0.025f, 0.03f, 0.20f, 16.0f); // shorts
   setMat(4, 0.04f, 0.035f, 0.03f, 0.10f, 8.0f);   // hair
@@ -386,7 +373,7 @@ int main(int argc, char **argv) {
   setMat(10, 0.55f, 0.56f, 0.58f, 1.6f, 90.0f);   // steel
   setMat(11, 0.03f, 0.03f, 0.035f, 0.6f, 40.0f);  // rubber plates
   setMat(12, 0.035f, 0.035f, 0.04f, 0.45f, 30.0f); // upholstery
-  setMat(13, 0.70f, 0.71f, 0.73f, 0.6f, 50.0f);   // machine frame
+  setMat(13, 0.62f, 0.63f, 0.66f, 0.6f, 50.0f);   // machine frame
   setMat(14, 0.02f, 0.02f, 0.02f, 0.3f, 20.0f);   // cable
   setMat(15, 0.07f, 0.07f, 0.08f, 0.5f, 30.0f);   // weight stack
   setMat(16, 0.75f, 0.12f, 0.08f, 0.4f, 30.0f);   // red plate accent
@@ -403,6 +390,9 @@ int main(int argc, char **argv) {
 
   int RW = W * SS, RH = H * SS;
   float *acc = malloc(sizeof(float) * 3 * W * H);
+  float *hcol = malloc(sizeof(float) * 3 * RW * RH);
+  float *hdep = malloc(sizeof(float) * RW * RH);
+  int *hpid = malloc(sizeof(int) * RW * RH);
   unsigned char *out = malloc(3 * W * H);
   v3 fw = norm(sub(camTarget, camPos));
   v3 rt = norm(cross(fw, V(0, 1, 0)));
@@ -438,10 +428,44 @@ int main(int argc, char **argv) {
         float vv = 1.0f - (y + 0.5f) / RH * 2.0f;
         v3 rd = norm(add(add(mul(rt, u), mul(up, vv)), mul(fw, fl)));
         v3 c = render(camPos, rd);
+        int i = y * RW + x;
+        hcol[i * 3] = tonemap(c.x);
+        hcol[i * 3 + 1] = tonemap(c.y);
+        hcol[i * 3 + 2] = tonemap(c.z);
+        hdep[i] = gDepth;
+        hpid[i] = gPid;
+      }
+    }
+    // Outline pass: silhouettes where depth jumps, and ink lines along the borders between
+    // muscles (at least one side a muscle belly) or pieces of equipment.
+    for (int y = 0; y < RH; y++) {
+      for (int x = 0; x < RW; x++) {
+        int i = y * RW + x;
+        int a = hpid[i];
+        float ink = 1.0f;
+        if (a >= 0) {
+          for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+              int xx = x + dx, yy = y + dy;
+              if ((dx == 0 && dy == 0) || xx < 0 || yy < 0 || xx >= RW || yy >= RH) continue;
+              int j = yy * RW + xx;
+              int b = hpid[j];
+              if (b < 0 || fabsf(hdep[j] - hdep[i]) > 0.035f * hdep[i]) { ink = fminf(ink, 0.22f); continue; }
+              if (b == a) continue;
+              const Prim *A = &prims[a], *B = &prims[b];
+              int bodyA = A->mat <= 3, bodyB = B->mat <= 3;
+              if (bodyA && bodyB) {
+                if (A->tex || B->tex) ink = fminf(ink, 0.5f);
+              } else if (bodyA != bodyB) {
+                ink = fminf(ink, 0.3f);
+              }
+            }
+          }
+        }
         int o = ((y / SS) * W + (x / SS)) * 3;
-        acc[o] += tonemap(c.x);
-        acc[o + 1] += tonemap(c.y);
-        acc[o + 2] += tonemap(c.z);
+        acc[o] += hcol[i * 3] * ink;
+        acc[o + 1] += hcol[i * 3 + 1] * ink;
+        acc[o + 2] += hcol[i * 3 + 2] * ink;
       }
     }
     float inv = 1.0f / (SS * SS);

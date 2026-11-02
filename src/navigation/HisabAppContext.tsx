@@ -23,7 +23,6 @@ import {
   AppState,
   InteractionManager,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
@@ -31,6 +30,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACTIVE_ENV } from '../config/active-env';
 import {
@@ -57,6 +57,7 @@ import {
   BillCalendarEvent,
   BottomTabItem,
   CreditCard,
+  DebtPayment,
   DebtRecord,
   DebtStatus,
   DebtType,
@@ -204,6 +205,8 @@ export type HisabAppContextType = {
   manual: any;
   setManual: React.Dispatch<React.SetStateAction<any>>;
   shiftMonth: (delta: number) => void;
+  /** Jump straight to a month, as YYYY-MM. */
+  setMonth: (monthYear: string) => void;
   removeTransaction: (id: string) => void;
   addTransactions: (items: Transaction[], toastMsg?: string) => void;
   editTransaction: (tx: Transaction) => void;
@@ -223,7 +226,9 @@ export type HisabAppContextType = {
   creditSalary: (record: SalaryRecord) => void;
   removeSalary: (id: string) => void;
   addDebt: (payload?: any) => void;
-  settleDebt: (id: string, amount: number) => void;
+  settleDebt: (id: string, amount: number, details?: { date?: string; note?: string }) => void;
+  updateDebt: (id: string, changes: DebtEdit) => void;
+  removeDebtPayment: (debtId: string, paymentId: string) => void;
   removeDebt: (id: string) => void;
   generateRecurringForMonth: (monthYear?: string) => void;
   addRecurring: (customPayload?: any) => void;
@@ -275,6 +280,31 @@ function normalizeDateToISO(dateStr?: string): string {
   return today();
 }
 const numeric = (value: string | number | undefined) => Number(String(value || '').replace(/[^0-9.]/g, '')) || 0;
+
+export type DebtEdit = { personName?: string; amount?: number | string; type?: DebtType; dueDate?: string; notes?: string };
+
+const debtTxTitle = (debt: Pick<DebtRecord, 'type' | 'personName'>) =>
+  `${debt.type === 'lent' ? 'Lent to' : 'Borrowed from'} ${debt.personName}`;
+
+/**
+ * Repayments of a record. Records saved before payment history existed only carry a total,
+ * which is shown as one payment so the numbers still add up.
+ */
+const debtPayments = (debt: DebtRecord): DebtPayment[] => {
+  if (debt.payments) return debt.payments;
+  return debt.settledAmount > 0 ? [{ id: `${debt.id}_legacy`, date: debt.date, amount: debt.settledAmount }] : [];
+};
+
+const withDebtTotals = (debt: DebtRecord): DebtRecord => {
+  const payments = debtPayments(debt);
+  const settledAmount = Math.min(debt.amount, payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0));
+  const status: DebtStatus = settledAmount >= debt.amount ? 'settled' : settledAmount > 0 ? 'partially_paid' : 'pending';
+  return { ...debt, payments, settledAmount, status };
+};
+
+/** The ledger entry addDebt created before records stored its id. */
+const findLegacyDebtTx = (debt: DebtRecord, transactions: Transaction[]) =>
+  transactions.find(tx => tx.title === debtTxTitle(debt) && Number(tx.amount) === Number(debt.amount) && tx.date === debt.date);
 const clampDay = (value: number) => Math.min(31, Math.max(1, Math.round(value || 1)));
 const money = (value: number, currency = '₹') => `${currency} ${Math.round(value || 0).toLocaleString('en-IN')}`;
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -1660,8 +1690,11 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
       return;
     }
     const debtType: DebtType = (payload?.type || (form.debtType as DebtType) || 'lent');
+    const txId = uid();
     const debt: DebtRecord = {
       id: uid(),
+      txId,
+      payments: [],
       personName,
       type: debtType,
       amount,
@@ -1677,9 +1710,9 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
         debts: [debt, ...current.debts],
         transactions: [
           {
-            id: uid(),
+            id: txId,
             date: today(),
-            title: `${debt.type === 'lent' ? 'Lent to' : 'Borrowed from'} ${debt.personName}`,
+            title: debtTxTitle(debt),
             amount,
             category: 'Others',
             type: txType,
@@ -1696,21 +1729,97 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     setForm(current => ({ ...current, debtPerson: '', debtAmount: '', debtNotes: '', debtDue: '', debtDueDate: '', debtType: '' }));
   }
 
-  function settleDebt(id: string, amount: number) {
+  /** Records a full or partial repayment, with its own ledger entry. */
+  function settleDebt(id: string, amount: number, details?: { date?: string; note?: string }) {
     const debt = state.debts.find(d => d.id === id);
-    if (!debt) return;
-    const settledAmount = Math.min(debt.amount, debt.settledAmount + amount);
-    const status: DebtStatus = settledAmount >= debt.amount ? 'settled' : settledAmount > 0 ? 'partially_paid' : 'pending';
+    const value = Math.round(numeric(amount) * 100) / 100;
+    if (!debt || !(value > 0)) return;
+    const remaining = Math.max(0, debt.amount - (debt.settledAmount || 0));
+    const paid = Math.min(value, remaining);
+    if (!(paid > 0)) return;
+    const date = details?.date || today();
+    const txId = uid();
+    const payment: DebtPayment = { id: uid(), date, amount: paid, note: details?.note?.trim() || undefined, txId };
     const txType: TxType = debt.type === 'lent' ? 'income' : 'expense';
     patch(current => ({
-      debts: current.debts.map(d => d.id === id ? { ...d, settledAmount, status } : d),
-      transactions: [{ id: uid(), date: today(), title: `Debt settlement - ${debt.personName}`, amount, category: 'Others', type: txType, paymentMethod: 'UPI' }, ...current.transactions],
+      debts: current.debts.map(d => (d.id === id ? withDebtTotals({ ...d, payments: [...debtPayments(d), payment] }) : d)),
+      transactions: [
+        {
+          id: txId,
+          date,
+          title: `${debt.type === 'lent' ? 'Received from' : 'Paid back'} ${debt.personName}`,
+          amount: paid,
+          category: 'Others',
+          type: txType,
+          paymentMethod: 'UPI',
+          notes: payment.note,
+        },
+        ...current.transactions,
+      ],
     }));
+    const left = remaining - paid;
     showToast({
-      title: 'Settled',
-      message: `Recorded ${money(amount, state.currency)} settlement for ${debt.personName}`,
+      title: left > 0 ? 'Payment recorded' : 'Fully settled',
+      message: left > 0
+        ? `${money(paid, state.currency)} from ${debt.personName}. ${money(left, state.currency)} still pending.`
+        : `${debt.personName}'s udhar is fully settled.`,
       type: 'success',
     });
+  }
+
+  /** Edits a record; the original ledger entry is updated to match. */
+  function updateDebt(id: string, changes: DebtEdit) {
+    const debt = state.debts.find(d => d.id === id);
+    if (!debt) return;
+    const personName = changes.personName?.trim() || debt.personName;
+    const amount = changes.amount !== undefined ? numeric(changes.amount) : debt.amount;
+    if (!personName || !(amount > 0)) {
+      Alert.alert('Missing Details', 'Please enter a valid person name and amount.');
+      return;
+    }
+    const alreadyPaid = debt.settledAmount || 0;
+    if (amount < alreadyPaid) {
+      Alert.alert(
+        'Amount too low',
+        `${money(alreadyPaid, state.currency)} has already been paid back. Delete a payment first if it was added by mistake.`
+      );
+      return;
+    }
+    const next = withDebtTotals({
+      ...debt,
+      personName,
+      amount,
+      type: changes.type || debt.type,
+      dueDate: changes.dueDate ?? debt.dueDate,
+      notes: changes.notes ?? debt.notes,
+    });
+    const linkedTxId = debt.txId || findLegacyDebtTx(debt, state.transactions)?.id;
+    patch(current => ({
+      debts: current.debts.map(d => (d.id === id ? { ...next, txId: linkedTxId || d.txId } : d)),
+      transactions: linkedTxId
+        ? current.transactions.map(tx =>
+            tx.id === linkedTxId
+              ? { ...tx, title: debtTxTitle(next), amount, type: next.type === 'lent' ? 'expense' : 'income' }
+              : tx
+          )
+        : current.transactions,
+    }));
+    showToast({ title: 'Udhar updated', message: `${personName} · ${money(amount, state.currency)}`, type: 'success' });
+  }
+
+  /** Undoes a repayment added by mistake, along with its ledger entry. */
+  function removeDebtPayment(debtId: string, paymentId: string) {
+    const debt = state.debts.find(d => d.id === debtId);
+    const payment = debt ? debtPayments(debt).find(p => p.id === paymentId) : undefined;
+    if (!debt || !payment) return;
+    if (payment.txId) markIdDeleted('transactions', payment.txId);
+    patch(current => ({
+      debts: current.debts.map(d =>
+        d.id === debtId ? withDebtTotals({ ...d, payments: debtPayments(d).filter(p => p.id !== paymentId) }) : d
+      ),
+      transactions: payment.txId ? current.transactions.filter(tx => tx.id !== payment.txId) : current.transactions,
+    }));
+    showToast({ title: 'Payment removed', message: `${money(payment.amount, state.currency)} removed from ${debt.personName}`, type: 'danger', duration: 1800 });
   }
 
   function removeDebt(id: string) {
@@ -2176,6 +2285,10 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     });
   }
 
+  function setMonth(monthYear: string) {
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(monthYear)) setCurrentMonth(monthYear);
+  }
+
   function shiftMonth(delta: number) {
     const [year, month] = currentMonth.split('-').map(Number);
     const date = new Date(year, month - 1 + delta, 1);
@@ -2516,6 +2629,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     manual,
     setManual,
     shiftMonth,
+    setMonth,
     removeTransaction,
     addTransactions,
     editTransaction,
@@ -2536,6 +2650,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     removeSalary,
     addDebt,
     settleDebt,
+    updateDebt,
+    removeDebtPayment,
     removeDebt,
     generateRecurringForMonth,
     addRecurring,
@@ -2617,6 +2733,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     form,
     manual,
     shiftMonth,
+    setMonth,
     removeTransaction,
     addTransactions,
     editTransaction,

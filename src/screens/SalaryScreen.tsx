@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Button, Empty, Field, money, SegmentedRadio } from '../components/UI';
 import { AppIcon } from '../components/AppIcon';
 import { formatMonthLabel, formatRecordDate } from '../utils/date';
@@ -18,6 +18,7 @@ import { useAppTheme } from '../theme/appTheme';
 import { HisabState, SalaryRecord } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
 import { confirmDelete } from '../utils/confirm';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 type SalarySubTab = 'all' | 'credited' | 'pending' | 'tax';
 
@@ -513,20 +514,21 @@ function AddSalaryModal({
   onSubmit: () => void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const gross = numeric(form.salGross);
   const deductions = numeric(form.salDeduct);
   const calculatedNet = numeric(form.salNet || (gross > 0 ? gross - deductions : 0));
   const canSubmit = gross > 0 || calculatedNet > 0;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         style={styles.modalRoot}
       >
         <Pressable style={styles.modalBackdrop} onPress={onClose} />
-        <View style={[styles.modalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={[styles.modalSheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.modalHandle, { backgroundColor: theme.border }]} />
           <View style={styles.modalHead}>
             <View style={styles.modalTitleBlock}>

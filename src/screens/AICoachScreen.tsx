@@ -5,7 +5,6 @@ import {
   Animated,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { useNavigation } from '@react-navigation/native';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
@@ -226,7 +226,7 @@ export const AICoachScreen = () => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.bg }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Toolbar under the shared TitanFit header */}
@@ -337,7 +337,7 @@ export const AICoachScreen = () => {
       </View>
 
       {/* AI Intelligence Engine Key Modal */}
-      <Modal visible={showKeyModal} transparent animationType="fade" onRequestClose={() => setShowKeyModal(false)}>
+      <Modal visible={showKeyModal} transparent animationType="fade" onRequestClose={() => setShowKeyModal(false)} statusBarTranslucent navigationBarTranslucent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
             <View style={styles.modalHeaderRow}>

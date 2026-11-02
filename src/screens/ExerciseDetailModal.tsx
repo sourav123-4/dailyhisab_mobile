@@ -13,6 +13,7 @@ import { MUSCLE_GROUPS_META } from '../data/exercisesData';
 import { useAppTheme } from '../theme/appTheme';
 import { ExerciseVideoPlayer } from '../components/ExerciseVideoPlayer';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 interface ExerciseDetailModalProps {
   visible: boolean;
@@ -27,6 +28,7 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
   onClose,
 }) => {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { addExerciseToActiveWorkout, activeWorkout } = useFitnessApp();
 
   const muscleMeta =
@@ -35,9 +37,9 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+        <View style={[styles.sheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           {/* Top Bar */}
           <View style={styles.topBar}>
             <View style={styles.badgesRow}>

@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import {
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { AuthMode } from '../types';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';

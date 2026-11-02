@@ -113,7 +113,7 @@ class Rig:
         self.pelvis_R = np.eye(3)
         self.spine_rot = np.eye(3)
         self.chest_rot = np.eye(3)
-        self.neck_rot = rx(6)
+        self.neck_rot = rx(14)
         self.arms = {}
         self.legs = {}
         self._solve_torso()
@@ -129,7 +129,7 @@ class Rig:
         cf = flex * 0.8 if chest_flex is None else chest_flex
         ct = twist if chest_twist is None else chest_twist
         self.chest_rot = ry(ct) @ rx(cf) @ rz(side * 0.6)
-        self.neck_rot = ry(neck_twist) @ rx(6 + neck_flex)
+        self.neck_rot = ry(neck_twist) @ rx(14 + neck_flex)
         self._solve_torso()
 
     def _solve_torso(self):
@@ -250,13 +250,14 @@ class Rig:
         sc.ell(at(self.pelvis_pos, P, [0, 0.0, -0.005]), P, [0.152, 0.112, 0.102], MAT["shorts"], 0.0)
         for s in (-1, 1):
             sc.ell(at(self.pelvis_pos, P, [s * 0.07, -0.035, -0.06]), P, [0.078, 0.092, 0.066], m("glutes", MAT["shorts"]), 0.015, tex=1)
-        sc.ell(at(self.pelvis_pos, P, [0, 0.075, 0.012]), P, [0.125, 0.075, 0.08], skin, 0.03)
+        sc.ell(at(self.pelvis_pos, P, [0, 0.085, 0.012]), P, [0.118, 0.065, 0.078], skin, 0.012)
 
         # abdomen
         sc.ell(at(self.lumbar, A, [0, 0.085, 0]), A, [0.126, 0.13, 0.088], skin, 0.035)
-        for row, y in enumerate((0.03, 0.09, 0.15)):
+        # Eight-pack: four rows of flat blocks either side of the midline.
+        for row, y in enumerate((0.0, 0.055, 0.11, 0.165)):
             for s in (-1, 1):
-                sc.ell(at(self.lumbar, A, [s * 0.031, y, 0.072 + 0.004 * row]), A, [0.03, 0.03, 0.019], m("abs"), 0.016, tex=1)
+                sc.ell(at(self.lumbar, A, [s * 0.032, y, 0.074 + 0.003 * row]), A, [0.03, 0.025, 0.012], m("abs"), 0.012, tex=1)
         for s in (-1, 1):
             sc.ell(at(self.lumbar, A, [s * 0.098, 0.065, 0.025]), A @ rz(s * 8), [0.034, 0.085, 0.055], m("obliques"), 0.02, tex=1)
             sc.ell(at(self.lumbar, A, [s * 0.036, 0.09, -0.07]), A, [0.03, 0.13, 0.026], m("erectors"), 0.015, tex=1)
@@ -265,23 +266,33 @@ class Rig:
         sc.ell(at(self.chest_o, C, [0, 0.105, -0.008]), C, [0.148, 0.16, 0.104], skin, 0.035)
         sc.ell(at(self.chest_o, C, [0, 0.205, -0.015]), C, [0.185, 0.075, 0.09], skin, 0.03)
         for s in (-1, 1):
-            sc.ell(at(self.chest_o, C, [s * 0.078, 0.178, 0.066]), C @ rz(-s * 18) @ rx(10), [0.098, 0.06, 0.034], m("pecs"), 0.016, tex=1)
+            sc.ell(at(self.chest_o, C, [s * 0.085, 0.172, 0.068]), C @ rz(-s * 16) @ rx(8), [0.108, 0.068, 0.03], m("pecs"), 0.014, tex=1)
+            # serratus "fingers" along the side of the ribcage
+            for j, y in enumerate((0.045, 0.085, 0.125)):
+                sc.ell(at(self.chest_o, C, [s * 0.128, y, 0.045 - 0.004 * j]), C @ rz(s * 35), [0.022, 0.011, 0.016], m("obliques"), 0.008, tex=1)
+            # neck straps (sternocleidomastoid)
+            sc.ell(at(self.chest_o, C, [s * 0.028, 0.29, 0.03]), C @ rz(-s * 22) @ rx(-15), [0.011, 0.05, 0.012], skin, 0.01, tex=1)
             sc.ell(at(self.chest_o, C, [s * 0.075, 0.262, -0.035]), C @ rz(-s * 22), [0.08, 0.045, 0.05], m("traps"), 0.02, tex=1)
             sc.ell(at(self.chest_o, C, [s * 0.112, 0.07, -0.05]), C @ rz(s * 14), [0.052, 0.14, 0.068], m("lats"), 0.02, tex=1)
             sc.ell(at(self.chest_o, C, [s * 0.05, 0.155, -0.094]), C, [0.045, 0.072, 0.026], m("midback", m("traps")), 0.016, tex=1)
 
         # neck & head
-        sc.cone(self.chest_point([0, 0.24, -0.012]), self.neck_o + Hd @ [0, 0.06, 0.0], 0.056, 0.048, skin, 0.03)
+        sc.cone(self.chest_point([0, 0.24, -0.012]), self.neck_o + Hd @ [0, 0.06, 0.0], 0.06, 0.05, skin, 0.03)
         ho = self.head_o
-        sc.ell(at(ho, Hd, [0, 0.095, 0.006]), Hd, [0.082, 0.106, 0.094], skin, 0.02)
-        sc.ell(at(ho, Hd, [0, 0.028, 0.036]), Hd, [0.06, 0.05, 0.064], skin, 0.03)
-        sc.ell(at(ho, Hd, [0, 0.072, 0.099]), Hd @ rx(-12), [0.012, 0.024, 0.017], skin, 0.01)
-        sc.ell(at(ho, Hd, [0, 0.038, 0.086]), Hd, [0.018, 0.0035, 0.006], MAT["dark"], 0.0)
+        sc.ell(at(ho, Hd, [0, 0.105, -0.004]), Hd, [0.078, 0.097, 0.09], skin, 0.02)
+        sc.ell(at(ho, Hd, [0, 0.036, 0.032]), Hd, [0.056, 0.046, 0.058], skin, 0.025)
+        sc.ell(at(ho, Hd, [0, 0.014, 0.072]), Hd, [0.022, 0.018, 0.018], skin, 0.012)
+        sc.ell(at(ho, Hd, [0, 0.1, 0.08]), Hd, [0.052, 0.011, 0.016], skin, 0.012)
+        sc.ell(at(ho, Hd, [0, 0.076, 0.092]), Hd @ rx(-14), [0.01, 0.024, 0.012], skin, 0.008)
+        sc.ell(at(ho, Hd, [0, 0.056, 0.098]), Hd, [0.013, 0.009, 0.011], skin, 0.008)
+        sc.ell(at(ho, Hd, [0, 0.034, 0.085]), Hd, [0.015, 0.0028, 0.005], MAT["dark"], 0.0)
         for s in (-1, 1):
-            sc.ell(at(ho, Hd, [s * 0.082, 0.08, -0.004]), Hd, [0.012, 0.027, 0.018], skin, 0.008)
-            sc.ell(at(ho, Hd, [s * 0.029, 0.092, 0.084]), Hd, [0.009, 0.004, 0.006], MAT["dark"], 0.0)
-            sc.ell(at(ho, Hd, [s * 0.03, 0.103, 0.088]), Hd @ rz(-s * 8), [0.017, 0.0035, 0.005], MAT["hair"], 0.0)
-        sc.ell(at(ho, Hd, [0, 0.132, -0.013]), Hd, [0.087, 0.083, 0.094], MAT["hair"], 0.0)
+            sc.ell(at(ho, Hd, [s * 0.046, 0.068, 0.066]), Hd, [0.021, 0.015, 0.018], skin, 0.012)
+            sc.ell(at(ho, Hd, [s * 0.078, 0.078, -0.006]), Hd, [0.011, 0.025, 0.017], skin, 0.008)
+            sc.ell(at(ho, Hd, [s * 0.029, 0.086, 0.081]), Hd, [0.0095, 0.0042, 0.005], MAT["dark"], 0.0)
+            sc.ell(at(ho, Hd, [s * 0.03, 0.1, 0.088]), Hd @ rz(-s * 8), [0.017, 0.0032, 0.005], MAT["hair"], 0.0)
+        # short cropped hair, leaving the forehead clear
+        sc.ell(at(ho, Hd, [0, 0.138, -0.014]), Hd, [0.084, 0.082, 0.094], MAT["hair"], 0.0)
 
         # arms
         for s, a in self.arms.items():

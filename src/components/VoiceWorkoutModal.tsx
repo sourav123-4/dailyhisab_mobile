@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useAppTheme } from '../theme/appTheme';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 interface VoiceWorkoutModalProps {
   visible: boolean;
@@ -29,6 +30,7 @@ export const VoiceWorkoutModal: React.FC<VoiceWorkoutModalProps> = ({
   onProcessAIQuery,
 }) => {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const [isListening, setIsListening] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -117,9 +119,9 @@ export const VoiceWorkoutModal: React.FC<VoiceWorkoutModalProps> = ({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+        <View style={[styles.sheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.titleRow}>

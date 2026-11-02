@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -11,12 +10,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Button, Card, ChipRow, DatePickerField, Empty, Field, money } from '../components/UI';
 import { BillCalendarEvent, CreditCard, FinanceInsight, HisabState, SavingsGoal } from '../types';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon, IconName } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
 import { confirmDelete } from '../utils/confirm';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 type PlannerSection = 'calendar' | 'goals' | 'recurring' | 'cards' | 'split';
 
@@ -62,6 +63,7 @@ export const PlannerScreen = React.memo(function PlannerScreen({
   addSplitExpense?: () => void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { setActiveModalOpen } = useHisabApp();
   const [activeSection, setActiveSection] = useState<PlannerSection>('calendar');
   const [goalModalVisible, setGoalModalVisible] = useState(false);
@@ -805,14 +807,14 @@ export const PlannerScreen = React.memo(function PlannerScreen({
       {/* ========================================================================= */}
 
       {/* Add Goal Modal */}
-      <Modal visible={goalModalVisible} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setGoalModalVisible(false)}>
+      <Modal visible={goalModalVisible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => setGoalModalVisible(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
           style={styles.modalRoot}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setGoalModalVisible(false)} />
-          <View style={[styles.modalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.modalSheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[styles.modalHandle, { backgroundColor: theme.border }]} />
             <View style={styles.modalHead}>
               <View>
@@ -880,14 +882,14 @@ export const PlannerScreen = React.memo(function PlannerScreen({
       </Modal>
 
       {/* Add Recurring Modal */}
-      <Modal visible={recModalVisible} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setRecModalVisible(false)}>
+      <Modal visible={recModalVisible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => setRecModalVisible(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
           style={styles.modalRoot}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setRecModalVisible(false)} />
-          <View style={[styles.modalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.modalSheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[styles.modalHandle, { backgroundColor: theme.border }]} />
             <View style={styles.modalHead}>
               <View>
@@ -946,14 +948,14 @@ export const PlannerScreen = React.memo(function PlannerScreen({
       </Modal>
 
       {/* Add Credit Card Modal */}
-      <Modal visible={cardModalVisible} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setCardModalVisible(false)}>
+      <Modal visible={cardModalVisible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => setCardModalVisible(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
           style={styles.modalRoot}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setCardModalVisible(false)} />
-          <View style={[styles.modalSheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.modalSheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[styles.modalHandle, { backgroundColor: theme.border }]} />
             <View style={styles.modalHead}>
               <View>

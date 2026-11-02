@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useAppTheme } from '../theme/appTheme';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 interface RestTimerModalProps {
   visible: boolean;
@@ -23,6 +24,7 @@ export const RestTimerModal: React.FC<RestTimerModalProps> = ({
   onComplete,
 }) => {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
   const [totalTime, setTotalTime] = useState(initialSeconds);
   const [isActive, setIsActive] = useState(true);
@@ -65,9 +67,9 @@ export const RestTimerModal: React.FC<RestTimerModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+        <View style={[styles.card, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.headerTitle, { color: theme.text }]}>REST & RECOVERY</Text>

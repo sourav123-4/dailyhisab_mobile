@@ -4,7 +4,6 @@ import {
   Animated,
   AppState,
   Easing,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
 import { useAppTheme } from '../theme/appTheme';
@@ -41,6 +41,7 @@ import {
 } from '../services/phonepeContacts';
 import { localDateISO } from '../utils/date';
 import * as Clipboard from 'expo-clipboard';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 interface PhonePePaymentModalProps {
   visible: boolean;
@@ -62,6 +63,7 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
   transactions = [],
 }: PhonePePaymentModalProps) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   // "Rs 150" needs a space; "₹150" does not.
   const currencyPrefix = /[a-z]$/i.test(currency) ? `${currency} ` : currency;
 
@@ -443,18 +445,18 @@ export const PhonePePaymentModal = React.memo(function PhonePePaymentModal({
       animationType="fade"
       transparent
       onRequestClose={handleBack}
-      statusBarTranslucent
+      statusBarTranslucent navigationBarTranslucent
     >
       <View style={styles.modalBackdrop}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.keyboardContainer}
         >
           <Animated.View
             style={[
               styles.modalCard,
               {
-                backgroundColor: theme.surface,
+                paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                 borderColor: theme.borderSoft || theme.border,
                 transform: [{ scale: scaleAnim }],
               },

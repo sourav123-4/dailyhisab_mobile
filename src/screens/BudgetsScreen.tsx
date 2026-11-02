@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Button, money } from '../components/UI';
 import { CreditCard, HisabPatch, HisabState, SavingsGoal, Transaction } from '../types';
 import { useAppTheme } from '../theme/appTheme';
@@ -20,6 +20,7 @@ import { AppIcon } from '../components/AppIcon';
 import { useHisabApp } from '../navigation/HisabAppContext';
 import { PinSetupModal, PinSetupMode } from '../components/PinSetupModal';
 import appConfig from '../../app.json';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 const getLocalAuth = () => {
   try {
@@ -668,14 +669,15 @@ function SettingsSheet({
   children: React.ReactNode;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.sheetRoot}
       >
         <Pressable style={styles.sheetBackdrop} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={[styles.sheet, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.sheetHandle, { backgroundColor: theme.border }]} />
           <View style={styles.sheetHead}>
             <Text style={[styles.sheetTitle, { color: theme.text }]}>{title}</Text>

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Alert,
   Image,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppMode } from '../navigation/AppModeContext';
 import { useAppTheme } from '../theme/appTheme';
@@ -21,9 +21,11 @@ import { MacroPlanModal } from '../components/MacroPlanModal';
 import { FoodScannerModal } from '../components/FoodScannerModal';
 import { BodyStatsCard } from '../components/BodyStatsCard';
 import { MealType, WeightGoal } from '../types/fitness';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 export const WeightTrackerScreen = () => {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { setAppMode } = useAppMode();
   const {
     profile,
@@ -500,12 +502,12 @@ export const WeightTrackerScreen = () => {
       </ScrollView>
 
       {/* Log Weight Modal */}
-      <Modal visible={weightInputModal} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setWeightInputModal(false)}>
+      <Modal visible={weightInputModal} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => setWeightInputModal(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+          <View style={[styles.modalCard, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>LOG TODAY'S WEIGHT</Text>
 
             <View style={styles.weightInputRow}>
@@ -547,12 +549,12 @@ export const WeightTrackerScreen = () => {
       </Modal>
 
       {/* Measurements Modal */}
-      <Modal visible={measureModalVisible} transparent statusBarTranslucent animationType="slide" onRequestClose={() => setMeasureModalVisible(false)}>
+      <Modal visible={measureModalVisible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => setMeasureModalVisible(false)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+          <View style={[styles.modalCard, { paddingBottom: sheetBottomPadding, backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>LOG BODY MEASUREMENTS (CM)</Text>
 
             <ScrollView

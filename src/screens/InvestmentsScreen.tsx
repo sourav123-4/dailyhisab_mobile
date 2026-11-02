@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -12,12 +11,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Button, Field, money } from '../components/UI';
 import { AppIcon } from '../components/AppIcon';
 import { useAppTheme } from '../theme/appTheme';
 import { HisabPatch, HisabState, Investment } from '../types';
 import { useHisabApp } from '../navigation/HisabAppContext';
 import { localMonthISO } from '../utils/date';
+import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
 export const InvestmentsScreen = React.memo(function InvestmentsScreen({
   state,
@@ -39,6 +40,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
   removeInvestment: (id: string) => void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const { setActiveModalOpen } = useHisabApp();
   const thisMonth = currentMonth || localMonthISO();
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -1210,11 +1212,11 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
         visible={addModalVisible}
         animationType="slide"
         transparent
-        statusBarTranslucent
+        statusBarTranslucent navigationBarTranslucent
         onRequestClose={() => setAddModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <TouchableOpacity
@@ -1226,7 +1228,7 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
             style={[
               styles.modalSheet,
               {
-                backgroundColor: theme.surface,
+                paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                 borderColor: theme.borderSoft || theme.border,
               },
             ]}

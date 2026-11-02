@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -12,8 +11,10 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { useAppTheme } from '../theme/appTheme';
 import { AppIcon } from './AppIcon';
+import { useSheetBottomPadding } from './useSheetBottomPadding';
 
 export function ProfileModal({
   visible,
@@ -33,6 +34,7 @@ export function ProfileModal({
   onChangePassword?: (newPassword?: string) => Promise<void> | void;
 }) {
   const theme = useAppTheme();
+  const sheetBottomPadding = useSheetBottomPadding();
   const [isEditing, setIsEditing] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -94,21 +96,21 @@ export function ProfileModal({
       animationType="slide"
       transparent
       visible={visible}
-      statusBarTranslucent
+      statusBarTranslucent navigationBarTranslucent
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); onClose(); }}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.keyboardView}
+            behavior="padding"
+            style={[styles.keyboardView, { backgroundColor: theme.surface, maxHeight: '90%' }]}
           >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View
                 style={[
                   styles.sheetContainer,
                   {
-                    backgroundColor: theme.surface,
+                    paddingBottom: sheetBottomPadding, backgroundColor: theme.surface,
                     borderColor: theme.border,
                   },
                 ]}
@@ -346,6 +348,11 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     width: '100%',
+    // The sheet's rounded top lives here too: Android can leave this wrapper taller than the
+    // sheet, and the extra space must look like part of the sheet rather than a gap.
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
   },
   sheetContainer: {
     borderTopLeftRadius: 28,
@@ -357,7 +364,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    maxHeight: '90%',
+    maxHeight: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.15,
