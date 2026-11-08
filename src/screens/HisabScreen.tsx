@@ -140,6 +140,9 @@ function getCategoryVisual(category: string, type: string, isDark: boolean) {
   }
 }
 
+/** EMIs and loan repayments, whether saved with the EMI type or just the EMI category. */
+const isEmiTx = (t: Transaction) => t.type === 'emi' || t.category?.trim().toLowerCase() === 'emi';
+
 const TransactionRowCard = React.memo(function TransactionRowCard({
   tx,
   currency,
@@ -459,88 +462,36 @@ export const HisabScreen = React.memo(function HisabScreen({
       return String(b.id || '').localeCompare(String(a.id || ''));
     });
   }, [txs, state.transactions, startDate, endDate, searchQuery]);
-  // Top 3 KPI metrics
-  const stats = useMemo(() => {
-    let monthlyExpenses = 0;
-    let extraIncome = 0;
-    let emiLoanOutflows = 0;
-    let expenseCount = 0;
-    let incomeCount = 0;
-
-    displayList.forEach(t => {
-      const amt = Number(t.amount) || 0;
-      if (t.type === 'income') {
-        extraIncome += amt;
-        incomeCount += 1;
-      } else if (t.type === 'emi' || t.category?.toLowerCase() === 'emi') {
-        emiLoanOutflows += amt;
-        monthlyExpenses += amt;
-        expenseCount += 1;
-      } else {
-        monthlyExpenses += amt;
-        expenseCount += 1;
-      }
-    });
-
-    return {
-      monthlyExpenses,
-      extraIncome,
-      emiLoanOutflows,
-      expenseCount,
-      incomeCount,
-      totalCount: displayList.length,
-    };
-  }, [displayList]);
-
-  // Comprehensive Filtering (Search, Category, Type, Payment, Date Range, Min/Max Amount)
-  const filteredTxs = useMemo(() => {
+  // Everything except the type filter: the summary cards show this scope (so they follow the
+  // chosen dates, search, category and amounts) and the type filter is applied on top for the list.
+  const scopedTxs = useMemo(() => {
     let list = displayList;
 
-    // Type Filter
-    if (selectedType !== 'all') {
-      if (selectedType === 'expense') {
-        list = list.filter(t => t.type === 'expense');
-      } else if (selectedType === 'income') {
-        list = list.filter(t => t.type === 'income');
-      } else if (selectedType === 'emi') {
-        list = list.filter(t => t.type === 'emi' || t.category?.toLowerCase() === 'emi');
-      }
-    }
-
-    // Category Filter
     if (selectedCategory !== 'all') {
       const targetCat = selectedCategory.trim().toLowerCase();
       list = list.filter(t => (t.category || 'Others').trim().toLowerCase() === targetCat);
     }
 
-    // Payment Filter
     if (selectedPayment !== 'all') {
       list = list.filter(t => t.paymentMethod?.toLowerCase() === selectedPayment.toLowerCase());
     }
 
-    // Start Date Filter
-    if (startDate.trim()) {
-      list = list.filter(t => (t.date || '') >= startDate.trim());
-    }
+    // One date picked = just that day; both = the range between them.
+    const from = startDate.trim() || endDate.trim();
+    const to = endDate.trim() || startDate.trim();
+    if (from) list = list.filter(t => (t.date || '') >= from);
+    if (to) list = list.filter(t => (t.date || '') <= to);
 
-    // End Date Filter
-    if (endDate.trim()) {
-      list = list.filter(t => (t.date || '') <= endDate.trim());
-    }
-
-    // Min Amount
     if (minAmount.trim() && !isNaN(Number(minAmount))) {
       const minVal = Number(minAmount);
       list = list.filter(t => (Number(t.amount) || 0) >= minVal);
     }
 
-    // Max Amount
     if (maxAmount.trim() && !isNaN(Number(maxAmount))) {
       const maxVal = Number(maxAmount);
       list = list.filter(t => (Number(t.amount) || 0) <= maxVal);
     }
 
-    // Search Query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(
@@ -554,19 +505,50 @@ export const HisabScreen = React.memo(function HisabScreen({
       );
     }
 
-    // List is already sorted by date descending in displayList
     return list;
-  }, [
-    displayList,
-    selectedType,
-    selectedCategory,
-    selectedPayment,
-    startDate,
-    endDate,
-    minAmount,
-    maxAmount,
-    searchQuery,
-  ]);
+  }, [displayList, selectedCategory, selectedPayment, startDate, endDate, minAmount, maxAmount, searchQuery]);
+
+  // Summary cards. Each entry lands in exactly one bucket, so nothing is counted twice:
+  // EMIs (type or category EMI) are not also expenses, and investments are neither.
+  const stats = useMemo(() => {
+    let monthlyExpenses = 0;
+    let extraIncome = 0;
+    let emiLoanOutflows = 0;
+    let expenseCount = 0;
+    let incomeCount = 0;
+    let emiCount = 0;
+
+    scopedTxs.forEach(t => {
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income') {
+        extraIncome += amt;
+        incomeCount += 1;
+      } else if (isEmiTx(t)) {
+        emiLoanOutflows += amt;
+        emiCount += 1;
+      } else if (t.type === 'expense') {
+        monthlyExpenses += amt;
+        expenseCount += 1;
+      }
+    });
+
+    return {
+      monthlyExpenses,
+      extraIncome,
+      emiLoanOutflows,
+      expenseCount,
+      incomeCount,
+      emiCount,
+      totalCount: scopedTxs.length,
+    };
+  }, [scopedTxs]);
+
+  const filteredTxs = useMemo(() => {
+    if (selectedType === 'expense') return scopedTxs.filter(t => t.type === 'expense' && !isEmiTx(t));
+    if (selectedType === 'income') return scopedTxs.filter(t => t.type === 'income');
+    if (selectedType === 'emi') return scopedTxs.filter(isEmiTx);
+    return scopedTxs;
+  }, [scopedTxs, selectedType]);
 
   // Windowed rendering with instant 30-item chunking for 0ms render latency
   const [displayLimit, setDisplayLimit] = useState(30);
@@ -868,7 +850,7 @@ export const HisabScreen = React.memo(function HisabScreen({
             {money(stats.emiLoanOutflows, state.currency)}
           </Text>
           <Text style={[styles.kpiSubText, { color: theme.subtle }]} numberOfLines={1}>
-            Auto-debit
+            {stats.emiCount} records
           </Text>
         </TouchableOpacity>
       </View>
@@ -890,7 +872,12 @@ export const HisabScreen = React.memo(function HisabScreen({
               All Transactions
             </Text>
             <Text style={[styles.sectionSubHeading, { color: theme.subtle }]}>
-              Showing {displayedTxs.length} of {filteredTxs.length} records • {currentMonthYear}
+              Showing {displayedTxs.length} of {filteredTxs.length} records •{' '}
+              {startDate || endDate
+                ? startDate && endDate && startDate !== endDate
+                  ? `${formatRecordDate(startDate).label} – ${formatRecordDate(endDate).label}`
+                  : formatRecordDate(startDate || endDate).label
+                : currentMonthYear}
             </Text>
           </View>
 
@@ -1021,7 +1008,7 @@ export const HisabScreen = React.memo(function HisabScreen({
                   style={[styles.filterChipPill, { backgroundColor: theme.dark ? '#312e81' : '#e0e7ff' }]}
                 >
                   <Text style={[styles.filterChipPillText, { color: '#4f46e5' }]}>
-                    Date: {startDate || '...'} → {endDate || '...'} ✕
+                    Date: {startDate && endDate && startDate !== endDate ? `${startDate} → ${endDate}` : startDate || endDate} ✕
                   </Text>
                 </TouchableOpacity>
               )}

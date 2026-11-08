@@ -26,6 +26,9 @@ function currentWeekDates() {
   });
 }
 
+// Softer than pure blue/amber/pink so the bars are easy to read on both themes.
+export const MACRO_COLORS = { protein: '#6B9CF5', carbs: '#D9B45A', fats: '#D98AB0' };
+
 const formatVolume = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)} kg`);
 
 export const TodayWorkoutScreen = ({ navigation }: any) => {
@@ -91,16 +94,16 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   const pct = (value: number, target: number) => (target > 0 ? Math.min(1, value / target) : 0);
 
   const macroRows: { label: string; value: number; target: number; unit: string; color: string }[] = [
-    { label: 'Protein', value: totalConsumedProtein, target: profile.targetProteinGrams, unit: 'g', color: '#3b82f6' },
-    { label: 'Carbs', value: totalConsumedCarbs, target: profile.targetCarbsGrams, unit: 'g', color: '#f59e0b' },
-    { label: 'Fats', value: totalConsumedFats, target: profile.targetFatsGrams, unit: 'g', color: '#ec4899' },
+    { label: 'Protein', value: totalConsumedProtein, target: profile.targetProteinGrams, unit: 'g', color: MACRO_COLORS.protein },
+    { label: 'Carbs', value: totalConsumedCarbs, target: profile.targetCarbsGrams, unit: 'g', color: MACRO_COLORS.carbs },
+    { label: 'Fats', value: totalConsumedFats, target: profile.targetFatsGrams, unit: 'g', color: MACRO_COLORS.fats },
   ];
 
   const quickActions: { label: string; icon: IconName; tint: string; onPress: () => void }[] = [
-    { label: 'Scan food', icon: 'scan', tint: '#f59e0b', onPress: () => setFoodScannerVisible(true) },
-    { label: 'Log weight', icon: 'scale', tint: '#10b981', onPress: () => navigation.navigate('Weight') },
-    { label: 'Ask coach', icon: 'spark', tint: '#8b5cf6', onPress: () => navigation.navigate('AICoach') },
-    { label: 'Voice log', icon: 'voice', tint: '#0ea5e9', onPress: () => setVoiceModalVisible(true) },
+    { label: 'Scan food', icon: 'scan', tint: theme.primary, onPress: () => setFoodScannerVisible(true) },
+    { label: 'Log weight', icon: 'scale', tint: theme.accent, onPress: () => navigation.navigate('Weight') },
+    { label: 'Ask coach', icon: 'spark', tint: '#9C8CE0', onPress: () => navigation.navigate('AICoach') },
+    { label: 'Voice log', icon: 'voice', tint: '#5AA9D6', onPress: () => setVoiceModalVisible(true) },
   ];
 
   const card = [styles.card, { backgroundColor: theme.surface, borderColor: theme.borderSoft }];
@@ -113,7 +116,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         {activeWorkout ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.resumeBanner, { backgroundColor: '#10b981' }]}
+            style={[styles.resumeBanner, { backgroundColor: theme.success }]}
             onPress={() => navigation.navigate('ActiveWorkout')}
           >
             <View style={styles.liveDot} />
@@ -154,7 +157,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
                   style={[
                     styles.dayMark,
                     {
-                      backgroundColor: trained ? '#10b981' : rest ? 'transparent' : selected ? 'rgba(255,255,255,0.6)' : theme.borderSoft,
+                      backgroundColor: trained ? theme.success : rest ? 'transparent' : selected ? 'rgba(255,255,255,0.6)' : theme.borderSoft,
                     },
                   ]}
                 />
@@ -164,34 +167,34 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         </View>
 
         {/* Plan card */}
-        <View style={[styles.planCard, { backgroundColor: theme.primary }]}>
-          <View style={styles.planGlow} />
-          <Text style={styles.planEyebrow}>
+        <View style={[styles.planCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.planGlow, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.planEyebrow, { color: theme.primary }]}>
             {isToday ? (trainedToday ? 'TODAY · DONE ✓' : "TODAY'S PLAN") : `${selectedDay.dayName.toUpperCase()}'S PLAN`}
           </Text>
-          <Text style={styles.planTitle} numberOfLines={2}>
+          <Text style={[styles.planTitle, { color: theme.text }]} numberOfLines={2}>
             {selectedDay.isRestDay || scheduledExercises.length === 0 ? 'Rest & recovery' : selectedDay.splitTitle}
           </Text>
           {selectedDay.isRestDay || scheduledExercises.length === 0 ? (
-            <Text style={styles.planMeta}>Stretch, walk and hydrate. Muscles grow while you recover.</Text>
+            <Text style={[styles.planMeta, { color: theme.muted }]}>Stretch, walk and hydrate. Muscles grow while you recover.</Text>
           ) : (
             <>
-              <Text style={styles.planMeta}>
+              <Text style={[styles.planMeta, { color: theme.muted }]}>
                 {scheduledExercises.length} exercises · ~{estMinutes} min
               </Text>
               <View style={styles.muscleRow}>
                 {selectedDay.targetMuscles.map(mg => {
                   const meta = MUSCLE_GROUPS_META.find(m => m.id === mg);
                   return (
-                    <View key={mg} style={styles.musclePill}>
-                      <Text style={styles.musclePillText}>{meta?.title || mg}</Text>
+                    <View key={mg} style={[styles.musclePill, { backgroundColor: theme.primarySoft }]}>
+                      <Text style={[styles.musclePillText, { color: theme.primary }]}>{meta?.title || mg}</Text>
                     </View>
                   );
                 })}
               </View>
-              <TouchableOpacity activeOpacity={0.85} style={styles.planButton} onPress={handleStartWorkout}>
-                <AppIcon name="play" size={14} color={theme.primary} />
-                <Text style={[styles.planButtonText, { color: theme.primary }]}>
+              <TouchableOpacity activeOpacity={0.85} style={[styles.planButton, { backgroundColor: theme.primary }]} onPress={handleStartWorkout}>
+                <AppIcon name="play" size={14} color="#ffffff" />
+                <Text style={[styles.planButtonText, { color: '#ffffff' }]}>
                   {activeWorkout ? 'Resume workout' : isToday ? 'Start workout' : `Do ${selectedDay.dayName}'s workout now`}
                 </Text>
               </TouchableOpacity>
@@ -202,9 +205,9 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         {/* This week */}
         <View style={styles.statsRow}>
           {[
-            { label: 'Streak', value: `${profile.streakDays}d`, icon: 'flame' as IconName, tint: '#f97316' },
+            { label: 'Streak', value: `${profile.streakDays}d`, icon: 'flame' as IconName, tint: theme.primary },
             { label: 'This week', value: `${weekStats.sessions}/${weekStats.planned || 0}`, icon: 'dumbbell' as IconName, tint: theme.primary },
-            { label: 'Volume', value: formatVolume(weekStats.volume), icon: 'reports' as IconName, tint: '#10b981' },
+            { label: 'Volume', value: formatVolume(weekStats.volume), icon: 'reports' as IconName, tint: theme.accent },
           ].map(stat => (
             <View key={stat.label} style={[styles.statTile, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
               <View style={[styles.statIcon, { backgroundColor: `${stat.tint}22` }]}>
@@ -287,11 +290,11 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
               <Text style={{ color: theme.subtle, fontWeight: '600', fontSize: 13 }}> / {(profile.dailyWaterTargetMl / 1000).toFixed(1)} L water</Text>
             </Text>
             <View style={[styles.trackThin, { backgroundColor: theme.surfaceAlt, marginTop: 8 }]}>
-              <View style={[styles.fill, { width: `${pct(waterToday, profile.dailyWaterTargetMl) * 100}%`, backgroundColor: '#0ea5e9' }]} />
+              <View style={[styles.fill, { width: `${pct(waterToday, profile.dailyWaterTargetMl) * 100}%`, backgroundColor: '#5AA9D6' }]} />
             </View>
           </View>
           <TouchableOpacity
-            style={[styles.waterButton, { backgroundColor: '#0ea5e9' }]}
+            style={[styles.waterButton, { backgroundColor: '#5AA9D6' }]}
             activeOpacity={0.8}
             onPress={() => logWater(WATER_STEP_ML)}
             accessibilityLabel="Add a glass of water"
@@ -425,14 +428,14 @@ const styles = StyleSheet.create({
   dayName: { fontSize: 10.5, fontWeight: '700' },
   dayDate: { fontSize: 15, fontWeight: '800', marginTop: 2 },
   dayMark: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
-  planCard: { borderRadius: 22, padding: 18, overflow: 'hidden', marginBottom: 14 },
+  planCard: { borderRadius: 22, borderWidth: 1, padding: 18, overflow: 'hidden', marginBottom: 14 },
   planGlow: {
     position: 'absolute',
     width: 200,
     height: 200,
     borderRadius: 100,
     backgroundColor: '#ffffff',
-    opacity: 0.1,
+    opacity: 0.07,
     top: -80,
     right: -60,
   },

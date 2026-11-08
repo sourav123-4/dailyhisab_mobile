@@ -188,3 +188,68 @@ export function useAppTheme() {
 export function getAppTheme(themeName: AppThemeName = 'cyber') {
   return themes[themeName] || themes.cyber;
 }
+
+// TitanFit has its own palette: a calm teal with a soft blue accent, chosen to be easy on the
+// eyes for long sessions. It follows the chosen theme's light/dark mode.
+const fitnessThemes: Record<'dark' | 'light', AppTheme> = {
+  dark: {
+    name: 'midnight',
+    dark: true,
+    bg: '#0E1726',
+    surface: '#16213A',
+    surfaceAlt: '#1E2B47',
+    card: '#182540',
+    input: '#111B2F',
+    text: '#E8EEF7',
+    muted: '#9AA8BF',
+    subtle: '#728199',
+    border: 'rgba(45, 179, 166, 0.28)',
+    borderSoft: 'rgba(255, 255, 255, 0.07)',
+    primary: '#2DB3A6',
+    primarySoft: 'rgba(45, 179, 166, 0.16)',
+    primaryText: '#FFFFFF',
+    accent: '#7AA2F7',
+    accentSoft: 'rgba(122, 162, 247, 0.16)',
+    danger: '#E57A8A',
+    dangerSoft: 'rgba(229, 122, 138, 0.15)',
+    success: '#5BC08F',
+    successSoft: 'rgba(91, 192, 143, 0.15)',
+    warning: '#D9B45A',
+    warningSoft: 'rgba(217, 180, 90, 0.15)',
+    infoSoft: 'rgba(122, 162, 247, 0.12)',
+    highlightMuscle: '#E5534B',
+  },
+  light: {
+    name: 'light',
+    dark: false,
+    bg: '#F4F7F9',
+    surface: '#FFFFFF',
+    surfaceAlt: '#EEF3F6',
+    card: '#FFFFFF',
+    input: '#FFFFFF',
+    text: '#13202E',
+    muted: '#4B5B6E',
+    subtle: '#6B7B8E',
+    border: '#DDE5EC',
+    borderSoft: '#E8EEF3',
+    primary: '#0F8F84',
+    primarySoft: '#DDF3F0',
+    primaryText: '#FFFFFF',
+    accent: '#3B6FD8',
+    accentSoft: '#E3ECFB',
+    danger: '#C2485A',
+    dangerSoft: '#FBE6EA',
+    success: '#2E8B5E',
+    successSoft: '#E0F3E9',
+    warning: '#A67C1E',
+    warningSoft: '#F7EFD9',
+    infoSoft: '#E3ECFB',
+    highlightMuscle: '#D6453D',
+  },
+};
+
+/** Wraps TitanFit screens in the fitness palette, matching the current theme's light/dark mode. */
+export function FitnessThemeProvider({ children }: { children: ReactNode }) {
+  const { dark } = useAppTheme();
+  return <AppThemeContext.Provider value={fitnessThemes[dark ? 'dark' : 'light']}>{children}</AppThemeContext.Provider>;
+}

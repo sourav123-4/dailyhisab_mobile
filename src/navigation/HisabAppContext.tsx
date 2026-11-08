@@ -349,9 +349,28 @@ const CATEGORY_KEYWORDS: Array<[string, string[]]> = [
     'restaurant', 'hotel', 'cafe', 'dhaba', 'canteen', 'swiggy', 'zomato', 'zepto', 'blinkit', 'instamart', 'bigbasket', 'dmart',
     'tea', 'chai', 'coffee', 'snack', 'snacks', 'breakfast', 'lunch', 'dinner', 'tiffin', 'sweet', 'mishti', 'biryani', 'burger', 'pizza',
     'idli', 'dosa', 'vada', 'samosa', 'roti', 'paratha', 'luchi', 'puri', 'momo', 'momos', 'chowmein', 'roll', 'thali', 'juice', 'cake', 'icecream', 'ice cream', 'water bottle',
+    // vegetables (English, Hindi, Bengali, and common misspellings)
+    'vegetables', 'vegitable', 'vegitables', 'vegetable', 'veggies', 'sabzee', 'sabjee', 'tarkari', 'torkari', 'shak', 'saag',
+    'pea', 'peas', 'green peas', 'matar', 'mattar', 'motorshuti', 'koraishuti', 'beans', 'french beans', 'borboti', 'cabbage', 'bandhakopi', 'patta gobi',
+    'cauliflower', 'phulkopi', 'gobi', 'gobhi', 'brinjal', 'baingan', 'begun', 'eggplant', 'carrot', 'gajar', 'radish', 'mooli', 'mula', 'beetroot', 'beet',
+    'spinach', 'palak', 'pumpkin', 'kaddu', 'kumro', 'bottle gourd', 'lauki', 'lau', 'pointed gourd', 'parwal', 'potol', 'bitter gourd', 'karela', 'korola',
+    'ladyfinger', 'lady finger', 'okra', 'bhindi', 'dherosh', 'cucumber', 'kheera', 'sosa', 'capsicum', 'shimla mirch', 'mushroom', 'corn', 'bhutta', 'sweet corn',
+    'pyaj', 'pyaaz', 'peyaj', 'piyaj', 'aalu', 'alu', 'tamatar', 'garlic', 'lehsun', 'rasun', 'ginger', 'adrak', 'ada', 'chilli', 'chili', 'mirchi', 'lonka', 'lanka',
+    'coriander', 'dhania', 'dhonepata', 'pudina', 'mint', 'lemon', 'nimbu', 'lebu', 'curry leaves',
+    // fruits
+    'banana', 'kela', 'kola', 'apple', 'seb', 'mango', 'aam', 'orange', 'santra', 'komola', 'grapes', 'angoor', 'papaya', 'papita', 'pepe', 'guava', 'amrood', 'peyara',
+    'watermelon', 'tarbooz', 'tormuj', 'pineapple', 'anaras', 'pomegranate', 'anar', 'bedana', 'coconut', 'nariyal', 'daab', 'narkel', 'jackfruit', 'kathal', 'litchi', 'lichu', 'dates', 'khajur', 'berries',
+    // staples, spices and dairy
+    'flour', 'maida', 'besan', 'sooji', 'suji', 'poha', 'chira', 'oats', 'muri', 'murmura', 'chana', 'chhola', 'rajma', 'moong', 'masoor', 'toor', 'arhar', 'urad', 'pulses', 'lentil', 'lentils',
+    'masala', 'spice', 'spices', 'haldi', 'turmeric', 'jeera', 'cumin', 'mustard', 'sarso', 'shorshe', 'ghee', 'butter', 'makhan', 'cheese', 'lassi', 'buttermilk', 'chaas', 'ghol', 'honey', 'jam', 'sauce', 'ketchup', 'pickle', 'achar',
+    'prawn', 'prawns', 'chingri', 'crab', 'kakra', 'rui', 'katla', 'ilish', 'hilsa', 'pomfret', 'pabda', 'tangra', 'eggs', 'anda', 'dimer', 'murgi', 'pork', 'beef',
+    // snacks, sweets and drinks
+    'biscuit', 'biscuits', 'chips', 'namkeen', 'chanachur', 'bhujia', 'maggi', 'noodles', 'pasta', 'chocolate', 'toffee', 'rasgulla', 'rosogolla', 'sandesh', 'jalebi', 'laddu', 'mithai',
+    'cold drink', 'soft drink', 'coke', 'pepsi', 'sprite', 'thums up', 'frooti', 'maaza', 'soda', 'lassi', 'shake', 'milkshake', 'puchka', 'phuchka', 'golgappa', 'pani puri', 'chaat', 'jhalmuri', 'ghugni',
+    'sandwich', 'fries', 'kfc', 'mcdonald', 'mcdonalds', 'dominos', 'subway', 'haldiram', 'meal', 'meals', 'khana', 'khabar',
   ]],
   ['Bills', ['bill', 'electricity', 'bijli', 'current bill', 'rent', 'ghar bhada', 'wifi', 'broadband', 'internet', 'jio', 'airtel', 'vi recharge', 'mobile recharge', 'recharge', 'cylinder', 'gas', 'indane', 'water bill', 'society', 'maintenance', 'dth']],
-  ['Health', ['medicine', 'medicines', 'doctor', 'hospital', 'health', 'pharmacy', 'chemist', 'apollo', 'medplus', 'clinic', 'lab test', 'blood test', 'dental', 'dentist', 'tablet', 'syrup', 'gym', 'protein']],
+  ['Health', ['medicine', 'medicines', 'doctor', 'hospital', 'health', 'pharmacy', 'chemist', 'apollo', 'medplus', 'clinic', 'lab test', 'blood test', 'dental', 'dentist', 'tablet', 'syrup', 'gym', 'protein', 'ors', 'electral', 'glucose', 'glucon d', 'vitamin', 'paracetamol', 'dolo', 'crocin', 'antiseptic', 'dettol', 'savlon', 'bandage', 'band aid', 'ointment', 'injection', 'checkup', 'medical']],
   ['Entertainment', ['movie', 'netflix', 'prime', 'hotstar', 'spotify', 'youtube premium', 'game', 'entertainment', 'cinema', 'pvr', 'inox', 'theatre', 'outing', 'party', 'trip', 'vacation']],
   ['Shopping', ['pant', 'jeans', 'shoe', 'shirt', 'tshirt', 'dress', 'saree', 'kurta', 'amazon', 'flipkart', 'myntra', 'meesho', 'ajio', 'shopping', 'clothes', 'cloth', 'sneaker', 'bag', 'cosmetics', 'makeup', 'mall', 'watch']],
 ];
@@ -361,9 +380,67 @@ const CATEGORY_PATTERNS = CATEGORY_KEYWORDS.map(([category, words]) => [
   new RegExp(`(^|[^a-z])(${words.map(w => w.replace(/ /g, '\\s+')).join('|')})(e?s)?(?![a-z])`, 'i'),
 ] as const);
 
+// Single-word food names of 5+ letters, for catching spelling variants ("dhaniya" ~ "dhania").
+const FOOD_WORDS = (CATEGORY_KEYWORDS.find(([category]) => category === 'Food')?.[1] || []).filter(w => w.length >= 5 && !w.includes(' '));
+
+/** True when a and b differ by at most one inserted, removed or changed letter. */
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
 function categoryFor(text: string): string {
   const source = text.toLowerCase();
-  return CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(source))?.[0] ?? 'Others';
+  const exact = CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(source))?.[0];
+  if (exact) return exact;
+  const words = source.split(/[^a-z]+/).filter(w => w.length >= 5);
+  return words.some(w => FOOD_WORDS.some(f => withinOneEdit(w, f))) ? 'Food' : 'Others';
+}
+
+const KNOWN_CATEGORIES = new Set(CATEGORY_KEYWORDS.map(([category]) => category));
+
+/**
+ * The AI's category, unless it is missing, unknown or "Others" — then the item name (and failing
+ * that the full sentence) is matched against the keyword lists, so "200 green peas" is Food.
+ */
+function resolveCategory(aiCategory: unknown, title: string, sentence: string): string {
+  const fromAi = typeof aiCategory === 'string' ? aiCategory.trim() : '';
+  if (fromAi && fromAi !== 'Others' && KNOWN_CATEGORIES.has(fromAi)) return fromAi;
+  const fromTitle = categoryFor(title);
+  return fromTitle !== 'Others' ? fromTitle : categoryFor(sentence);
+}
+
+// Categories a plain spend can be moved into without changing its type.
+const SPEND_CATEGORIES = new Set(['Food', 'Transport', 'Bills', 'Health', 'Entertainment', 'Shopping']);
+
+/** Re-checks entries saved as "Others" (e.g. "Green peas") against the keyword lists. */
+function recategorizeOthers(transactions: Transaction[]): Transaction[] {
+  let changed = false;
+  const next = transactions.map(tx => {
+    if (tx.type !== 'expense' || (tx.category && tx.category !== 'Others')) return tx;
+    const guess = categoryFor(tx.title || '');
+    if (!SPEND_CATEGORIES.has(guess)) return tx;
+    changed = true;
+    return { ...tx, category: guess };
+  });
+  return changed ? next : transactions;
 }
 
 function parseHisab(text: string): Transaction[] {
@@ -462,10 +539,10 @@ function migrateState(raw: any): HisabState {
       };
 
   if (Array.isArray(baseState.transactions)) {
-    baseState.transactions = baseState.transactions.map(tx => ({
+    baseState.transactions = recategorizeOthers(baseState.transactions.map(tx => ({
       ...tx,
       date: normalizeDateToISO(tx.date),
-    }));
+    })));
   }
   return baseState;
 }
@@ -996,7 +1073,8 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         const removed = removedByKey[stateKey];
         const currentArray: any[] = (next as any)[stateKey] || [];
         const remaining = removed ? currentArray.filter(item => !removed.has(item?.id)) : currentArray;
-        const merged = mergeById(remaining, update.items, deletedIdsRef.current);
+        const mergedRaw = mergeById(remaining, update.items, deletedIdsRef.current);
+        const merged = stateKey === 'transactions' ? recategorizeOthers(mergedRaw as Transaction[]) : mergedRaw;
         if (haveItemsChanged(currentArray, merged)) next = { ...next, [stateKey]: merged };
       });
       if (pending.budgets) next = { ...next, budgets: { ...next.budgets, ...pending.budgets } };
@@ -1577,7 +1655,7 @@ Voice text: "${text}"
 Each item in "transactions" MUST have:
 - "title": string (clean item name, e.g. "Petrol", "Groceries", "Chai", "Salary", "Netflix")
 - "amount": number (positive numeric amount)
-- "category": string ("Food", "Transport", "Bills", "Shopping", "Entertainment", "Health", "Investment", "Income", "EMI", or "Others")
+- "category": string ("Food", "Transport", "Bills", "Shopping", "Entertainment", "Health", "Investment", "Income", "EMI", or "Others"). Anything eaten or drunk is "Food": vegetables (peas, matar, potato, onion), fruits, groceries, meat, fish, eggs, dairy, snacks, sweets, drinks and meals. Use "Others" only when no category fits.
 - "type": string ("expense", "income", "investment", or "emi")
 - "paymentMethod": string ("UPI", "Cash", "Credit Card", or "NetBanking")
 
@@ -1617,7 +1695,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
               id: uid(),
               title: String(item.title || 'Entry').trim(),
               amount: numeric(item.amount),
-              category: item.category || categoryFor(item.title || text),
+              category: resolveCategory(item.category, String(item.title || ''), text),
               type: (['expense', 'income', 'investment', 'emi'].includes(item.type) ? item.type : 'expense') as TxType,
               paymentMethod: (['UPI', 'Cash', 'Credit Card', 'NetBanking'].includes(item.paymentMethod) ? item.paymentMethod : 'UPI'),
               date: today(),

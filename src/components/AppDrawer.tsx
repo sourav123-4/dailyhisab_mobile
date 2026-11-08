@@ -268,7 +268,7 @@ export const AppDrawer = React.memo(function AppDrawer({
                   }}
                 >
                   <Text style={styles.quickEmoji}>⚡</Text>
-                  <Text style={[styles.quickTitle, { color: theme.dark ? '#fda4af' : '#be123c' }]}>TitanFit</Text>
+                  <Text style={[styles.quickTitle, { color: theme.dark ? '#5eead4' : '#0f766e' }]}>TitanFit</Text>
                   <Text style={[styles.quickHint, { color: theme.subtle }]}>Workouts & diet</Text>
                 </TouchableOpacity>
               </View>

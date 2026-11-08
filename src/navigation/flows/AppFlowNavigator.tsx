@@ -21,6 +21,7 @@ import { FitnessHeader } from '../../components/FitnessHeader';
 import { AppDrawer, FitnessDrawerConfig } from '../../components/AppDrawer';
 import { useFitnessApp } from '../FitnessAppContext';
 import { localDateISO } from '../../utils/date';
+import { FitnessThemeProvider } from '../../theme/appTheme';
 
 const TabNav = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -159,14 +160,16 @@ export default function AppFlowNavigator() {
       {appMode === 'hisab' || shouldShowAuthGate ? (
         <DailyHisabFrame />
       ) : (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
-          <Stack.Screen
-            name="ActiveWorkout"
-            component={ActiveWorkoutScreen}
-            options={{ presentation: 'fullScreenModal' }}
-          />
-        </Stack.Navigator>
+        <FitnessThemeProvider>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
+            <Stack.Screen
+              name="ActiveWorkout"
+              component={ActiveWorkoutScreen}
+              options={{ presentation: 'fullScreenModal' }}
+            />
+          </Stack.Navigator>
+        </FitnessThemeProvider>
       )}
 
       <SecurityLockModal

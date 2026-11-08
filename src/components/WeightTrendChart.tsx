@@ -43,13 +43,15 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
 
   const chartHeight = 120;
 
-  // Calculate progress percent towards target
-  const totalChangeNeeded = Math.abs(targetWeight - startWeight);
-  const changeAchieved = Math.abs(currentWeight - startWeight);
+  // Progress counts only movement towards the target: losing weight on a bulk is 0%, not 100%.
+  const totalChangeNeeded = targetWeight - startWeight;
+  const changeAchieved = currentWeight - startWeight;
   const progressPercent =
-    totalChangeNeeded > 0
-      ? Math.min(100, Math.round((changeAchieved / totalChangeNeeded) * 100))
-      : 100;
+    totalChangeNeeded !== 0
+      ? Math.max(0, Math.min(100, Math.round((changeAchieved / totalChangeNeeded) * 100)))
+      : currentWeight === targetWeight
+        ? 100
+        : 0;
 
   const delta = currentWeight - startWeight;
   const deltaFormatted = `${delta > 0 ? '+' : ''}${delta.toFixed(1)} ${unit}`;
@@ -61,7 +63,7 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
         <View>
           <Text style={[styles.title, { color: theme.text }]}>Weight Transformation</Text>
           <Text style={[styles.subtitle, { color: theme.muted }]}>
-            {goal === 'weight_loss' ? 'Fat Loss & Cutting' : goal === 'weight_gain' ? 'Hypertrophy & Bulking' : 'Body Recomposition'}
+            {goal === 'weight_loss' ? 'Fat Loss & Cutting' : goal === 'weight_gain' || goal === 'muscle_gain' ? 'Hypertrophy & Bulking' : 'Body Recomposition'}
           </Text>
         </View>
 

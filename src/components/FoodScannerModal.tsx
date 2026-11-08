@@ -528,7 +528,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 
                 {/* MACRO BREAKDOWN HUD */}
                 <View style={styles.macroHud}>
-                  <View style={[styles.macroPill, { borderColor: '#FF9500' }]}>
+                  <View style={[styles.macroPill, { borderColor: '#D9B45A' }]}>
                     <Text style={styles.macroPillIcon}>🔥</Text>
                     <Text style={styles.macroPillValue}>
                       {Math.round(analysisResult.calories * portionMultiplier)}
@@ -537,27 +537,27 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                     <Text style={styles.macroPillSub}>kcal</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#00F0FF' }]}>
+                  <View style={[styles.macroPill, { borderColor: '#2DB3A6' }]}>
                     <Text style={styles.macroPillIcon}>🍗</Text>
-                    <Text style={[styles.macroPillValue, { color: '#00F0FF' }]}>
+                    <Text style={[styles.macroPillValue, { color: '#2DB3A6' }]}>
                       {Math.round(analysisResult.protein * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>PROTEIN</Text>
                     <Text style={styles.macroPillSub}>Muscle Builder</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#00FF87' }]}>
+                  <View style={[styles.macroPill, { borderColor: '#5BC08F' }]}>
                     <Text style={styles.macroPillIcon}>🌾</Text>
-                    <Text style={[styles.macroPillValue, { color: '#00FF87' }]}>
+                    <Text style={[styles.macroPillValue, { color: '#5BC08F' }]}>
                       {Math.round(analysisResult.carbs * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>CARBS</Text>
                     <Text style={styles.macroPillSub}>Clean Energy</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#FF0055' }]}>
+                  <View style={[styles.macroPill, { borderColor: '#E07A7A' }]}>
                     <Text style={styles.macroPillIcon}>🥑</Text>
-                    <Text style={[styles.macroPillValue, { color: '#FF0055' }]}>
+                    <Text style={[styles.macroPillValue, { color: '#E07A7A' }]}>
                       {Math.round(analysisResult.fats * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>FATS</Text>
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   headerBadgeText: {
-    color: '#00F0FF',
+    color: '#2DB3A6',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
@@ -772,8 +772,8 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   tabButtonActive: {
-    backgroundColor: '#00F0FF',
-    borderColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
+    borderColor: '#2DB3A6',
   },
   tabIcon: {
     fontSize: 15,
@@ -804,8 +804,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: '#00F0FF',
-    shadowColor: '#00F0FF',
+    borderColor: '#2DB3A6',
+    shadowColor: '#2DB3A6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   cameraBtnArrow: {
-    color: '#00F0FF',
+    color: '#2DB3A6',
     fontSize: 18,
     fontWeight: '800',
     marginLeft: 8,
@@ -912,14 +912,14 @@ const styles = StyleSheet.create({
   },
   caloriePill: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 149, 0, 0.15)',
+    backgroundColor: 'rgba(217, 180, 90, 0.15)',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
     marginBottom: 6,
   },
   caloriePillText: {
-    color: '#FF9500',
+    color: '#D9B45A',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -935,17 +935,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   presetProtein: {
-    color: '#00F0FF',
+    color: '#2DB3A6',
     fontSize: 10,
     fontWeight: '700',
   },
   presetCarbs: {
-    color: '#00FF87',
+    color: '#5BC08F',
     fontSize: 10,
     fontWeight: '700',
   },
   presetFats: {
-    color: '#FF0055',
+    color: '#E07A7A',
     fontSize: 10,
     fontWeight: '700',
   },
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   analyzeBtn: {
-    backgroundColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1033,7 +1033,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#00F0FF',
+    borderColor: '#2DB3A6',
   },
   scanningImagePreviewBox: {
     width: 220,
@@ -1041,7 +1041,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#00F0FF',
+    borderColor: '#2DB3A6',
   },
   scanningImagePreview: {
     width: '100%',
@@ -1053,8 +1053,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: '#00FF87',
-    shadowColor: '#00FF87',
+    backgroundColor: '#5BC08F',
+    shadowColor: '#5BC08F',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 8,
@@ -1079,7 +1079,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#334155',
   },
   stepDotOn: {
-    backgroundColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
   },
   scanningSubtitle: {
     color: '#94A3B8',
@@ -1123,10 +1123,10 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#00FF87',
+    borderColor: '#5BC08F',
   },
   aiBadgeText: {
-    color: '#00FF87',
+    color: '#5BC08F',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -1137,9 +1137,9 @@ const styles = StyleSheet.create({
   },
   quickPhotoSwitchBtn: {
     flex: 1,
-    backgroundColor: 'rgba(0, 240, 255, 0.12)',
+    backgroundColor: 'rgba(45, 179, 166, 0.12)',
     borderWidth: 1,
-    borderColor: '#00F0FF',
+    borderColor: '#2DB3A6',
     borderRadius: 10,
     paddingVertical: 9,
     alignItems: 'center',
@@ -1179,7 +1179,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   healthNoteText: {
-    color: '#00F0FF',
+    color: '#2DB3A6',
     fontSize: 12,
     lineHeight: 16,
     marginTop: 4,
@@ -1211,8 +1211,8 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   multBtnActive: {
-    backgroundColor: '#00F0FF',
-    borderColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
+    borderColor: '#2DB3A6',
   },
   multBtnText: {
     color: '#94A3B8',
@@ -1241,7 +1241,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   macroPillValue: {
-    color: '#FF9500',
+    color: '#D9B45A',
     fontSize: 16,
     fontWeight: '800',
     marginBottom: 2,
@@ -1318,8 +1318,8 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   mealTypeBtnSelected: {
-    backgroundColor: '#00F0FF',
-    borderColor: '#00F0FF',
+    backgroundColor: '#2DB3A6',
+    borderColor: '#2DB3A6',
   },
   mealTypeBtnText: {
     color: '#94A3B8',
@@ -1354,7 +1354,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00FF87',
+    backgroundColor: '#5BC08F',
     borderRadius: 12,
     paddingVertical: 14,
   },

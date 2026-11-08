@@ -155,7 +155,7 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
               activeOpacity={0.8}
               style={[
                 styles.tabBtn,
-                activeTab === 'food_scanner' && { backgroundColor: '#FF334B', borderColor: '#FF334B' },
+                activeTab === 'food_scanner' && { backgroundColor: theme.primary, borderColor: theme.primary },
               ]}
               onPress={() => setActiveTab('food_scanner')}
             >
@@ -211,33 +211,33 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
 
                 <View style={styles.macroCardsList}>
                   {/* Protein */}
-                  <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#FF475755' }]}>
-                    <View style={[styles.macroDot, { backgroundColor: '#FF4757' }]} />
+                  <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#6B9CF555' }]}>
+                    <View style={[styles.macroDot, { backgroundColor: '#6B9CF5' }]} />
                     <View style={styles.macroInfo}>
                       <Text style={[styles.macroName, { color: theme.text }]}>Protein (Muscle Building)</Text>
                       <Text style={[styles.macroDetail, { color: theme.muted }]}>2.2g / kg • {proteinCalories} kcal</Text>
                     </View>
-                    <Text style={[styles.macroGrams, { color: '#FF4757' }]}>{targetProteinGrams}g</Text>
+                    <Text style={[styles.macroGrams, { color: '#6B9CF5' }]}>{targetProteinGrams}g</Text>
                   </View>
 
                   {/* Carbohydrates */}
                   <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#00E5FF55' }]}>
-                    <View style={[styles.macroDot, { backgroundColor: '#00E5FF' }]} />
+                    <View style={[styles.macroDot, { backgroundColor: '#D9B45A' }]} />
                     <View style={styles.macroInfo}>
                       <Text style={[styles.macroName, { color: theme.text }]}>Carbohydrates (Gym Fuel)</Text>
                       <Text style={[styles.macroDetail, { color: theme.muted }]}>{carbsCalories} kcal</Text>
                     </View>
-                    <Text style={[styles.macroGrams, { color: '#00E5FF' }]}>{targetCarbsGrams}g</Text>
+                    <Text style={[styles.macroGrams, { color: '#D9B45A' }]}>{targetCarbsGrams}g</Text>
                   </View>
 
                   {/* Fats */}
                   <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#FFA50255' }]}>
-                    <View style={[styles.macroDot, { backgroundColor: '#FFA502' }]} />
+                    <View style={[styles.macroDot, { backgroundColor: '#D98AB0' }]} />
                     <View style={styles.macroInfo}>
                       <Text style={[styles.macroName, { color: theme.text }]}>Healthy Fats (Hormones)</Text>
                       <Text style={[styles.macroDetail, { color: theme.muted }]}>25% ratio • {fatCalories} kcal</Text>
                     </View>
-                    <Text style={[styles.macroGrams, { color: '#FFA502' }]}>{targetFatGrams}g</Text>
+                    <Text style={[styles.macroGrams, { color: '#D98AB0' }]}>{targetFatGrams}g</Text>
                   </View>
                 </View>
 
@@ -272,7 +272,7 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
 
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  style={[styles.analyzeBtn, { backgroundColor: '#FF334B' }]}
+                  style={[styles.analyzeBtn, { backgroundColor: theme.primary }]}
                   onPress={handleAnalyzeMeal}
                   disabled={isAnalyzing || !mealText.trim()}
                 >
@@ -303,19 +303,19 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Calories (kcal)</Text>
                       </View>
                       <View style={styles.resultStatBox}>
-                        <Text style={[styles.resultStatNum, { color: '#FF4757' }]}>
+                        <Text style={[styles.resultStatNum, { color: '#6B9CF5' }]}>
                           {analysisResult.proteinGrams}g
                         </Text>
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Protein</Text>
                       </View>
                       <View style={styles.resultStatBox}>
-                        <Text style={[styles.resultStatNum, { color: '#00E5FF' }]}>
+                        <Text style={[styles.resultStatNum, { color: '#D9B45A' }]}>
                           {analysisResult.carbsGrams}g
                         </Text>
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Carbs</Text>
                       </View>
                       <View style={styles.resultStatBox}>
-                        <Text style={[styles.resultStatNum, { color: '#FFA502' }]}>
+                        <Text style={[styles.resultStatNum, { color: '#D98AB0' }]}>
                           {analysisResult.fatGrams}g
                         </Text>
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Fats</Text>

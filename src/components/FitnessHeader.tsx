@@ -74,17 +74,17 @@ export const FitnessHeader = React.memo(function FitnessHeader({
           {isHome ? (
             <TouchableOpacity
               onPress={onOpenStreak}
-              style={[styles.streakPill, { backgroundColor: 'rgba(249,115,22,0.14)', borderColor: 'rgba(249,115,22,0.45)' }]}
+              style={[styles.streakPill, { backgroundColor: theme.primarySoft, borderColor: theme.border }]}
               activeOpacity={0.75}
               accessibilityLabel={`${streakDays} day workout streak`}
             >
-              <AppIcon name="flame" size={14} color="#f97316" />
-              <Text style={styles.streakText}>{streakDays}</Text>
+              <AppIcon name="flame" size={14} color={theme.primary} />
+              <Text style={[styles.streakText, { color: theme.primary }]}>{streakDays}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
             onPress={onSwitchToHisab}
-            style={[styles.modePill, { backgroundColor: 'rgba(20,184,166,0.14)', borderColor: '#14B8A6' }]}
+            style={[styles.modePill, { backgroundColor: 'rgba(139,124,246,0.14)', borderColor: '#8B7CF6' }]}
             activeOpacity={0.75}
             accessibilityLabel="Switch to Daily Hisab"
           >
@@ -167,7 +167,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   streakText: {
-    color: '#f97316',
     fontWeight: '800',
     fontSize: 12,
   },
@@ -184,7 +183,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   modeText: {
-    color: '#14B8A6',
+    color: '#8B7CF6',
     fontWeight: '800',
     fontSize: 11,
   },
