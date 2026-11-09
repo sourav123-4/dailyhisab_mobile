@@ -484,7 +484,9 @@ export const WeightTrackerScreen = () => {
         </View>
 
         {/* Weight Log History */}
-        <Text style={[styles.historyHeading, { color: theme.text }]}>RECENT WEIGH-INS</Text>
+        {weightHistory.length > 0 ? (
+          <Text style={[styles.historyHeading, { color: theme.text }]}>RECENT WEIGH-INS</Text>
+        ) : null}
         {[...weightHistory].reverse().map((entry) => (
           <View
             key={entry.id}

@@ -83,12 +83,12 @@ export function TitanFitBottomTabBar({
       {TABS.slice(0, 2).map(renderTab)}
 
       <View style={styles.centerWrapper}>
-        <View style={[styles.centerHalo, { backgroundColor: workoutInProgress ? 'rgba(16,185,129,0.18)' : `${theme.primary}29` }]}>
+        <View style={[styles.centerHalo, { backgroundColor: `${theme.primary}29` }]}>
           <TouchableOpacity
             onPress={onStartWorkout}
             style={[
               styles.centerButton,
-              { backgroundColor: workoutInProgress ? '#10b981' : theme.primary, shadowColor: workoutInProgress ? '#10b981' : theme.primary },
+              { backgroundColor: theme.primary, shadowColor: theme.primary },
             ]}
             activeOpacity={0.85}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -97,7 +97,7 @@ export function TitanFitBottomTabBar({
             <AppIcon name="play" size={22} color="#ffffff" />
           </TouchableOpacity>
         </View>
-        <Text style={[styles.centerLabel, { color: workoutInProgress ? '#10b981' : inactiveColor }]}>
+        <Text style={[styles.centerLabel, { color: workoutInProgress ? theme.primary : inactiveColor }]}>
           {workoutInProgress ? 'Resume' : 'Start'}
         </Text>
       </View>

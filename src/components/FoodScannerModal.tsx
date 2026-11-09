@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Modal,
   View,
@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { MealType } from '../types/fitness';
+import { AppTheme, useAppTheme } from '../theme/appTheme';
 import {
   analyzeFoodFromText,
   analyzeFoodFromImage,
@@ -40,6 +41,8 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
   defaultMealType = 'lunch',
 }) => {
   const { logMeal } = useFitnessApp();
+  const theme = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [activeTab, setActiveTab] = useState<'photo' | 'text'>('photo');
   const [inputText, setInputText] = useState('');
@@ -347,7 +350,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                 {/* Section Separator */}
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR TEST WITH ATHLETE PRESET MEALS</Text>
+                  <Text style={styles.dividerText}>OR PICK A QUICK MEAL</Text>
                   <View style={styles.dividerLine} />
                 </View>
 
@@ -391,7 +394,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                     <TextInput
                       style={styles.textInput}
                       placeholder="e.g. 200g chicken breast and 1 cup rice"
-                      placeholderTextColor="#64748B"
+                      placeholderTextColor={theme.subtle}
                       value={inputText}
                       onChangeText={setInputText}
                       onSubmitEditing={() => handleAnalyzeText()}
@@ -399,7 +402,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                     />
                     {inputText.length > 0 && (
                       <TouchableOpacity onPress={() => setInputText('')}>
-                        <Text style={{ color: '#64748B', fontSize: 16 }}>✕</Text>
+                        <Text style={{ color: theme.subtle, fontSize: 16 }}>✕</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -471,7 +474,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.quickPhotoSwitchBtn, { backgroundColor: '#1E293B', borderColor: '#475569' }]}
+                        style={[styles.quickPhotoSwitchBtn, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}
                         onPress={handlePickFromGallery}
                         disabled={isScanning}
                         activeOpacity={0.8}
@@ -490,7 +493,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                     value={editableName}
                     onChangeText={setEditableName}
                     placeholder="Meal Name"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={theme.subtle}
                   />
                   <Text style={styles.foodPortion}>
                     Portion: {analysisResult.portion}
@@ -528,7 +531,7 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
 
                 {/* MACRO BREAKDOWN HUD */}
                 <View style={styles.macroHud}>
-                  <View style={[styles.macroPill, { borderColor: '#D9B45A' }]}>
+                  <View style={[styles.macroPill, { borderColor: theme.warning }]}>
                     <Text style={styles.macroPillIcon}>🔥</Text>
                     <Text style={styles.macroPillValue}>
                       {Math.round(analysisResult.calories * portionMultiplier)}
@@ -537,27 +540,27 @@ export const FoodScannerModal: React.FC<FoodScannerModalProps> = ({
                     <Text style={styles.macroPillSub}>kcal</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#2DB3A6' }]}>
+                  <View style={[styles.macroPill, { borderColor: theme.primary }]}>
                     <Text style={styles.macroPillIcon}>🍗</Text>
-                    <Text style={[styles.macroPillValue, { color: '#2DB3A6' }]}>
+                    <Text style={[styles.macroPillValue, { color: theme.primary }]}>
                       {Math.round(analysisResult.protein * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>PROTEIN</Text>
                     <Text style={styles.macroPillSub}>Muscle Builder</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#5BC08F' }]}>
+                  <View style={[styles.macroPill, { borderColor: theme.success }]}>
                     <Text style={styles.macroPillIcon}>🌾</Text>
-                    <Text style={[styles.macroPillValue, { color: '#5BC08F' }]}>
+                    <Text style={[styles.macroPillValue, { color: theme.success }]}>
                       {Math.round(analysisResult.carbs * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>CARBS</Text>
                     <Text style={styles.macroPillSub}>Clean Energy</Text>
                   </View>
 
-                  <View style={[styles.macroPill, { borderColor: '#E07A7A' }]}>
+                  <View style={[styles.macroPill, { borderColor: theme.danger }]}>
                     <Text style={styles.macroPillIcon}>🥑</Text>
-                    <Text style={[styles.macroPillValue, { color: '#E07A7A' }]}>
+                    <Text style={[styles.macroPillValue, { color: theme.danger }]}>
                       {Math.round(analysisResult.fats * portionMultiplier)}g
                     </Text>
                     <Text style={styles.macroPillLabel}>FATS</Text>
@@ -649,6 +652,8 @@ function ScanningOverlay({ photoUri, fromText, onCancel }: { photoUri: string | 
   const sweep = useRef(new Animated.Value(0)).current;
   const [step, setStep] = useState(0);
   const steps = fromText ? TEXT_STEPS : PHOTO_STEPS;
+  const theme = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -676,7 +681,7 @@ function ScanningOverlay({ photoUri, fromText, onCancel }: { photoUri: string | 
             />
           </View>
         ) : null}
-        <ActivityIndicator size="large" color="#00F0FF" style={{ marginTop: 16 }} />
+        <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 16 }} />
         <Text style={styles.scanningTitle}>{steps[step]}</Text>
         <View style={styles.stepDots}>
           {steps.map((label, i) => (
@@ -692,21 +697,23 @@ function ScanningOverlay({ photoUri, fromText, onCancel }: { photoUri: string | 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: AppTheme) => {
+  const line = t.dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.12)';
+  return StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(5, 8, 16, 0.85)',
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: '92%',
     paddingTop: 16,
     paddingBottom: 28,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: t.borderSoft,
   },
   header: {
     flexDirection: 'row',
@@ -715,7 +722,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: t.borderSoft,
   },
   headerLeft: {
     flex: 1,
@@ -730,13 +737,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   headerBadgeText: {
-    color: '#2DB3A6',
+    color: t.primary,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
   },
   title: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 20,
     fontWeight: '800',
   },
@@ -744,12 +751,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeButtonText: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -767,24 +774,24 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   tabButtonActive: {
-    backgroundColor: '#2DB3A6',
-    borderColor: '#2DB3A6',
+    backgroundColor: t.primary,
+    borderColor: t.primary,
   },
   tabIcon: {
     fontSize: 15,
   },
   tabButtonText: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 13,
     fontWeight: '700',
   },
   tabButtonTextActive: {
-    color: '#0A0E17',
+    color: t.primaryText,
     fontWeight: '800',
   },
   scrollContent: {
@@ -800,12 +807,12 @@ const styles = StyleSheet.create({
   cameraPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: '#2DB3A6',
-    shadowColor: '#2DB3A6',
+    borderColor: t.primary,
+    shadowColor: t.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -815,24 +822,24 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: '#2DB3A6',
+    backgroundColor: t.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
   },
   cameraBtnTitle: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 16,
     fontWeight: '800',
     marginBottom: 3,
   },
   cameraBtnSubtitle: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 12,
     lineHeight: 16,
   },
   cameraBtnArrow: {
-    color: '#2DB3A6',
+    color: t.primary,
     fontSize: 18,
     fontWeight: '800',
     marginLeft: 8,
@@ -840,35 +847,35 @@ const styles = StyleSheet.create({
   gallerySecondaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   galleryBtnIconBox: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   galleryBtnTitle: {
-    color: '#E2E8F0',
+    color: t.text,
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 2,
   },
   galleryBtnSubtitle: {
-    color: '#64748B',
+    color: t.subtle,
     fontSize: 11,
   },
   galleryBtnArrow: {
-    color: '#64748B',
+    color: t.subtle,
     fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
@@ -882,10 +889,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#334155',
+    backgroundColor: t.surfaceAlt,
   },
   dividerText: {
-    color: '#64748B',
+    color: t.subtle,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -899,32 +906,33 @@ const styles = StyleSheet.create({
     width: '48%',
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   presetImage: {
     width: '100%',
     height: 120,
+    backgroundColor: t.surfaceAlt,
   },
   presetOverlay: {
     padding: 10,
   },
   caloriePill: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(217, 180, 90, 0.15)',
+    backgroundColor: t.warningSoft,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
     marginBottom: 6,
   },
   caloriePillText: {
-    color: '#D9B45A',
+    color: t.warning,
     fontSize: 11,
     fontWeight: '800',
   },
   presetName: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 17,
@@ -935,30 +943,30 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   presetProtein: {
-    color: '#2DB3A6',
+    color: t.primary,
     fontSize: 10,
     fontWeight: '700',
   },
   presetCarbs: {
-    color: '#5BC08F',
+    color: t.success,
     fontSize: 10,
     fontWeight: '700',
   },
   presetFats: {
-    color: '#E07A7A',
+    color: t.danger,
     fontSize: 10,
     fontWeight: '700',
   },
   inputCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
     marginVertical: 12,
   },
   inputLabel: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
@@ -967,32 +975,32 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
     marginBottom: 14,
   },
   textInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 14,
     paddingVertical: 12,
   },
   analyzeBtn: {
-    backgroundColor: '#2DB3A6',
+    backgroundColor: t.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   analyzeBtnText: {
-    color: '#0A0E17',
+    color: t.primaryText,
     fontSize: 14,
     fontWeight: '800',
   },
   sectionHeading: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 12,
     fontWeight: '700',
     marginTop: 6,
@@ -1004,15 +1012,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   chipText: {
-    color: '#E2E8F0',
+    color: t.text,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1028,12 +1036,12 @@ const styles = StyleSheet.create({
   scanningBox: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 22,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2DB3A6',
+    borderColor: t.primary,
   },
   scanningImagePreviewBox: {
     width: 220,
@@ -1041,7 +1049,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#2DB3A6',
+    borderColor: t.primary,
   },
   scanningImagePreview: {
     width: '100%',
@@ -1053,15 +1061,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: '#5BC08F',
-    shadowColor: '#5BC08F',
+    backgroundColor: t.success,
+    shadowColor: t.success,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 6,
   },
   scanningTitle: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 16,
     fontWeight: '800',
     marginTop: 14,
@@ -1076,13 +1084,13 @@ const styles = StyleSheet.create({
     width: 22,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#334155',
+    backgroundColor: t.surfaceAlt,
   },
   stepDotOn: {
-    backgroundColor: '#2DB3A6',
+    backgroundColor: t.primary,
   },
   scanningSubtitle: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 8,
@@ -1093,10 +1101,10 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#475569',
+    borderColor: line,
   },
   scanCancelText: {
-    color: '#E2E8F0',
+    color: t.text,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -1137,49 +1145,49 @@ const styles = StyleSheet.create({
   },
   quickPhotoSwitchBtn: {
     flex: 1,
-    backgroundColor: 'rgba(45, 179, 166, 0.12)',
+    backgroundColor: t.primarySoft,
     borderWidth: 1,
-    borderColor: '#2DB3A6',
+    borderColor: t.primary,
     borderRadius: 10,
     paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickPhotoSwitchBtnText: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 12,
     fontWeight: '700',
   },
   foodHeaderCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   editTitleLabel: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   editableNameInput: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 18,
     fontWeight: '800',
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: line,
     paddingVertical: 4,
     marginBottom: 6,
   },
   foodPortion: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 13,
     marginBottom: 6,
   },
   healthNoteText: {
-    color: '#2DB3A6',
+    color: t.primary,
     fontSize: 12,
     lineHeight: 16,
     marginTop: 4,
@@ -1191,10 +1199,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#334155',
+    borderTopColor: line,
   },
   portionLabel: {
-    color: '#E2E8F0',
+    color: t.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -1206,21 +1214,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   multBtnActive: {
-    backgroundColor: '#2DB3A6',
-    borderColor: '#2DB3A6',
+    backgroundColor: t.primary,
+    borderColor: t.primary,
   },
   multBtnText: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 12,
     fontWeight: '700',
   },
   multBtnTextActive: {
-    color: '#0A0E17',
+    color: t.primaryText,
     fontWeight: '800',
   },
   macroHud: {
@@ -1230,7 +1238,7 @@ const styles = StyleSheet.create({
   },
   macroPill: {
     flex: 1,
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderRadius: 14,
     padding: 10,
     alignItems: 'center',
@@ -1241,32 +1249,32 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   macroPillValue: {
-    color: '#D9B45A',
+    color: t.warning,
     fontSize: 16,
     fontWeight: '800',
     marginBottom: 2,
   },
   macroPillLabel: {
-    color: '#FFFFFF',
+    color: t.text,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   macroPillSub: {
-    color: '#64748B',
+    color: t.subtle,
     fontSize: 9,
     marginTop: 2,
     textAlign: 'center',
   },
   ingredientsBox: {
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   ingredientsLabel: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -1278,25 +1286,25 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ingredientBadge: {
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
   },
   ingredientBadgeText: {
-    color: '#E2E8F0',
+    color: t.text,
     fontSize: 11,
     fontWeight: '600',
   },
   mealTypeSection: {
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   mealTypeLabel: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -1313,21 +1321,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#0F172A',
+    backgroundColor: t.bg,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   mealTypeBtnSelected: {
-    backgroundColor: '#2DB3A6',
-    borderColor: '#2DB3A6',
+    backgroundColor: t.primary,
+    borderColor: t.primary,
   },
   mealTypeBtnText: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 11,
     fontWeight: '700',
   },
   mealTypeBtnTextSelected: {
-    color: '#0A0E17',
+    color: t.primaryText,
     fontWeight: '800',
   },
   actionRow: {
@@ -1341,12 +1349,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#1E293B',
+    backgroundColor: t.surface,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: line,
   },
   rescanBtnText: {
-    color: '#94A3B8',
+    color: t.muted,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1354,13 +1362,14 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#5BC08F',
+    backgroundColor: t.success,
     borderRadius: 12,
     paddingVertical: 14,
   },
   logSaveBtnText: {
-    color: '#0A0E17',
+    color: t.primaryText,
     fontSize: 14,
     fontWeight: '800',
   },
 });
+};

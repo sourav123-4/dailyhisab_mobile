@@ -211,13 +211,13 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
 
                 <View style={styles.macroCardsList}>
                   {/* Protein */}
-                  <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#6B9CF555' }]}>
-                    <View style={[styles.macroDot, { backgroundColor: '#6B9CF5' }]} />
+                  <View style={[styles.macroRow, { backgroundColor: theme.surfaceAlt, borderColor: '#2DB3A655' }]}>
+                    <View style={[styles.macroDot, { backgroundColor: '#2DB3A6' }]} />
                     <View style={styles.macroInfo}>
                       <Text style={[styles.macroName, { color: theme.text }]}>Protein (Muscle Building)</Text>
                       <Text style={[styles.macroDetail, { color: theme.muted }]}>2.2g / kg • {proteinCalories} kcal</Text>
                     </View>
-                    <Text style={[styles.macroGrams, { color: '#6B9CF5' }]}>{targetProteinGrams}g</Text>
+                    <Text style={[styles.macroGrams, { color: '#2DB3A6' }]}>{targetProteinGrams}g</Text>
                   </View>
 
                   {/* Carbohydrates */}
@@ -303,7 +303,7 @@ export const MacroPlanModal: React.FC<MacroPlanModalProps> = ({
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Calories (kcal)</Text>
                       </View>
                       <View style={styles.resultStatBox}>
-                        <Text style={[styles.resultStatNum, { color: '#6B9CF5' }]}>
+                        <Text style={[styles.resultStatNum, { color: '#2DB3A6' }]}>
                           {analysisResult.proteinGrams}g
                         </Text>
                         <Text style={[styles.resultStatLabel, { color: theme.muted }]}>Protein</Text>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -12,7 +12,7 @@ import {
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
 import { RestTimerModal } from '../components/RestTimerModal';
-import { MUSCLE_GROUPS_META } from '../data/exercisesData';
+import { EXERCISES_DATABASE, MUSCLE_GROUPS_META } from '../data/exercisesData';
 import { localDateISO, nextStreakDays } from '../utils/date';
 
 export const ActiveWorkoutScreen = ({ navigation }: any) => {
@@ -28,6 +28,18 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
 
   const [restTimerVisible, setRestTimerVisible] = useState(false);
   const [restSeconds, setRestSeconds] = useState(profile.restTimerSeconds || 90);
+  const [now, setNow] = useState(Date.now());
+
+  // Live workout clock.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const startRest = (seconds: number) => {
+    setRestSeconds(seconds);
+    setRestTimerVisible(true);
+  };
 
   if (!activeWorkout) {
     return (
@@ -47,17 +59,34 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
     );
   }
 
+  const startedAt = parseInt(activeWorkout.id.split('_')[1] || '0', 10) || now;
+  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const clock = `${Math.floor(elapsed / 3600) ? `${Math.floor(elapsed / 3600)}:` : ''}${String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
+  const doneSets = activeWorkout.exercises.reduce((n, e) => n + e.sets.filter(set => set.isCompleted).length, 0);
+  const totalSets = activeWorkout.exercises.reduce((n, e) => n + e.sets.length, 0);
+
   const handleFinish = async () => {
+    if (doneSets === 0) {
+      Alert.alert('Nothing to save yet', 'Tick the circle next to each set you finish, then save the workout.');
+      return;
+    }
     // Same rule the context applies: a second workout today keeps the streak, it doesn't add a day.
     const streakAfter = nextStreakDays(profile.lastWorkoutDate, profile.streakDays, localDateISO());
     const finished = await finishActiveWorkout();
     if (finished) {
       Alert.alert(
-        '🔥 Workout Crushed!',
-        `Total Volume Lifted: ${finished.totalVolumeKg} ${profile.unit}\nEstimated Burn: ${finished.caloriesBurned} kcal\nStreak: ${streakAfter} day${streakAfter === 1 ? '' : 's'}`,
-        [{ text: 'Awesome!', onPress: () => navigation.navigate('MainTabs', { screen: 'Today' }) }]
+        'Workout saved 💪',
+        `Time: ${finished.durationMinutes} min\nSets done: ${doneSets}\nVolume lifted: ${finished.totalVolumeKg} ${profile.unit}\nEstimated burn: ${finished.caloriesBurned} kcal\nStreak: ${streakAfter} day${streakAfter === 1 ? '' : 's'}`,
+        [{ text: 'Done', onPress: () => navigation.navigate('MainTabs', { screen: 'Today' }) }]
       );
     }
+  };
+
+  const confirmDeleteSet = (exerciseId: string, setId: string, setNumber: number, exerciseName: string) => {
+    Alert.alert(`Remove set ${setNumber}?`, `This removes set ${setNumber} from ${exerciseName}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => deleteSetFromActiveWorkout(exerciseId, setId) },
+    ]);
   };
 
   const handleCancel = () => {
@@ -94,7 +123,7 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
           <View>
             <Text style={[styles.sessionTitle, { color: theme.text }]}>{activeWorkout.title}</Text>
             <Text style={[styles.sessionTime, { color: theme.muted }]}>
-              Started at {activeWorkout.startTime} • {activeWorkout.exercises.length} Exercises
+              ⏱ {clock} • {doneSets}/{totalSets} sets done
             </Text>
           </View>
 
@@ -109,6 +138,8 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
         {/* Exercises Logger List */}
         {activeWorkout.exercises.map((exLog, exIdx) => {
           const meta = MUSCLE_GROUPS_META.find((m) => m.id === exLog.muscleGroup);
+          const exInfo = EXERCISES_DATABASE.find((e) => e.id === exLog.exerciseId);
+          const exRest = exInfo?.restSeconds || profile.restTimerSeconds || 90;
 
           return (
             <View
@@ -130,9 +161,9 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
                 <TouchableOpacity
                   activeOpacity={0.7}
                   style={[styles.timerPill, { backgroundColor: theme.surfaceAlt, borderColor: theme.accent }]}
-                  onPress={() => setRestTimerVisible(true)}
+                  onPress={() => startRest(exRest)}
                 >
-                  <Text style={[styles.timerPillText, { color: theme.accent }]}>⏱ 90s</Text>
+                  <Text style={[styles.timerPillText, { color: theme.accent }]}>⏱ {exRest}s</Text>
                 </TouchableOpacity>
               </View>
 
@@ -158,9 +189,16 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
                       },
                     ]}
                   >
-                    <Text style={[styles.setNumCol, { flex: 0.8, color: theme.text }]}>
-                      #{set.setNumber}
-                    </Text>
+                    <TouchableOpacity
+                      style={{ flex: 0.8 }}
+                      onPress={() => confirmDeleteSet(exLog.exerciseId, set.id, set.setNumber, exLog.exerciseName)}
+                      onLongPress={() => confirmDeleteSet(exLog.exerciseId, set.id, set.setNumber, exLog.exerciseName)}
+                      hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                      accessibilityLabel={`Set ${set.setNumber}, tap to remove`}
+                    >
+                      <Text style={[styles.setNumCol, { color: theme.text }]}>#{set.setNumber}</Text>
+                      <Text style={[styles.removeHint, { color: theme.subtle }]}>remove</Text>
+                    </TouchableOpacity>
 
                     <Text style={[styles.prevCol, { flex: 1.2, color: theme.muted }]}>
                       {set.previousWeight ? `${set.previousWeight}kg × ${set.previousReps}` : '—'}
@@ -210,7 +248,7 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
                           isCompleted: nextCompleted,
                         });
                         if (nextCompleted) {
-                          setRestTimerVisible(true);
+                          startRest(exRest);
                         }
                       }}
                     >
@@ -250,7 +288,7 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
             style={[styles.finishBtn, { backgroundColor: theme.primary }]}
             onPress={handleFinish}
           >
-            <Text style={styles.finishBtnText}>FINISH & SAVE WORKOUT 🔥</Text>
+            <Text style={styles.finishBtnText}>FINISH & SAVE WORKOUT</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -274,6 +312,11 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
+  removeHint: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 1,
+  },
   container: {
     flex: 1,
   },

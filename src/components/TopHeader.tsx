@@ -132,8 +132,8 @@ export const TopHeader = React.memo(function TopHeader({
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              backgroundColor: 'rgba(45, 179, 166, 0.14)',
-              borderColor: '#2DB3A6',
+              backgroundColor: 'rgba(91, 141, 246, 0.14)',
+              borderColor: '#5B8DF6',
               borderWidth: 1,
               borderRadius: 10,
               paddingHorizontal: 8,
@@ -144,7 +144,7 @@ export const TopHeader = React.memo(function TopHeader({
             onPress={() => setAppMode('fitness')}
           >
             <Text style={{ fontSize: 13 }}>⚡</Text>
-            <Text style={{ color: '#2DB3A6', fontWeight: '800', fontSize: 11 }}>TitanFit</Text>
+            <Text style={{ color: '#5B8DF6', fontWeight: '800', fontSize: 11 }}>TitanFit</Text>
           </TouchableOpacity>
 
           {onQrPress && (

@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { Exercise } from '../types/fitness';
 import { EXERCISE_3D_VIDEOS, MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META } from '../data/exercisesData';
-import { getExerciseLocalMedia } from '../data/exerciseLocalMedia';
 import { useAppTheme } from '../theme/appTheme';
+import { EXERCISE_VIDEO_LOOKUP } from '../data/exerciseVideoLookup';
 
 interface ExerciseVisualCardProps {
   exercise: Exercise;
@@ -29,9 +29,7 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
   const muscleMeta =
     MUSCLE_GROUPS_META.find((m) => m.id === exercise.muscleGroup) || MUSCLE_GROUPS_META[0];
 
-  const localMedia = getExerciseLocalMedia(exercise.id);
   const exerciseImage =
-    localMedia?.posterJpg ||
     EXERCISE_3D_VIDEOS[exercise.id] ||
     (exercise.thumbnailUrl ? { uri: exercise.thumbnailUrl } : null) ||
     MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] ||
@@ -58,7 +56,7 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
             resizeMode="cover"
           />
 
-          {localMedia ? (
+          {EXERCISE_VIDEO_LOOKUP[exercise.id] ? (
             <View style={styles.playOverlayBadge}>
               <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
               <Text style={styles.playOverlayText}>DEMO</Text>

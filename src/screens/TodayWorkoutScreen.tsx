@@ -27,7 +27,7 @@ function currentWeekDates() {
 }
 
 // Softer than pure blue/amber/pink so the bars are easy to read on both themes.
-export const MACRO_COLORS = { protein: '#6B9CF5', carbs: '#D9B45A', fats: '#D98AB0' };
+export const MACRO_COLORS = { protein: '#2DB3A6', carbs: '#D9B45A', fats: '#D98AB0' };
 
 const formatVolume = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)} kg`);
 
@@ -116,7 +116,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         {activeWorkout ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.resumeBanner, { backgroundColor: theme.success }]}
+            style={[styles.resumeBanner, { backgroundColor: theme.primary }]}
             onPress={() => navigation.navigate('ActiveWorkout')}
           >
             <View style={styles.liveDot} />
@@ -211,7 +211,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
           ].map(stat => (
             <View key={stat.label} style={[styles.statTile, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
               <View style={[styles.statIcon, { backgroundColor: `${stat.tint}22` }]}>
-                <AppIcon name={stat.icon} size={15} color={stat.tint} />
+                <AppIcon name={stat.icon} size={18} color={stat.tint} />
               </View>
               <Text style={[styles.statValue, { color: theme.text }]}>{stat.value}</Text>
               <Text style={[styles.statLabel, { color: theme.subtle }]}>{stat.label}</Text>

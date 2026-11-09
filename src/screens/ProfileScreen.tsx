@@ -122,7 +122,7 @@ export const ProfileScreen = () => {
             </View>
             <View style={[styles.statBox, { backgroundColor: theme.surfaceAlt }]}>
               <Text style={[styles.statLabel, { color: theme.muted }]}>STREAK</Text>
-              <Text style={[styles.statVal, { color: theme.success }]}>{profile.streakDays} Days</Text>
+              <Text style={[styles.statVal, { color: theme.success }]}>{profile.streakDays} {profile.streakDays === 1 ? 'Day' : 'Days'}</Text>
             </View>
           </View>
         </View>

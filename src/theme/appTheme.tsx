@@ -189,7 +189,7 @@ export function getAppTheme(themeName: AppThemeName = 'cyber') {
   return themes[themeName] || themes.cyber;
 }
 
-// TitanFit has its own palette: a calm teal with a soft blue accent, chosen to be easy on the
+// TitanFit has its own palette: a royal blue with a teal accent, chosen to be easy on the
 // eyes for long sessions. It follows the chosen theme's light/dark mode.
 const fitnessThemes: Record<'dark' | 'light', AppTheme> = {
   dark: {
@@ -203,13 +203,13 @@ const fitnessThemes: Record<'dark' | 'light', AppTheme> = {
     text: '#E8EEF7',
     muted: '#9AA8BF',
     subtle: '#728199',
-    border: 'rgba(45, 179, 166, 0.28)',
+    border: 'rgba(91, 141, 246, 0.30)',
     borderSoft: 'rgba(255, 255, 255, 0.07)',
-    primary: '#2DB3A6',
-    primarySoft: 'rgba(45, 179, 166, 0.16)',
+    primary: '#5B8DF6',
+    primarySoft: 'rgba(91, 141, 246, 0.16)',
     primaryText: '#FFFFFF',
-    accent: '#7AA2F7',
-    accentSoft: 'rgba(122, 162, 247, 0.16)',
+    accent: '#2DB3A6',
+    accentSoft: 'rgba(45, 179, 166, 0.16)',
     danger: '#E57A8A',
     dangerSoft: 'rgba(229, 122, 138, 0.15)',
     success: '#5BC08F',
@@ -222,21 +222,21 @@ const fitnessThemes: Record<'dark' | 'light', AppTheme> = {
   light: {
     name: 'light',
     dark: false,
-    bg: '#F4F7F9',
+    bg: '#F4F6FA',
     surface: '#FFFFFF',
-    surfaceAlt: '#EEF3F6',
+    surfaceAlt: '#EDF1F8',
     card: '#FFFFFF',
     input: '#FFFFFF',
     text: '#13202E',
     muted: '#4B5B6E',
     subtle: '#6B7B8E',
-    border: '#DDE5EC',
-    borderSoft: '#E8EEF3',
-    primary: '#0F8F84',
-    primarySoft: '#DDF3F0',
+    border: '#DCE3EE',
+    borderSoft: '#E7ECF4',
+    primary: '#2563EB',
+    primarySoft: '#E3ECFD',
     primaryText: '#FFFFFF',
-    accent: '#3B6FD8',
-    accentSoft: '#E3ECFB',
+    accent: '#0E9A94',
+    accentSoft: '#DDF3F0',
     danger: '#C2485A',
     dangerSoft: '#FBE6EA',
     success: '#2E8B5E',

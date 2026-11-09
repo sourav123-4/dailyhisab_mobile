@@ -241,6 +241,35 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     });
   };
 
+  /** Last completed set of an exercise in saved history, for "Previous" and pre-filling. */
+  const lastSetFor = (exerciseId: string): WorkoutSet | undefined => {
+    for (const session of workoutHistory) {
+      const log = session.exercises.find(e => e.exerciseId === exerciseId);
+      const done = log?.sets.filter(s => s.isCompleted);
+      if (done && done.length) return done[done.length - 1];
+    }
+    return undefined;
+  };
+
+  const firstSetFor = (exerciseId: string): WorkoutSet => {
+    const ex = EXERCISES_DATABASE.find(e => e.id === exerciseId);
+    const last = lastSetFor(exerciseId);
+    // Bodyweight moves start at 0 kg (no extra load) instead of a made-up 20 kg.
+    const startWeight = last?.weightKg ?? (ex?.equipment === 'bodyweight' ? 0 : 20);
+    return {
+      id: `set_${Date.now()}_${exerciseId}_1`,
+      setNumber: 1,
+      weightKg: startWeight,
+      reps: last?.reps || ex?.defaultReps || 10,
+      isCompleted: false,
+      previousWeight: last?.weightKg,
+      previousReps: last?.reps,
+    };
+  };
+
+  const volumeOf = (exercises: ActiveExerciseLog[]) =>
+    exercises.reduce((sum, e) => sum + e.sets.reduce((s, set) => s + (set.isCompleted ? (set.weightKg || 0) * (set.reps || 0) : 0), 0), 0);
+
   const startWorkout = (
     title?: string,
     exerciseIds?: string[],
@@ -253,15 +282,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         exerciseId: id,
         exerciseName: ex?.name || 'Custom Exercise',
         muscleGroup: ex?.muscleGroup || 'arms',
-        sets: [
-          {
-            id: `set_${Date.now()}_1`,
-            setNumber: 1,
-            weightKg: 20,
-            reps: ex?.defaultReps || 10,
-            isCompleted: false,
-          },
-        ],
+        sets: [firstSetFor(id)],
       };
     });
 
@@ -290,15 +311,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
       exerciseId: ex.id,
       exerciseName: ex.name,
       muscleGroup: ex.muscleGroup,
-      sets: [
-        {
-          id: `set_${Date.now()}_1`,
-          setNumber: 1,
-          weightKg: 20,
-          reps: ex.defaultReps || 10,
-          isCompleted: false,
-        },
-      ],
+      sets: [firstSetFor(ex.id)],
     };
 
     setActiveWorkout((prev) => {
@@ -323,28 +336,20 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
           return { ...ex, sets: updatedSets };
         } else {
           // Add new set
+          // A new set copies the previous one and starts un-ticked: it only counts once done.
+          const prevSet = ex.sets[ex.sets.length - 1];
           const newSet: WorkoutSet = {
             id: `set_${Date.now()}_${ex.sets.length + 1}`,
             setNumber: ex.sets.length + 1,
-            weightKg: setData.weightKg || ex.sets[ex.sets.length - 1]?.weightKg || 20,
-            reps: setData.reps || ex.sets[ex.sets.length - 1]?.reps || 10,
-            isCompleted: setData.isCompleted ?? true,
+            weightKg: setData.weightKg ?? prevSet?.weightKg ?? 0,
+            reps: setData.reps ?? prevSet?.reps ?? 10,
+            isCompleted: setData.isCompleted ?? false,
           };
           return { ...ex, sets: [...ex.sets, newSet] };
         }
       });
 
-      // Calculate new total volume
-      let totalVol = 0;
-      updatedExercises.forEach((e) => {
-        e.sets.forEach((s) => {
-          if (s.isCompleted) {
-            totalVol += (s.weightKg || 0) * (s.reps || 0);
-          }
-        });
-      });
-
-      const next = { ...prev, exercises: updatedExercises, totalVolumeKg: totalVol };
+      const next = { ...prev, exercises: updatedExercises, totalVolumeKg: volumeOf(updatedExercises) };
       AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_WORKOUT, JSON.stringify(next));
       return next;
     });
@@ -363,7 +368,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         return { ...ex, sets: renumbered };
       });
 
-      const next = { ...prev, exercises: updatedExercises };
+      const next = { ...prev, exercises: updatedExercises, totalVolumeKg: volumeOf(updatedExercises) };
       AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_WORKOUT, JSON.stringify(next));
       return next;
     });
@@ -372,21 +377,26 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
   const finishActiveWorkout = async (): Promise<WorkoutSession | null> => {
     if (!activeWorkout) return null;
 
-    let totalVol = 0;
-    activeWorkout.exercises.forEach((e) => {
-      e.sets.forEach((s) => {
-        if (s.isCompleted) {
-          totalVol += (s.weightKg || 0) * (s.reps || 0);
-        }
-      });
-    });
+    // Only sets ticked as done are saved; exercises with none are left out.
+    const doneExercises = activeWorkout.exercises
+      .map(e => ({ ...e, sets: e.sets.filter(set => set.isCompleted) }))
+      .filter(e => e.sets.length > 0);
+    if (doneExercises.length === 0) return null;
+
+    const totalVol = volumeOf(doneExercises);
+    const startedAt = parseInt(activeWorkout.id.split('_')[1] || '0', 10) || Date.now();
+    const durationMinutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+    // Strength training is about 5 METs: kcal = 5 x body weight (kg) x hours.
+    const bodyKg = profile.currentWeightKg || 70;
+    const caloriesBurned = Math.round(5 * bodyKg * (durationMinutes / 60));
 
     const finishedSession: WorkoutSession = {
       ...activeWorkout,
+      exercises: doneExercises,
       endTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      durationMinutes: Math.max(30, Math.round((Date.now() - parseInt(activeWorkout.id.split('_')[1] || '0', 10)) / 60000)),
+      durationMinutes,
       totalVolumeKg: totalVol,
-      caloriesBurned: Math.round(totalVol * 0.08) + 250,
+      caloriesBurned,
       isCompleted: true,
     };
 

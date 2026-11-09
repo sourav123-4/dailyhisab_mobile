@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Exercise } from '../types/fitness';
 import { useAppTheme } from '../theme/appTheme';
-import { getExerciseLocalMedia } from '../data/exerciseLocalMedia';
 import { EXERCISE_VIDEO_LOOKUP } from '../data/exerciseVideoLookup';
 import { EXERCISE_YOUTUBE_IDS } from '../data/exerciseVideoSources';
 import { EXERCISE_3D_VIDEOS, MUSCLE_ANATOMY_IMAGES } from '../data/exercisesData';
@@ -11,18 +10,17 @@ import { fetchExerciseVideoUrl } from '../services/aiProxy';
 
 const SPEEDS = [0.5, 1] as const;
 
-type Source = 'pending' | 'exercisedb' | 'bundled' | 'none';
+type Source = 'pending' | 'exercisedb' | 'none';
 
 /**
- * Demo for one exercise. Streams the ExerciseDB anatomy video when one exists for it (fetched fresh
- * each time, as the plan requires); otherwise plays the bundled 3D demo, or shows a still.
+ * Demo for one exercise: the ExerciseDB anatomy video, fetched fresh each time as the plan
+ * requires. Without one (offline or signed out) it shows the muscle picture and a retry button.
  */
 export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: Exercise; compact?: boolean }) {
   const theme = useAppTheme();
-  const media = getExerciseLocalMedia(exercise.id);
   const lookup = EXERCISE_VIDEO_LOOKUP[exercise.id];
   const youtubeId = exercise.youtubeId || EXERCISE_YOUTUBE_IDS[exercise.id];
-  const still = media?.posterJpg || EXERCISE_3D_VIDEOS[exercise.id] || MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup];
+  const still = EXERCISE_3D_VIDEOS[exercise.id] || MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup];
 
   const player = useVideoPlayer(null, p => {
     p.loop = true;
@@ -33,54 +31,46 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
-  const sourceRef = useRef<Source>('pending');
-  useEffect(() => {
-    sourceRef.current = source;
-  }, [source]);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       const remote = lookup ? await fetchExerciseVideoUrl(lookup) : null;
       if (cancelled) return;
-      const next: Source = remote ? 'exercisedb' : media ? 'bundled' : 'none';
       setReady(false);
       setFailed(false);
-      setSource(next);
-      if (next === 'none') return;
-      await player.replaceAsync(remote ? { uri: remote } : media!.video);
+      setSource(remote ? 'exercisedb' : 'none');
+      if (!remote) return;
+      await player.replaceAsync({ uri: remote });
       if (!cancelled) player.play();
     };
     load().catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-    // media and lookup are fixed per exercise id
+    // lookup is fixed per exercise id; attempt re-runs it from the retry button
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercise.id, player]);
+  }, [exercise.id, player, attempt]);
 
   useEffect(() => {
     const playingSub = player.addListener('playingChange', ({ isPlaying }) => setPlaying(isPlaying));
     const statusSub = player.addListener('statusChange', ({ status }) => {
       if (status === 'readyToPlay') setReady(true);
-      if (status !== 'error') return;
-      // A streamed video that fails falls back to the bundled demo.
-      if (sourceRef.current === 'exercisedb' && media) {
-        setReady(false);
-        setSource('bundled');
-        player.replaceAsync(media.video).then(() => player.play()).catch(() => setFailed(true));
-      } else {
-        setFailed(true);
-      }
+      if (status === 'error') setFailed(true);
     });
     return () => {
       playingSub.remove();
       statusSub.remove();
     };
-  }, [player, media]);
+  }, [player]);
 
-  const hasVideo = source === 'exercisedb' || source === 'bundled';
-  const fromExerciseDb = source === 'exercisedb';
+  const retry = () => {
+    setSource('pending');
+    setAttempt(n => n + 1);
+  };
+
+  const hasVideo = source === 'exercisedb' && !failed;
   const togglePlay = () => (player.playing ? player.pause() : player.play());
   const changeSpeed = (next: (typeof SPEEDS)[number]) => {
     player.playbackRate = next;
@@ -89,20 +79,20 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
-      <View style={[styles.stage, compact && styles.stageCompact, fromExerciseDb && styles.stageWide]}>
-        {still && !fromExerciseDb ? <Image source={still} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-        {hasVideo && !failed ? (
+      <View style={[styles.stage, compact && styles.stageCompact, hasVideo && styles.stageWide]}>
+        {still && !hasVideo ? <Image source={still} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+        {hasVideo ? (
           <VideoView
             player={player}
             style={[StyleSheet.absoluteFill, !ready && styles.hidden]}
-            contentFit={fromExerciseDb ? 'contain' : 'cover'}
+            contentFit="contain"
             nativeControls={false}
             fullscreenOptions={{ enable: false }}
             allowsPictureInPicture={false}
           />
         ) : null}
 
-        {source === 'pending' || (hasVideo && !failed) ? (
+        {source === 'pending' || hasVideo ? (
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
@@ -123,12 +113,15 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
             ) : null}
           </TouchableOpacity>
         ) : (
-          <View style={styles.noClipBadge}>
-            <Text style={styles.noClipText}>No demo clip yet</Text>
-          </View>
+          <TouchableOpacity style={styles.offlineOverlay} onPress={retry} activeOpacity={0.85} accessibilityRole="button">
+            <Text style={styles.offlineText}>Connect to the internet and sign in to play the demo</Text>
+            <View style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
+              <Text style={styles.retryText}>Retry</Text>
+            </View>
+          </TouchableOpacity>
         )}
         {hasVideo ? (
-          <View style={[styles.legend, fromExerciseDb && styles.legendBottom]} pointerEvents="none">
+          <View style={[styles.legend, styles.legendBottom]} pointerEvents="none">
             <View style={styles.legendDot} />
             <Text style={styles.legendText}>Working muscle</Text>
           </View>
@@ -136,7 +129,7 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
       </View>
 
       <View style={styles.controls}>
-        {hasVideo && !failed ? (
+        {hasVideo ? (
           <>
             <TouchableOpacity
               onPress={togglePlay}
@@ -160,15 +153,19 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
             </View>
           </>
         ) : null}
-        {youtubeId ? (
-          <TouchableOpacity
-            onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${youtubeId}`).catch(() => undefined)}
-            style={[styles.youtubeBtn, { borderColor: theme.borderSoft }]}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.youtubeText, { color: theme.text }]}>▶ Full tutorial</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity
+          onPress={() =>
+            Linking.openURL(
+              youtubeId
+                ? `https://www.youtube.com/watch?v=${youtubeId}`
+                : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} proper form`)}`
+            ).catch(() => undefined)
+          }
+          style={[styles.youtubeBtn, { borderColor: theme.borderSoft }]}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.youtubeText, { color: theme.text }]}>▶ Full tutorial</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -240,6 +237,30 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 22,
     marginLeft: 3,
+  },
+  offlineOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  offlineText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
   },
   noClipBadge: {
     position: 'absolute',

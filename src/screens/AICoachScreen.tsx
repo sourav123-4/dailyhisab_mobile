@@ -83,16 +83,18 @@ function TypingBubble({ theme }: { theme: any }) {
   );
 }
 
-// AI replies use **bold** and leading "* " / "- " bullets; show them as formatting, not symbols.
+// AI replies use **bold**, *italic* and leading "* " / "- " bullets; show them as formatting, not symbols.
 function renderInlineMarkdown(text: string) {
   const normalized = text.replace(/^[ \t]*[*-][ \t]+/gm, '• ');
-  return normalized.split(/(\*\*[^*]+\*\*)/g).map((part, idx) =>
-    part.startsWith('**') && part.endsWith('**') && part.length > 4 ? (
-      <Text key={idx} style={{ fontWeight: '800' }}>{part.slice(2, -2)}</Text>
-    ) : (
-      part
-    )
-  );
+  return normalized.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g).map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <Text key={idx} style={{ fontWeight: '800' }}>{part.slice(2, -2)}</Text>;
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return <Text key={idx} style={{ fontStyle: 'italic' }}>{part.slice(1, -1)}</Text>;
+    }
+    return part;
+  });
 }
 
 export const AICoachScreen = () => {

@@ -121,7 +121,18 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
 
       {/* Chart Bars Visualizer */}
       <View style={[styles.chartBox, { backgroundColor: theme.bg }]}>
-        <View style={[styles.targetLine, { top: `${((maxW - targetWeight) / range) * 100}%`, borderColor: theme.accent }]} />
+        {displayEntries.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No weigh-ins yet</Text>
+            <Text style={[styles.emptyText, { color: theme.muted }]}>
+              Tap "Log Weight" to start your trend. Weigh in at the same time each morning for the most accurate line.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.targetLine, { top: `${((maxW - targetWeight) / range) * 100}%`, borderColor: theme.accent }]}>
+            <Text style={[styles.targetTag, { color: theme.accent, backgroundColor: theme.bg }]}>Target {targetWeight}</Text>
+          </View>
+        )}
 
         <View style={styles.barsRow}>
           {displayEntries.map((entry, idx) => {
@@ -134,11 +145,10 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
 
             return (
               <View key={entry.id || idx} style={styles.barCol}>
-                <Text style={[styles.barValText, { color: isLatest ? theme.primary : theme.muted }]}>
-                  {entry.weightKg}
-                </Text>
-
                 <View style={styles.barTrack}>
+                  <Text style={[styles.barValText, { color: isLatest ? theme.primary : theme.muted }]}>
+                    {entry.weightKg}
+                  </Text>
                   <View
                     style={[
                       styles.barFill,
@@ -227,6 +237,22 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     position: 'relative',
   },
+  emptyBox: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
   targetLine: {
     position: 'absolute',
     left: 8,
@@ -253,14 +279,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
   },
+  targetTag: {
+    position: 'absolute',
+    right: 0,
+    top: -8,
+    fontSize: 9,
+    fontWeight: '800',
+    paddingHorizontal: 4,
+  },
   barTrack: {
-    width: 14,
+    width: 40,
     height: 90,
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
   barFill: {
-    width: '100%',
+    width: 14,
     borderRadius: 6,
     borderWidth: 1,
   },

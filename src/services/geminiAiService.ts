@@ -154,6 +154,19 @@ Coaching Guidelines:
 function generateSmartOfflineCoaching(prompt: string, profile: UserProfile): string {
   const q = prompt.toLowerCase();
 
+  if (q.includes('meal') || q.includes('food') || q.includes('eat') || q.includes('breakfast') || q.includes('dinner') || q.includes('lunch')) {
+    const perMeal = Math.round(profile.targetProteinGrams / 4);
+    return `🍽️ **High-protein meal ideas** (aim for ~${perMeal}g protein per meal, 4 meals = ${profile.targetProteinGrams}g/day):
+• **Breakfast**: 4-egg bhurji + 2 rotis, or oats with milk, whey and banana (~30-35g)
+• **Lunch**: Chicken curry (150g) + rice + dal + salad, or paneer bhurji (150g) + rotis (~40g)
+• **Snack**: Greek yogurt / hung curd + roasted chana, or a sprouts chaat (~20-25g)
+• **Dinner**: Fish or chicken tikka (150g) + veggies, or soya chunks (60g dry) + dal (~35-40g)
+• **Veg swaps**: paneer, tofu, soya chunks, rajma, chole, moong dal, curd and milk
+• **Tip**: Spread protein evenly across the day; log each meal with "Log Meal / Scan" to track your ${profile.targetCalories} kcal target.
+
+💡 *Add your AI key in Coach settings for meal plans built around your exact preferences.*`;
+  }
+
   if (q.includes('protein') || q.includes('macro') || q.includes('calorie') || q.includes('diet')) {
     return `🥗 **Nutrition Protocol for ${profile.name} (${profile.fitnessGoal.replace('_', ' ').toUpperCase()})**:
 • **Target Calories**: ${profile.targetCalories} kcal/day
