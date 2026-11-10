@@ -45,7 +45,7 @@ function TitanFitTabsNavigator({ navigation }: { navigation: any }) {
     if (!activeWorkout) {
       const today = weeklySplit.find(day => day.dayIndex === new Date().getDay());
       if (today && !today.isRestDay && today.exerciseIds.length > 0) {
-        startWorkout(today.splitTitle, today.exerciseIds, today.targetMuscles);
+        startWorkout(today.splitTitle, today.exerciseIds, today.targetMuscles, today.prescriptions);
       } else {
         startWorkout('Free Workout', [], []);
       }

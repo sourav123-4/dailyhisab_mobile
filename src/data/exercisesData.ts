@@ -4,6 +4,7 @@ import {
   EXERCISE_YOUTUBE_IDS,
   EXERCISE_THUMBNAILS,
 } from './exerciseVideoSources';
+import { EXTRA_EXERCISES } from './extraExercises';
 
 export const MUSCLE_ANATOMY_IMAGES: Record<MuscleGroup, any> = {
   arms: require('../../assets/muscle_arms.jpg'),
@@ -326,6 +327,14 @@ export const MUSCLE_GROUPS_META: {
     color: '#9C8CE0',
     iconName: 'run',
     keyMuscles: ['Quadriceps Femoris', 'Hamstrings', 'Gluteus Maximus', 'Gastrocnemius & Soleus'],
+  },
+  {
+    id: 'fullbody',
+    title: 'Full Body',
+    subtitle: 'Conditioning & total-body power',
+    color: '#5AA9D6',
+    iconName: 'run',
+    keyMuscles: ['Quadriceps', 'Glutes', 'Chest', 'Shoulders', 'Core'],
   },
 ];
 
@@ -1067,7 +1076,7 @@ const RAW_EXERCISES_DATABASE: Omit<Exercise, 'videoUrl' | 'youtubeId' | 'thumbna
   },
 ];
 
-export const EXERCISES_DATABASE: Exercise[] = RAW_EXERCISES_DATABASE.map((ex) => {
+export const EXERCISES_DATABASE: Exercise[] = [...RAW_EXERCISES_DATABASE, ...EXTRA_EXERCISES].map((ex) => {
   const vid = EXERCISE_VIDEO_SOURCES[ex.id] || '';
   const ytid = EXERCISE_YOUTUBE_IDS[ex.id] || '';
   const thumb = EXERCISE_THUMBNAILS[ex.id] || '';

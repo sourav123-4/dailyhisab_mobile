@@ -6,6 +6,11 @@ export type Difficulty = 'beginner' | 'intermediate' | 'advanced';
 
 export type WeightGoal = 'weight_loss' | 'weight_gain' | 'muscle_gain' | 'maintenance';
 
+/** Equipment a person can train with, beyond their own body weight (always available). */
+export type GearId = 'dumbbells' | 'barbell' | 'bench' | 'pullup_bar' | 'dip_station' | 'cable' | 'machines' | 'kettlebell';
+
+export type TrainingLocation = 'home' | 'gym' | 'other';
+
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'athlete';
 
 export interface ExerciseDemonstration {
@@ -91,6 +96,8 @@ export interface WorkoutSplitDay {
   targetMuscles: MuscleGroup[];
   isRestDay: boolean;
   exerciseIds: string[];
+  /** Target per exercise from the plan builder, e.g. "4 × 6–10". */
+  prescriptions?: Record<string, string>;
 }
 
 export interface WeightEntry {
@@ -139,6 +146,10 @@ export interface UserProfile {
   lastWorkoutDate?: string;
   restTimerSeconds: number;
   geminiApiKey?: string;
+  /** Workout setup chosen in the plan builder. */
+  trainingLocation?: TrainingLocation;
+  gear?: GearId[];
+  trainingDaysPerWeek?: number;
 }
 
 export interface AIChatMessage {

@@ -22,6 +22,8 @@ import { FoodScannerModal } from '../components/FoodScannerModal';
 import { BodyStatsCard } from '../components/BodyStatsCard';
 import { MealType, WeightGoal } from '../types/fitness';
 import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
+import { MuscleGainPlanModal } from '../components/MuscleGainPlanModal';
+import { dailyTargetsForGoal } from '../utils/musclePlan';
 
 export const WeightTrackerScreen = () => {
   const theme = useAppTheme();
@@ -89,6 +91,31 @@ export const WeightTrackerScreen = () => {
     });
     setMeasureModalVisible(false);
     Alert.alert('✅ Saved!', 'Body measurements updated successfully.');
+  };
+
+  const [gainPlanVisible, setGainPlanVisible] = useState(false);
+
+  // Switching goal recalculates the daily calorie, macro and water targets for that goal.
+  const selectGoal = (goal: WeightGoal) => {
+    const t = dailyTargetsForGoal({ ...profile, fitnessGoal: goal }, goal);
+    updateProfile({
+      fitnessGoal: goal,
+      targetCalories: t.calories,
+      targetProteinGrams: t.proteinG,
+      targetCarbsGrams: t.carbsG,
+      targetFatsGrams: t.fatsG,
+      dailyWaterTargetMl: t.waterMl,
+    });
+    const label = goalsList.find(g => g.id === goal)?.label || 'New goal';
+    const summary = `Your daily targets are now ${t.calories} kcal, ${t.proteinG} g protein, ${t.carbsG} g carbs and ${t.fatsG} g fats.`;
+    if (goal === 'weight_gain') {
+      Alert.alert(`${label} ✅`, `${summary}\n\nOpen the Muscle Gain plan for your meals and a weekly workout split.`, [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open plan', onPress: () => setGainPlanVisible(true) },
+      ]);
+    } else {
+      Alert.alert(`${label} ✅`, summary);
+    }
   };
 
   const goalsList: { id: WeightGoal; label: string; emoji: string }[] = [
@@ -175,7 +202,7 @@ export const WeightTrackerScreen = () => {
                       borderColor: isSelected ? theme.primary : theme.borderSoft,
                     },
                   ]}
-                  onPress={() => updateProfile({ fitnessGoal: g.id })}
+                  onPress={() => !isSelected && selectGoal(g.id)}
                 >
                   <Text style={styles.goalEmoji}>{g.emoji}</Text>
                   <Text
@@ -599,6 +626,8 @@ export const WeightTrackerScreen = () => {
       </Modal>
 
       {/* Macro Plan Modal */}
+      <MuscleGainPlanModal visible={gainPlanVisible} onClose={() => setGainPlanVisible(false)} />
+
       <MacroPlanModal
         visible={macroModalVisible}
         profile={profile}

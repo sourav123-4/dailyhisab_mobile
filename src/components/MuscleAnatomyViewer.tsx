@@ -1,17 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Animated,
-  Easing,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { MuscleGroup } from '../types/fitness';
-import { MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META, EXERCISES_DATABASE } from '../data/exercisesData';
+import { MUSCLE_GROUPS_META, EXERCISES_DATABASE } from '../data/exercisesData';
 import { useAppTheme } from '../theme/appTheme';
 import { ExerciseVideoPlayer } from './ExerciseVideoPlayer';
+import { MuscleBodyMap, muscleTargetsForGroup } from './MuscleBodyMap';
 
 interface MuscleAnatomyViewerProps {
   selectedMuscle: MuscleGroup;
@@ -30,50 +28,11 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
     selectedMuscle === 'back' ? 'back' : 'front'
   );
 
-  const scanAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
   const activeMeta =
     MUSCLE_GROUPS_META.find((m) => m.id === selectedMuscle) || MUSCLE_GROUPS_META[0];
 
   const representativeExercise =
     EXERCISES_DATABASE.find((e) => e.muscleGroup === selectedMuscle) || EXERCISES_DATABASE[0];
-
-  useEffect(() => {
-    const scanLoop = Animated.loop(
-      Animated.timing(scanAnim, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.25,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    scanLoop.start();
-    pulseLoop.start();
-
-    return () => {
-      scanLoop.stop();
-      pulseLoop.stop();
-    };
-  }, []);
 
   const handleSelect = (muscle: MuscleGroup) => {
     onSelectMuscle(muscle);
@@ -83,12 +42,6 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
       setViewAngle('front');
     }
   };
-
-  const imageSource = MUSCLE_ANATOMY_IMAGES[selectedMuscle] || MUSCLE_ANATOMY_IMAGES.arms;
-  const scanY = scanAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-140, 140],
-  });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.surface, borderColor: `${activeMeta.color}44` }]}>
@@ -148,41 +101,14 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
           <ExerciseVideoPlayer exercise={representativeExercise} compact />
         </View>
       ) : (
-        <View style={styles.imageContainer}>
-          <Image
-            source={imageSource}
-            style={styles.anatomyImage}
-            resizeMode="contain"
+        <View style={[styles.mapStage, { backgroundColor: theme.surfaceAlt }]}>
+          <MuscleBodyMap
+            {...muscleTargetsForGroup(selectedMuscle)}
+            primaryNames={activeMeta.keyMuscles}
+            title=""
+            scale={0.62}
+            bare
           />
-
-          {/* Animated Laser Scanline */}
-          <Animated.View
-            style={[
-              styles.scanLine,
-              {
-                borderColor: `${activeMeta.color}AA`,
-                transform: [{ translateY: scanY }],
-              },
-            ]}
-          />
-
-          {/* Pulsing Target Heatmap Beacon */}
-          <Animated.View
-            style={[
-              styles.targetBeacon,
-              {
-                borderColor: activeMeta.color,
-                transform: [{ scale: pulseAnim }],
-              },
-            ]}
-          />
-
-          {/* Target Overlay Badge */}
-          <View style={[styles.targetBadge, { borderColor: activeMeta.color, backgroundColor: 'rgba(10, 15, 29, 0.90)' }]}>
-            <Text style={[styles.targetBadgeText, { color: activeMeta.color }]}>
-              TARGET: {activeMeta.title.toUpperCase()}
-            </Text>
-          </View>
         </View>
       )}
 
@@ -270,49 +196,9 @@ const styles = StyleSheet.create({
   motionStage: {
     width: '100%',
   },
-  imageContainer: {
-    width: '100%',
-    height: 280,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    backgroundColor: '#04070D',
+  mapStage: {
     borderRadius: 16,
-    overflow: 'hidden',
-  },
-  anatomyImage: {
-    width: '100%',
-    height: '100%',
-  },
-  scanLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 2,
-    borderBottomWidth: 2,
-    zIndex: 5,
-  },
-  targetBeacon: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    opacity: 0.6,
-  },
-  targetBadge: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  targetBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    padding: 12,
   },
   pillsContainer: {
     flexDirection: 'row',

@@ -4,13 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../theme/appTheme';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { EXERCISES_DATABASE } from '../data/exercisesData';
-import {
-  MUSCLE_GAIN_RULES,
-  muscleGainMeals,
-  muscleGainSplit,
-  muscleGainTargets,
-  muscleGainWeek,
-} from '../utils/musclePlan';
+import { MUSCLE_GAIN_RULES, muscleGainMeals, muscleGainTargets } from '../utils/musclePlan';
+import { buildWeeklyPlan, describeSetup, gearForProfile, planToSplit, recommendedDays } from '../utils/workoutPlanner';
+import { WorkoutSetupModal } from './WorkoutSetupModal';
 import { AppIcon } from './AppIcon';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -25,7 +21,18 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
   const [openDay, setOpenDay] = useState<number | null>(1);
 
   const targets = useMemo(() => muscleGainTargets(profile), [profile]);
-  const week = useMemo(() => muscleGainWeek(profile.experience), [profile.experience]);
+  const [setupVisible, setSetupVisible] = useState(false);
+  // Workouts follow the person's own setup (home, gym or their equipment).
+  const week = useMemo(
+    () =>
+      buildWeeklyPlan({
+        gear: gearForProfile(profile),
+        days: profile.trainingDaysPerWeek || recommendedDays(profile.experience),
+        goal: 'weight_gain',
+        experience: profile.experience,
+      }),
+    [profile]
+  );
   const meals = useMemo(() => muscleGainMeals(targets.calories, vegetarian), [targets.calories, vegetarian]);
 
   const applyPlan = () => {
@@ -45,7 +52,7 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
               targetFatsGrams: targets.fatsG,
               dailyWaterTargetMl: targets.waterMl,
             });
-            await replaceWeeklySplit(muscleGainSplit(profile.experience));
+            await replaceWeeklySplit(planToSplit(week));
             onClose();
             Alert.alert('Plan set ✅', 'Your Today screen now shows the new workouts and nutrition targets.');
           },
@@ -106,6 +113,12 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
 
           {/* Workout plan */}
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Workout · {week.name}</Text>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setSetupVisible(true)} style={[card, styles.setupRow]}>
+            <Text style={[styles.body, { color: theme.text, flex: 1, fontWeight: '700' }]} numberOfLines={1}>
+              {profile.trainingLocation ? describeSetup(profile) : 'Planned for a gym. Training at home?'}
+            </Text>
+            <Text style={[styles.mealMacros, { color: theme.primary }]}>{profile.trainingLocation ? 'Change ›' : 'Set up ›'}</Text>
+          </TouchableOpacity>
           {week.days.map((day, index) => {
             const open = openDay === index;
             return (
@@ -128,7 +141,7 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
                 {day && open
                   ? day.exercises.map(ex => (
                       <View key={ex.id} style={[styles.exerciseRow, { borderTopColor: theme.borderSoft }]}>
-                        <Text style={[styles.exerciseName, { color: theme.text }]} numberOfLines={1}>{exerciseName(ex.id)}</Text>
+                        <Text style={[styles.exerciseName, { color: theme.text }]} numberOfLines={1}>{ex.name || exerciseName(ex.id)}</Text>
                         <Text style={[styles.exerciseSets, { color: theme.primary }]}>{ex.prescription}</Text>
                       </View>
                     ))
@@ -183,6 +196,8 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
           </Text>
         </ScrollView>
 
+        <WorkoutSetupModal visible={setupVisible} onClose={() => setSetupVisible(false)} />
+
         <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.borderSoft, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TouchableOpacity style={[styles.applyBtn, { backgroundColor: theme.primary }]} activeOpacity={0.85} onPress={applyPlan}>
             <Text style={styles.applyText}>Use this plan</Text>
@@ -197,6 +212,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 16, borderBottomWidth: 1, gap: 12 },
   headerBtn: { width: 28, height: 36, justifyContent: 'center' },
+  setupRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerTitle: { fontSize: 18.5, fontWeight: '800' },
   content: { padding: 16 },
   intro: { fontSize: 13, lineHeight: 19, marginBottom: 12 },

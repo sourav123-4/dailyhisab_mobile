@@ -44,7 +44,7 @@ interface FitnessContextType {
   // Actions
   setThemeName: (theme: AppThemeName) => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  startWorkout: (title?: string, exerciseIds?: string[], targetMuscles?: MuscleGroup[]) => void;
+  startWorkout: (title?: string, exerciseIds?: string[], targetMuscles?: MuscleGroup[], prescriptions?: Record<string, string>) => void;
   addExerciseToActiveWorkout: (exerciseId: string) => void;
   logSetToActiveWorkout: (exerciseId: string, setData: Partial<WorkoutSet>) => void;
   deleteSetFromActiveWorkout: (exerciseId: string, setId: string) => void;
@@ -273,16 +273,22 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
   const startWorkout = (
     title?: string,
     exerciseIds?: string[],
-    targetMuscles?: MuscleGroup[]
+    targetMuscles?: MuscleGroup[],
+    prescriptions?: Record<string, string>
   ) => {
     const todayStr = localDateISO();
     const initialExercises: ActiveExerciseLog[] = (exerciseIds || []).map((id) => {
       const ex = EXERCISES_DATABASE.find((e) => e.id === id);
+      const first = firstSetFor(id);
+      // A plan target like "4 × 6–10" starts with 4 sets ready to tick; reps default to the low end.
+      const match = prescriptions?.[id]?.match(/^(\d+)\s*(?:×|rounds ×)\s*(\d+)/);
+      const setCount = match ? Math.min(6, Math.max(1, Number(match[1]))) : 1;
+      const reps = first.previousReps || (match ? Number(match[2]) : first.reps);
       return {
         exerciseId: id,
         exerciseName: ex?.name || 'Custom Exercise',
         muscleGroup: ex?.muscleGroup || 'arms',
-        sets: [firstSetFor(id)],
+        sets: Array.from({ length: setCount }, (_, i) => ({ ...first, id: `${first.id}_${i + 1}`, setNumber: i + 1, reps })),
       };
     });
 

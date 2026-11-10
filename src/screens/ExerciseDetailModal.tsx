@@ -12,6 +12,7 @@ import { Exercise } from '../types/fitness';
 import { MUSCLE_GROUPS_META } from '../data/exercisesData';
 import { useAppTheme } from '../theme/appTheme';
 import { ExerciseVideoPlayer } from '../components/ExerciseVideoPlayer';
+import { MuscleBodyMap, muscleTargetsFor } from '../components/MuscleBodyMap';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 
@@ -67,6 +68,13 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
             {/* Unified 3D Video Player & Scene Switcher */}
             <ExerciseVideoPlayer exercise={exercise} />
+
+            {/* Worked muscles highlighted in red on a front and back body */}
+            <MuscleBodyMap
+              {...muscleTargetsFor(exercise)}
+              primaryNames={exercise.primaryMuscles}
+              secondaryNames={exercise.secondaryMuscles}
+            />
 
             {/* Biomechanical Execution Guide */}
             <View style={{ paddingHorizontal: 4, marginTop: 16 }}>

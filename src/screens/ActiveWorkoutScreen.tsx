@@ -24,7 +24,11 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
     finishActiveWorkout,
     cancelActiveWorkout,
     profile,
+    weeklySplit,
   } = useFitnessApp();
+
+  // Targets from the weekly plan for this session (matched by its title).
+  const planTargets = activeWorkout ? weeklySplit.find(d => d.splitTitle === activeWorkout.title)?.prescriptions : undefined;
 
   const [restTimerVisible, setRestTimerVisible] = useState(false);
   const [restSeconds, setRestSeconds] = useState(profile.restTimerSeconds || 90);
@@ -155,6 +159,9 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
                     </Text>
                   </View>
                   <Text style={[styles.exName, { color: theme.text }]}>{exLog.exerciseName}</Text>
+                  {planTargets?.[exLog.exerciseId] ? (
+                    <Text style={[styles.targetText, { color: theme.primary }]}>Target: {planTargets[exLog.exerciseId]}</Text>
+                  ) : null}
                 </View>
 
                 {/* Rest Timer Button */}
@@ -312,6 +319,7 @@ export const ActiveWorkoutScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
+  targetText: { fontSize: 12, fontWeight: '800', marginTop: 2 },
   removeHint: {
     fontSize: 9,
     fontWeight: '600',

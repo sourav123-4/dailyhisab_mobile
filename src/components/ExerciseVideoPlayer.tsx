@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Exercise } from '../types/fitness';
@@ -7,6 +7,7 @@ import { EXERCISE_VIDEO_LOOKUP } from '../data/exerciseVideoLookup';
 import { EXERCISE_YOUTUBE_IDS } from '../data/exerciseVideoSources';
 import { EXERCISE_3D_VIDEOS, MUSCLE_ANATOMY_IMAGES } from '../data/exercisesData';
 import { fetchExerciseVideoUrl } from '../services/aiProxy';
+import { MuscleBodyThumb, muscleTargetsFor } from './MuscleBodyMap';
 
 const SPEEDS = [0.5, 1] as const;
 
@@ -32,6 +33,7 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
   const [failed, setFailed] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [attempt, setAttempt] = useState(0);
+  const targets = useMemo(() => muscleTargetsFor(exercise), [exercise]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +122,13 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
             </View>
           </TouchableOpacity>
         )}
+        {/* Mini body map: the muscles this exercise trains, in red, on every demo */}
+        <View style={styles.muscleMap} pointerEvents="none">
+          <MuscleBodyThumb primary={targets.primary} secondary={targets.secondary} scale={compact ? 0.2 : 0.24} />
+          <Text style={styles.muscleMapText} numberOfLines={2}>
+            {exercise.primaryMuscles[0]?.replace(/\s*\(.*\)/, '') || 'Target'}
+          </Text>
+        </View>
         {hasVideo ? (
           <View style={[styles.legend, styles.legendBottom]} pointerEvents="none">
             <View style={styles.legendDot} />
@@ -191,6 +200,25 @@ const styles = StyleSheet.create({
   stageWide: {
     aspectRatio: 16 / 9,
     backgroundColor: '#ffffff',
+  },
+  muscleMap: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 4,
+    maxWidth: 76,
+  },
+  muscleMapText: {
+    color: '#B42318',
+    fontSize: 9,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: 2,
   },
   legendBottom: {
     top: undefined,

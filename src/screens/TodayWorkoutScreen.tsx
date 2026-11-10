@@ -7,6 +7,8 @@ import { ExerciseVisualCard } from '../components/ExerciseVisualCard';
 import { VoiceWorkoutModal } from '../components/VoiceWorkoutModal';
 import { FoodScannerModal } from '../components/FoodScannerModal';
 import { MuscleGainPlanModal } from '../components/MuscleGainPlanModal';
+import { WorkoutSetupModal } from '../components/WorkoutSetupModal';
+import { describeSetup } from '../utils/workoutPlanner';
 import { BodyStatsCard } from '../components/BodyStatsCard';
 import { AppIcon, IconName } from '../components/AppIcon';
 import { Skeleton, SkeletonGroup } from '../components/Skeleton';
@@ -56,6 +58,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [foodScannerVisible, setFoodScannerVisible] = useState(false);
   const [planVisible, setPlanVisible] = useState(false);
+  const [setupVisible, setSetupVisible] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
   const selectedDay = weeklySplit.find(d => d.dayIndex === selectedDayIndex) || weeklySplit[0];
@@ -87,7 +90,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   const estMinutes = Math.max(20, scheduledExercises.length * 8);
 
   const handleStartWorkout = () => {
-    if (!activeWorkout) startWorkout(selectedDay.splitTitle, selectedDay.exerciseIds, selectedDay.targetMuscles);
+    if (!activeWorkout) startWorkout(selectedDay.splitTitle, selectedDay.exerciseIds, selectedDay.targetMuscles, selectedDay.prescriptions);
     navigation.navigate('ActiveWorkout');
   };
 
@@ -127,6 +130,20 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
               </Text>
             </View>
             <Text style={styles.resumeAction}>Resume ›</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Home / gym setup: prompt until done, then a compact row to change it */}
+        {!profile.trainingLocation ? (
+          <TouchableOpacity activeOpacity={0.85} onPress={() => setSetupVisible(true)} style={[card, styles.setupPrompt, { borderColor: theme.primary }]}>
+            <Text style={styles.planPromoEmoji}>🏠🏋️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Home or gym? Build your plan</Text>
+              <Text style={[styles.emptySub, { color: theme.muted, textAlign: 'left', marginTop: 2 }]}>
+                Tell us where you train and scan or tick your equipment. We'll make your full weekly plan.
+              </Text>
+            </View>
+            <AppIcon name="chevron-right" size={14} color={theme.primary} />
           </TouchableOpacity>
         ) : null}
 
@@ -201,6 +218,14 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
             </>
           )}
         </View>
+
+        {profile.trainingLocation ? (
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setSetupVisible(true)} style={[styles.setupRow, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
+            <Text style={styles.setupRowEmoji}>{profile.trainingLocation === 'gym' ? '🏋️' : profile.trainingLocation === 'home' ? '🏠' : '🧰'}</Text>
+            <Text style={[styles.setupRowText, { color: theme.text }]} numberOfLines={1}>{describeSetup(profile)}</Text>
+            <Text style={[styles.cardLink, { color: theme.primary }]}>Change plan ›</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* This week */}
         <View style={styles.statsRow}>
@@ -313,7 +338,12 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
             {scheduledExercises.map(exercise => (
-              <ExerciseVisualCard key={exercise.id} exercise={exercise} onPress={() => setSelectedExercise(exercise)} />
+              <ExerciseVisualCard
+                key={exercise.id}
+                exercise={exercise}
+                prescription={selectedDay.prescriptions?.[exercise.id]}
+                onPress={() => setSelectedExercise(exercise)}
+              />
             ))}
           </>
         ) : null}
@@ -354,6 +384,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
 
       <FoodScannerModal visible={foodScannerVisible} onClose={() => setFoodScannerVisible(false)} />
       <MuscleGainPlanModal visible={planVisible} onClose={() => setPlanVisible(false)} />
+      <WorkoutSetupModal visible={setupVisible} onClose={() => setSetupVisible(false)} />
 
       {selectedExercise ? (
         <ExerciseDetailModal visible exercise={selectedExercise} onClose={() => setSelectedExercise(null)} />
@@ -481,6 +512,10 @@ const styles = StyleSheet.create({
   macroLabel: { fontSize: 11.5, fontWeight: '700' },
   macroValue: { fontSize: 13.5, fontWeight: '800', marginTop: 2 },
   planPromo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  setupPrompt: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, marginBottom: 12 },
+  setupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, marginTop: 10 },
+  setupRowEmoji: { fontSize: 18 },
+  setupRowText: { flex: 1, fontSize: 13.5, fontWeight: '700' },
   planPromoEmoji: { fontSize: 28 },
   waterCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   waterButton: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 },

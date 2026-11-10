@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Exercise } from '../types/fitness';
-import { EXERCISE_3D_VIDEOS, MUSCLE_ANATOMY_IMAGES, MUSCLE_GROUPS_META } from '../data/exercisesData';
+import { MUSCLE_GROUPS_META } from '../data/exercisesData';
+import { MuscleBodyThumb, muscleTargetsFor } from './MuscleBodyMap';
 import { useAppTheme } from '../theme/appTheme';
 import { EXERCISE_VIDEO_LOOKUP } from '../data/exerciseVideoLookup';
 
@@ -16,6 +16,8 @@ interface ExerciseVisualCardProps {
   onPress: () => void;
   onQuickAdd?: () => void;
   isAdded?: boolean;
+  /** Plan target, e.g. "4 × 6–10"; replaces the default sets × reps. */
+  prescription?: string;
 }
 
 export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
@@ -23,17 +25,14 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
   onPress,
   onQuickAdd,
   isAdded = false,
+  prescription,
 }) => {
   const theme = useAppTheme();
 
   const muscleMeta =
     MUSCLE_GROUPS_META.find((m) => m.id === exercise.muscleGroup) || MUSCLE_GROUPS_META[0];
 
-  const exerciseImage =
-    EXERCISE_3D_VIDEOS[exercise.id] ||
-    (exercise.thumbnailUrl ? { uri: exercise.thumbnailUrl } : null) ||
-    MUSCLE_ANATOMY_IMAGES[exercise.muscleGroup] ||
-    MUSCLE_ANATOMY_IMAGES.arms;
+  const targets = useMemo(() => muscleTargetsFor(exercise), [exercise]);
 
   return (
     <TouchableOpacity
@@ -49,12 +48,8 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
     >
       <View style={styles.contentRow}>
         {/* Photorealistic 3D Exercise Thumbnail */}
-        <View style={[styles.thumbBox, { backgroundColor: '#02050A', borderColor: theme.borderSoft }]}>
-          <Image
-            source={exerciseImage}
-            style={styles.thumbImage}
-            resizeMode="cover"
-          />
+        <View style={[styles.thumbBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
+          <MuscleBodyThumb primary={targets.primary} secondary={targets.secondary} scale={0.18} />
 
           {EXERCISE_VIDEO_LOOKUP[exercise.id] ? (
             <View style={styles.playOverlayBadge}>
@@ -89,7 +84,7 @@ export const ExerciseVisualCard: React.FC<ExerciseVisualCardProps> = ({
 
           <View style={styles.statsRow}>
             <Text style={[styles.statValue, { color: theme.accent }]}>
-              {exercise.defaultSets} sets × {exercise.defaultReps} reps
+              {prescription || `${exercise.defaultSets} sets × ${exercise.defaultReps} reps`}
             </Text>
             <Text style={[styles.dotSep, { color: theme.subtle }]}>•</Text>
             <Text style={[styles.statValue, { color: theme.muted }]}>
