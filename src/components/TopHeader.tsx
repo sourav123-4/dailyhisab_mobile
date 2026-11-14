@@ -101,6 +101,31 @@ export const TopHeader = React.memo(function TopHeader({
     }
   };
 
+  // Same on every Daily Hisab page, mirroring TitanFit's header (which has a "Hisab" pill on every page).
+  const rightActions = (
+    <View style={styles.rightActionsRow}>
+      <TouchableOpacity
+        activeOpacity={0.75}
+        style={styles.titanPill}
+        onPress={() => setAppMode('fitness')}
+        accessibilityLabel="Switch to TitanFit"
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+      >
+        <Text style={styles.titanPillIcon}>💪</Text>
+        <Text style={styles.titanPillText}>TitanFit</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onOpenProfile || onOpenDrawer}
+        style={styles.avatarMiniCircle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        activeOpacity={0.8}
+        accessibilityLabel="Open profile"
+      >
+        <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '800' }}>{userInitial}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   if (activeTab === 'dashboard') {
     return (
       <View style={[styles.topBar, { backgroundColor: theme.surface }]}>
@@ -125,74 +150,8 @@ export const TopHeader = React.memo(function TopHeader({
           </Text>
         </View>
 
-        {/* Right Notification Bell + (S) Profile Avatar */}
-        <View style={styles.rightActionsRow}>
-          <TouchableOpacity
-            activeOpacity={0.75}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: 'rgba(91, 141, 246, 0.14)',
-              borderColor: '#5B8DF6',
-              borderWidth: 1,
-              borderRadius: 10,
-              paddingHorizontal: 8,
-              paddingVertical: 5,
-              gap: 4,
-              marginRight: 4,
-            }}
-            onPress={() => setAppMode('fitness')}
-          >
-            <Text style={{ fontSize: 13 }}>⚡</Text>
-            <Text style={{ color: '#5B8DF6', fontWeight: '800', fontSize: 11 }}>TitanFit</Text>
-          </TouchableOpacity>
-
-          {onQrPress && (
-            <TouchableOpacity
-              onPress={onQrPress}
-              style={[
-                styles.actionIconButton,
-                {
-                  backgroundColor: 'rgba(95, 37, 159, 0.12)',
-                  borderColor: 'rgba(95, 37, 159, 0.25)',
-                },
-              ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-              accessibilityLabel="Scan any QR code"
-            >
-              <Text style={{ fontSize: 15 }}>📷</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            onPress={onNotificationPress || onOpenDrawer}
-            style={[
-              styles.actionIconButton,
-              {
-                backgroundColor: theme.surfaceAlt || 'rgba(255,255,255,0.06)',
-                borderColor: theme.borderSoft || 'rgba(255,255,255,0.08)',
-              },
-            ]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.7}
-          >
-            <AppIcon name="bell" size={17} color={theme.text} />
-            {typeof unreadNotificationsCount === 'number' && unreadNotificationsCount > 0 && (
-              <View style={[styles.bellBadgeDot, { borderColor: theme.surface }]} />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onOpenProfile || onOpenDrawer}
-            style={styles.avatarMiniCircle}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.8}
-            accessibilityLabel="Open profile"
-          >
-            <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '800' }}>{userInitial}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Right: switch to TitanFit + profile (same on every page) */}
+        {rightActions}
       </View>
     );
   }
@@ -226,39 +185,8 @@ export const TopHeader = React.memo(function TopHeader({
         </Text>
       </View>
 
-      {/* Right Action Icons */}
-      <View style={styles.headerActions}>
-        <View style={styles.rightActionsRow}>
-          {activeTab !== 'notifications' && (
-            <TouchableOpacity
-              onPress={onNotificationPress || onOpenDrawer}
-              style={[
-                styles.actionIconButton,
-                {
-                  backgroundColor: theme.surfaceAlt || 'rgba(255,255,255,0.06)',
-                  borderColor: theme.borderSoft || 'rgba(255,255,255,0.08)',
-                },
-              ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <AppIcon name="bell" size={17} color={theme.text} />
-              {typeof unreadNotificationsCount === 'number' && unreadNotificationsCount > 0 && (
-                <View style={[styles.bellBadgeDot, { borderColor: theme.surface }]} />
-              )}
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            onPress={onOpenProfile || onOpenDrawer}
-            style={styles.avatarMiniCircle}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.8}
-          >
-            <AppIcon name="user" size={17} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* Right: switch to TitanFit + profile (same on every page) */}
+      {rightActions}
     </View>
   );
 });
@@ -335,6 +263,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b82f6',
     borderWidth: 1.2,
   },
+  titanPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(91, 141, 246, 0.12)',
+    borderColor: 'rgba(91, 141, 246, 0.55)',
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  titanPillIcon: { fontSize: 12 },
+  titanPillText: { color: '#3B6FE0', fontWeight: '800', fontSize: 12 },
   avatarMiniCircle: {
     width: 36,
     height: 36,

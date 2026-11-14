@@ -49,7 +49,7 @@ export const ExerciseExplorerScreen = () => {
   };
 
   const equipmentOptions = [
-    { id: 'all', label: 'All Gear' },
+    { id: 'all', label: 'All' },
     { id: 'barbell', label: 'Barbell' },
     { id: 'dumbbell', label: 'Dumbbell' },
     { id: 'cable', label: 'Cable' },
@@ -176,7 +176,7 @@ export const ExerciseExplorerScreen = () => {
 
             {/* Equipment Filter Chips */}
             <View style={styles.filterSection}>
-              <Text style={[styles.filterTitle, { color: theme.muted }]}>EQUIPMENT FILTER:</Text>
+              <Text style={[styles.filterTitle, { color: theme.muted }]}>EQUIPMENT</Text>
               <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -251,7 +251,7 @@ export const ExerciseExplorerScreen = () => {
                         <Text style={[styles.partName, { color: theme.text }]}>{part.name}</Text>
                         <Text style={[styles.partTarget, { color: theme.muted }]}>{part.target}</Text>
                         <View style={styles.partTagRow}>
-                          <Text style={[styles.partTag, { color: part.color }]}>⚡ 3D Human Execution ➔</Text>
+                          <Text style={[styles.partTag, { color: part.color }]}>See the exercise ›</Text>
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -263,7 +263,7 @@ export const ExerciseExplorerScreen = () => {
             {/* Count indicator */}
             <View style={styles.countRow}>
               <Text style={[styles.countText, { color: theme.text }]}>
-                {filteredExercises.length} {selectedMuscle.toUpperCase()} EXERCISES AVAILABLE
+                {filteredExercises.length} {filteredExercises.length === 1 ? 'EXERCISE' : 'EXERCISES'}
               </Text>
             </View>
           </View>

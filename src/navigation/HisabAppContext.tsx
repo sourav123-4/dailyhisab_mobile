@@ -180,6 +180,8 @@ export type HisabAppContextType = {
   dataSettling: boolean;
   /** Firebase uid, 'local' for offline mode, or null when signed out; TitanFit keys its storage by it. */
   dataOwner: string | null;
+  /** True once Firebase Auth has confirmed the account whose records are on screen; cloud reads/writes are safe. */
+  cloudOwnerReady: boolean;
   isTabReady: (tab: Tab) => boolean;
   unreadNotifCount: number;
   setUnreadNotifCount: (count: number) => void;
@@ -189,6 +191,8 @@ export type HisabAppContextType = {
   setCategoryFilter: (category: string) => void;
   openCategoryInHisab: (category: string, type?: string) => void;
   typeFilter: string;
+  dateFilter: string;
+  openDayInHisab: (dateISO: string, typeName?: string) => void;
   setTypeFilter: (type: string) => void;
   filterTrigger: number;
   // Exposed for tab screens and HisabScreenFrame
@@ -339,10 +343,13 @@ const defaultState: HisabState = {
 // Whole-word keyword lists (an optional plural "s"/"es" is allowed), so "car" never matches
 // "card" and "bus" never matches "business". Order matters: earlier categories win.
 const CATEGORY_KEYWORDS: Array<[string, string[]]> = [
+  // Checked first: payments that look like other categories but are bills (LIC is a premium, not an
+  // investment; "water bill" is a bill even though "water" alone is Food).
+  ['Bills', ['lic', 'lic premium', 'lic payment', 'insurance', 'insurance premium', 'policy premium', 'mediclaim', 'term plan', 'water bill', 'water tax', 'electricity bill', 'gas bill', 'phone bill', 'mobile bill', 'wifi bill']],
   ['Income', ['salary', 'credited', 'income', 'bonus', 'freelance', 'client', 'stipend', 'dividend', 'refund', 'cashback', 'interest received']],
   ['EMI', ['emi', 'loan', 'car loan', 'home loan', 'personal loan', 'credit card bill', 'card bill']],
   ['Investment', ['sip', 'stock', 'mutual fund', 'mutual', 'gold', 'sgb', 'invest', 'investment', 'groww', 'zerodha', 'upstox', 'crypto', 'bitcoin', 'etf', 'ppf', 'fd', 'rd', 'nps']],
-  ['Transport', ['petrol', 'diesel', 'cng', 'fuel', 'uber', 'ola', 'rapido', 'taxi', 'cab', 'auto', 'rickshaw', 'toto', 'bus', 'train', 'irctc', 'metro', 'flight', 'parking', 'toll', 'fastag', 'bike service', 'car service', 'ticket']],
+  ['Transport', ['petrol', 'diesel', 'cng', 'fuel', 'uber', 'ola', 'rapido', 'taxi', 'cab', 'auto', 'rickshaw', 'toto', 'bus', 'train', 'irctc', 'metro', 'flight', 'parking', 'toll', 'fastag', 'bike service', 'car service', 'ticket', 'number plate']],
   ['Food', [
     'grocery', 'groceries', 'food', 'fish', 'mach', 'machh', 'chicken', 'mutton', 'egg', 'dim', 'meat', 'paneer', 'fruit', 'vegetable', 'veg', 'sabzi', 'sabji', 'sobji',
     'doodh', 'milk', 'curd', 'dahi', 'bread', 'rice', 'chal', 'dal', 'atta', 'oil', 'sugar', 'salt', 'onion', 'potato', 'aloo', 'tomato', 'bazaar', 'bazar', 'market', 'kirana',
@@ -368,6 +375,11 @@ const CATEGORY_KEYWORDS: Array<[string, string[]]> = [
     'biscuit', 'biscuits', 'chips', 'namkeen', 'chanachur', 'bhujia', 'maggi', 'noodles', 'pasta', 'chocolate', 'toffee', 'rasgulla', 'rosogolla', 'sandesh', 'jalebi', 'laddu', 'mithai',
     'cold drink', 'soft drink', 'coke', 'pepsi', 'sprite', 'thums up', 'frooti', 'maaza', 'soda', 'lassi', 'shake', 'milkshake', 'puchka', 'phuchka', 'golgappa', 'pani puri', 'chaat', 'jhalmuri', 'ghugni',
     'sandwich', 'fries', 'kfc', 'mcdonald', 'mcdonalds', 'dominos', 'subway', 'haldiram', 'meal', 'meals', 'khana', 'khabar',
+    // plates of food, water, noodles (all common spellings) and dairy sweets
+    'plate', 'half plate', 'full plate', 'water', 'drinking water', 'mineral water', 'water jar', 'jar water', 'bisleri', 'kinley', 'aquafina', 'pani',
+    'chowmin', 'choumin', 'chaumin', 'chaomin', 'chowmien', 'chow mein', 'hakka', 'hakka noodles', 'noodle', 'manchurian', 'fried rice', 'thukpa',
+    'khoya', 'khowa', 'khoa', 'mawa', 'rabri', 'rabdi', 'kheer', 'payesh', 'peda', 'barfi', 'gulab jamun', 'rasmalai', 'kulfi', 'misti doi', 'mishti doi',
+    'kachori', 'pakora', 'pakoda', 'bhajiya', 'telebhaja', 'chop', 'cutlet', 'egg roll', 'kathi roll', 'shawarma', 'kebab', 'tikka', 'tandoori', 'naan', 'kulcha',
   ]],
   ['Bills', ['bill', 'electricity', 'bijli', 'current bill', 'rent', 'ghar bhada', 'wifi', 'broadband', 'internet', 'jio', 'airtel', 'vi recharge', 'mobile recharge', 'recharge', 'cylinder', 'gas', 'indane', 'water bill', 'society', 'maintenance', 'dth']],
   ['Health', ['medicine', 'medicines', 'doctor', 'hospital', 'health', 'pharmacy', 'chemist', 'apollo', 'medplus', 'clinic', 'lab test', 'blood test', 'dental', 'dentist', 'tablet', 'syrup', 'gym', 'protein', 'ors', 'electral', 'glucose', 'glucon d', 'vitamin', 'paracetamol', 'dolo', 'crocin', 'antiseptic', 'dettol', 'savlon', 'bandage', 'band aid', 'ointment', 'injection', 'checkup', 'medical']],
@@ -421,10 +433,13 @@ const KNOWN_CATEGORIES = new Set(CATEGORY_KEYWORDS.map(([category]) => category)
  * that the full sentence) is matched against the keyword lists, so "200 green peas" is Food.
  */
 function resolveCategory(aiCategory: unknown, title: string, sentence: string): string {
+  // A clear keyword in the item's own name (LIC, khoya, chowmein, water…) is more reliable than
+  // the AI's guess, so it wins. The AI decides only when the name has no known keyword.
+  const fromTitle = categoryFor(title);
+  if (fromTitle !== 'Others') return fromTitle;
   const fromAi = typeof aiCategory === 'string' ? aiCategory.trim() : '';
   if (fromAi && fromAi !== 'Others' && KNOWN_CATEGORIES.has(fromAi)) return fromAi;
-  const fromTitle = categoryFor(title);
-  return fromTitle !== 'Others' ? fromTitle : categoryFor(sentence);
+  return categoryFor(sentence);
 }
 
 // Categories a plain spend can be moved into without changing its type.
@@ -637,7 +652,13 @@ function hasUnsyncedChanges(data: HisabState, synced: SyncedItems) {
   });
 }
 
-async function syncStateToCloud(data: HisabState, synced: SyncedItems) {
+/**
+ * Uploads new and edited records. It NEVER deletes from the cloud just because a record is missing
+ * on this phone: an empty or half-loaded phone (fresh install, account switch, app reload) must not
+ * wipe the account. Cloud deletes happen only for records the person explicitly deleted
+ * (markIdDeleted, and its retry for deletes made offline, both keyed by deletedIds).
+ */
+async function syncStateToCloud(data: HisabState, synced: SyncedItems, deletedIds: Set<string>) {
   const jobs: Promise<unknown>[] = [];
   cloudArrayCollections.forEach(([cloudName, stateKey]) => {
     const known = synced.items[stateKey];
@@ -648,7 +669,13 @@ async function syncStateToCloud(data: HisabState, synced: SyncedItems) {
       jobs.push(saveToCloud(cloudName, item.id, item as unknown as Record<string, unknown>).then(saved => { if (saved) known.set(item.id, item); }));
     });
     Array.from(known.keys()).forEach(id => {
-      if (!currentIds.has(id)) jobs.push(deleteFromCloud(cloudName, id).then(deleted => { if (deleted) known.delete(id); }));
+      if (currentIds.has(id)) return;
+      if (deletedIds.has(id)) {
+        jobs.push(deleteFromCloud(cloudName, id).then(deleted => { if (deleted) known.delete(id); }));
+      } else {
+        // Not deleted by the person: just forget it here; the cloud copy stays and syncs back down.
+        known.delete(id);
+      }
     });
   });
   const budgets = budgetsKey(data.budgets);
@@ -730,10 +757,22 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [filterTrigger, setFilterTrigger] = useState<number>(0);
+  // One day (YYYY-MM-DD) to show on the Hisab page, set from the dashboard's day-by-day chart.
+  const [dateFilter, setDateFilter] = useState<string>('');
 
   const openCategoryInHisab = useCallback((categoryName: string, typeName: string = 'all') => {
     setCategoryFilter(categoryName || 'all');
     setTypeFilter(typeName || 'all');
+    setDateFilter('');
+    setFilterTrigger(Date.now());
+    setActiveTab('hisab');
+  }, []);
+
+  /** Opens the Hisab page showing one day's entries, optionally of one type (expense, income…). */
+  const openDayInHisab = useCallback((dateISO: string, typeName: string = 'all') => {
+    setCategoryFilter('all');
+    setTypeFilter(typeName || 'all');
+    setDateFilter(dateISO);
     setFilterTrigger(Date.now());
     setActiveTab('hisab');
   }, []);
@@ -809,7 +848,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     try {
       if (canUseCloudSync() && cloudHydrated) {
         setSyncStatus('Syncing');
-        await syncStateToCloud(state, syncedRef.current);
+        await syncStateToCloud(state, syncedRef.current, deletedIdsRef.current);
       }
       setSyncStatus('Cloud Synced');
       showToast({ title: 'Up to date', message: 'Your records sync automatically.', type: 'success' });
@@ -998,7 +1037,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         }
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
         if (canUseCloudSync() && hydratedRef.current && !isLocalOnly && isOnline && currentUser && !currentUser.isAnonymous) {
-          syncStateToCloud(latest, syncedRef.current).catch(() => undefined);
+          syncStateToCloud(latest, syncedRef.current, deletedIdsRef.current).catch(() => undefined);
         }
       }
     });
@@ -1166,7 +1205,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
         return;
       }
       setSyncStatus('Syncing');
-      syncStateToCloud(state, syncedRef.current)
+      syncStateToCloud(state, syncedRef.current, deletedIdsRef.current)
         .then(() => setSyncStatus('Cloud Synced'))
         .catch(() => setSyncStatus('Local'));
     }, 600);
@@ -1655,7 +1694,7 @@ Voice text: "${text}"
 Each item in "transactions" MUST have:
 - "title": string (clean item name, e.g. "Petrol", "Groceries", "Chai", "Salary", "Netflix")
 - "amount": number (positive numeric amount)
-- "category": string ("Food", "Transport", "Bills", "Shopping", "Entertainment", "Health", "Investment", "Income", "EMI", or "Others"). Anything eaten or drunk is "Food": vegetables (peas, matar, potato, onion), fruits, groceries, meat, fish, eggs, dairy, snacks, sweets, drinks and meals. Use "Others" only when no category fits.
+- "category": string ("Food", "Transport", "Bills", "Shopping", "Entertainment", "Health", "Investment", "Income", "EMI", or "Others"). Anything eaten or drunk is "Food": vegetables (peas, matar, potato, onion), fruits, groceries, meat, fish, eggs, dairy and khoya/mawa, snacks, sweets, drinking water, chowmein/noodles (any spelling: choumin, chaumin), a "plate" of anything (momo plate, half plate), drinks and meals. LIC, insurance and policy premiums are "Bills" (not Investment). Use "Others" only when no category fits.
 - "type": string ("expense", "income", "investment", or "emi")
 - "paymentMethod": string ("UPI", "Cash", "Credit Card", or "NetBanking")
 
@@ -2682,6 +2721,7 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     loaded,
     dataSettling,
     dataOwner,
+    cloudOwnerReady,
     isTabReady,
     unreadNotifCount,
     setUnreadNotifCount,
@@ -2691,6 +2731,8 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     setCategoryFilter,
     openCategoryInHisab,
     typeFilter,
+    dateFilter,
+    openDayInHisab,
     setTypeFilter,
     filterTrigger,
     // Exposed for tab screens & HisabScreenFrame
@@ -2798,12 +2840,15 @@ Return ONLY valid JSON like: {"transactions": [{"title": "Petrol", "amount": 500
     loaded,
     dataSettling,
     dataOwner,
+    cloudOwnerReady,
     isTabReady,
     unreadNotifCount,
     quickText,
     categoryFilter,
     openCategoryInHisab,
     typeFilter,
+    dateFilter,
+    openDayInHisab,
     filterTrigger,
     txs,
     currentMonth,

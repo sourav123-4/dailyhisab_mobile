@@ -362,6 +362,7 @@ export const HisabScreen = React.memo(function HisabScreen({
   shiftMonth,
   setMonth,
   categoryFilter = 'all',
+  dateFilter = '',
   typeFilter = 'all',
   filterTrigger = 0,
   onSelectCategory,
@@ -390,6 +391,8 @@ export const HisabScreen = React.memo(function HisabScreen({
   removeTransaction: (id: string) => void;
   parseHisab: (input: string) => any[];
   categoryFilter?: string;
+  /** One day (YYYY-MM-DD) to show, from the dashboard's day-by-day chart. */
+  dateFilter?: string;
   typeFilter?: string;
   filterTrigger?: number;
   onSelectCategory?: (category: string, type?: string) => void;
@@ -416,14 +419,14 @@ export const HisabScreen = React.memo(function HisabScreen({
     if (typeFilter !== undefined) {
       setSelectedType(typeFilter || 'all');
     }
-    if ((categoryFilter && categoryFilter !== 'all') || (typeFilter && typeFilter !== 'all')) {
+    if ((categoryFilter && categoryFilter !== 'all') || (typeFilter && typeFilter !== 'all') || dateFilter) {
       setSearchQuery('');
-      setStartDate('');
-      setEndDate('');
+      setStartDate(dateFilter || '');
+      setEndDate(dateFilter || '');
       setMinAmount('');
       setMaxAmount('');
     }
-  }, [categoryFilter, typeFilter, filterTrigger]);
+  }, [categoryFilter, typeFilter, dateFilter, filterTrigger]);
 
   // Main Filter Modal Visibility & Active Dropdown state within the modal
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -547,6 +550,7 @@ export const HisabScreen = React.memo(function HisabScreen({
     if (selectedType === 'expense') return scopedTxs.filter(t => t.type === 'expense' && !isEmiTx(t));
     if (selectedType === 'income') return scopedTxs.filter(t => t.type === 'income');
     if (selectedType === 'emi') return scopedTxs.filter(isEmiTx);
+    if (selectedType === 'investment') return scopedTxs.filter(t => t.type === 'investment');
     return scopedTxs;
   }, [scopedTxs, selectedType]);
 

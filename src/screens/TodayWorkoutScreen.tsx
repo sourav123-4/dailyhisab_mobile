@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFitnessApp } from '../navigation/FitnessAppContext';
 import { useAppTheme } from '../theme/appTheme';
@@ -50,6 +50,8 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
     totalConsumedCarbs,
     totalConsumedFats,
     isLoading,
+    planSetupRequested,
+    setPlanSetupRequested,
   } = useFitnessApp();
 
   const todayIndex = new Date().getDay();
@@ -59,10 +61,18 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
   const [foodScannerVisible, setFoodScannerVisible] = useState(false);
   const [planVisible, setPlanVisible] = useState(false);
   const [setupVisible, setSetupVisible] = useState(false);
+
+  // Straight after onboarding, open the plan builder once.
+  useEffect(() => {
+    if (!planSetupRequested) return;
+    setPlanSetupRequested(false);
+    setSetupVisible(true);
+  }, [planSetupRequested, setPlanSetupRequested]);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
   const selectedDay = weeklySplit.find(d => d.dayIndex === selectedDayIndex) || weeklySplit[0];
   const isToday = selectedDayIndex === todayIndex;
+  const hasPlan = weeklySplit.some(d => !d.isRestDay && d.exerciseIds.length > 0);
 
   const scheduledExercises = useMemo(
     () => selectedDay.exerciseIds.map(id => exercises.find(e => e.id === id)).filter((e): e is Exercise => !!e),
@@ -134,7 +144,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         ) : null}
 
         {/* Home / gym setup: prompt until done, then a compact row to change it */}
-        {!profile.trainingLocation ? (
+        {!profile.trainingLocation && hasPlan ? (
           <TouchableOpacity activeOpacity={0.85} onPress={() => setSetupVisible(true)} style={[card, styles.setupPrompt, { borderColor: theme.primary }]}>
             <Text style={styles.planPromoEmoji}>🏠🏋️</Text>
             <View style={{ flex: 1 }}>
@@ -187,12 +197,22 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
         <View style={[styles.planCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.planGlow, { backgroundColor: theme.primary }]} />
           <Text style={[styles.planEyebrow, { color: theme.primary }]}>
-            {isToday ? (trainedToday ? 'TODAY · DONE ✓' : "TODAY'S PLAN") : `${selectedDay.dayName.toUpperCase()}'S PLAN`}
+            {!hasPlan ? 'GET STARTED' : isToday ? (trainedToday ? 'TODAY · DONE ✓' : "TODAY'S PLAN") : `${selectedDay.dayName.toUpperCase()}'S PLAN`}
           </Text>
           <Text style={[styles.planTitle, { color: theme.text }]} numberOfLines={2}>
-            {selectedDay.isRestDay || scheduledExercises.length === 0 ? 'Rest & recovery' : selectedDay.splitTitle}
+            {!hasPlan ? 'No workout plan yet' : selectedDay.isRestDay || scheduledExercises.length === 0 ? 'Rest & recovery' : selectedDay.splitTitle}
           </Text>
-          {selectedDay.isRestDay || scheduledExercises.length === 0 ? (
+          {!hasPlan ? (
+            <>
+              <Text style={[styles.planMeta, { color: theme.muted }]}>
+                Tell us where you train (home or gym) and what equipment you have. We'll build your full week with sets and reps.
+              </Text>
+              <TouchableOpacity activeOpacity={0.85} style={[styles.planButton, { backgroundColor: theme.primary, marginTop: 14 }]} onPress={() => setSetupVisible(true)}>
+                <AppIcon name="plus" size={14} color="#ffffff" />
+                <Text style={[styles.planButtonText, { color: '#ffffff' }]}>Build my workout plan</Text>
+              </TouchableOpacity>
+            </>
+          ) : selectedDay.isRestDay || scheduledExercises.length === 0 ? (
             <Text style={[styles.planMeta, { color: theme.muted }]}>Stretch, walk and hydrate. Muscles grow while you recover.</Text>
           ) : (
             <>
@@ -258,7 +278,8 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
 
         <BodyStatsCard />
 
-        {/* Muscle gain plan */}
+        {/* Muscle gain plan: only when gaining is the goal */}
+        {profile.fitnessGoal === 'weight_gain' ? (
         <TouchableOpacity activeOpacity={0.85} onPress={() => setPlanVisible(true)} style={[card, styles.planPromo]}>
           <Text style={styles.planPromoEmoji}>💪</Text>
           <View style={{ flex: 1 }}>
@@ -269,6 +290,7 @@ export const TodayWorkoutScreen = ({ navigation }: any) => {
           </View>
           <AppIcon name="chevron-right" size={14} color={theme.subtle} />
         </TouchableOpacity>
+        ) : null}
 
         {/* Nutrition */}
         <View style={card}>
@@ -513,7 +535,7 @@ const styles = StyleSheet.create({
   macroValue: { fontSize: 13.5, fontWeight: '800', marginTop: 2 },
   planPromo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   setupPrompt: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, marginBottom: 12 },
-  setupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, marginTop: 10 },
+  setupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, marginTop: 12, marginBottom: 14 },
   setupRowEmoji: { fontSize: 18 },
   setupRowText: { flex: 1, fontSize: 13.5, fontWeight: '700' },
   planPromoEmoji: { fontSize: 28 },

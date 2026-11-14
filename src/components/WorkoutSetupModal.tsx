@@ -16,6 +16,7 @@ import {
   gearForProfile,
   planToSplit,
   recommendedDays,
+  defaultTrainingDays,
 } from '../utils/workoutPlanner';
 import { dailyTargetsForGoal } from '../utils/musclePlan';
 import { EquipmentScanUnavailableError, scanEquipmentPhoto } from '../services/equipmentScanService';
@@ -54,7 +55,13 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
   // A first-time setup starts with nothing ticked; after that, with the saved equipment.
   const savedGear = () => (profile.trainingLocation ? gearForProfile(profile) : []);
   const [gear, setGear] = useState<GearId[]>(savedGear);
-  const [days, setDays] = useState(profile.trainingDaysPerWeek || recommendedDays(profile.experience));
+  // The weekdays the person trains (0 = Sunday); everything else is a rest day.
+  const savedDays = () =>
+    profile.trainingDayIndexes?.length
+      ? profile.trainingDayIndexes
+      : defaultTrainingDays(profile.trainingDaysPerWeek || recommendedDays(profile.experience));
+  const [trainingDays, setTrainingDays] = useState<number[]>(savedDays);
+  const days = trainingDays.length;
   const [goal, setGoal] = useState<WeightGoal>(profile.fitnessGoal);
   const [level, setLevel] = useState<Difficulty>(profile.experience);
   const [scanning, setScanning] = useState(false);
@@ -69,7 +76,7 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
     setStep(0);
     setLocation(profile.trainingLocation || 'home');
     setGear(savedGear());
-    setDays(profile.trainingDaysPerWeek || recommendedDays(profile.experience));
+    setTrainingDays(savedDays());
     setGoal(profile.fitnessGoal);
     setLevel(profile.experience);
     setFound([]);
@@ -77,7 +84,23 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const plan = useMemo(() => buildWeeklyPlan({ gear, days, goal, experience: level, location }), [gear, days, goal, level, location]);
+  const plan = useMemo(
+    () => buildWeeklyPlan({ gear, days, goal, experience: level, location, trainingDays }),
+    [gear, days, goal, level, location, trainingDays]
+  );
+
+  const toggleTrainingDay = (dayIndex: number) => {
+    const on = trainingDays.includes(dayIndex);
+    if (on && trainingDays.length <= 2) {
+      Alert.alert('At least 2 days', 'Train at least 2 days a week to make progress.');
+      return;
+    }
+    if (!on && trainingDays.length >= 6) {
+      Alert.alert('Keep a rest day', 'Muscles grow while you rest, so keep at least one rest day a week.');
+      return;
+    }
+    setTrainingDays(prev => (on ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex]));
+  };
   const available = useMemo(() => EXERCISES_DATABASE.filter(e => canDoExercise(e.id, gear)).length, [gear]);
   const targets = useMemo(() => dailyTargetsForGoal({ ...profile, experience: level, fitnessGoal: goal }, goal), [profile, level, goal]);
 
@@ -85,7 +108,7 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     // Open the first workout day of the plan so the exercises are visible straight away.
-    if (step === 3) setOpenDay(plan.days.findIndex(d => d !== null));
+    if (step === 3) setOpenDay([1, 2, 3, 4, 5, 6, 0].find(i => plan.days[i] !== null) ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -149,6 +172,7 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
             trainingLocation: location,
             gear,
             trainingDaysPerWeek: days,
+            trainingDayIndexes: trainingDays,
             fitnessGoal: goal,
             experience: level,
             targetCalories: targets.calories,
@@ -267,22 +291,47 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
 
           {step === 2 ? (
             <>
-              <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 4 }]}>Days per week</Text>
-              <View style={styles.chipRow}>
-                {[2, 3, 4, 5, 6].map(n => (
+              <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 4 }]}>Which days will you train?</Text>
+              <Text style={[styles.optionText, { color: theme.muted, marginBottom: 10 }]}>
+                Tap a day to switch it between workout and rest. Pick the days that suit your week.
+              </Text>
+              <View style={styles.weekRow}>
+                {[1, 2, 3, 4, 5, 6, 0].map(dayIndex => {
+                  const on = trainingDays.includes(dayIndex);
+                  return (
+                    <TouchableOpacity
+                      key={dayIndex}
+                      onPress={() => toggleTrainingDay(dayIndex)}
+                      activeOpacity={0.8}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={`${DAYS[dayIndex]}: ${on ? 'workout' : 'rest'}`}
+                      style={[
+                        styles.weekDay,
+                        { borderColor: on ? theme.primary : theme.borderSoft, backgroundColor: on ? theme.primary : theme.surface },
+                      ]}
+                    >
+                      <Text style={[styles.weekDayName, { color: on ? '#ffffff' : theme.text }]}>{DAYS[dayIndex]}</Text>
+                      <Text style={[styles.weekDayTag, { color: on ? 'rgba(255,255,255,0.85)' : theme.subtle }]}>{on ? 'Train' : 'Rest'}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={[styles.optionText, { color: theme.muted, marginTop: 10 }]}>
+                {days} days a week · {plan.name.split(' · ')[0]}. Recommended for {level}s: {recommendedDays(level)} days.
+              </Text>
+              <View style={[styles.chipRow, { marginTop: 10 }]}>
+                {[3, 4, 5].map(n => (
                   <TouchableOpacity
                     key={n}
-                    onPress={() => setDays(n)}
+                    onPress={() => setTrainingDays(defaultTrainingDays(n))}
                     activeOpacity={0.8}
-                    style={[styles.dayChip, { borderColor: days === n ? theme.primary : theme.borderSoft, backgroundColor: days === n ? theme.primary : theme.surface }]}
+                    style={[styles.presetChip, { borderColor: theme.borderSoft, backgroundColor: theme.surface }]}
                   >
-                    <Text style={[styles.dayChipText, { color: days === n ? '#ffffff' : theme.text }]}>{n}</Text>
+                    <Text style={[styles.presetText, { color: theme.primary }]}>Usual {n} days</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={[styles.optionText, { color: theme.muted, marginTop: 6 }]}>
-                {buildWeeklyPlan({ gear, days, goal, experience: level }).name}. Recommended for {level}s: {recommendedDays(level)} days.
-              </Text>
 
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Your goal</Text>
               {GOALS.map(g => (
@@ -321,7 +370,9 @@ export function WorkoutSetupModal({ visible, onClose }: { visible: boolean; onCl
                 </Text>
               </View>
 
-              {plan.days.map((day, index) => {
+              {/* Monday first, matching the day picker. */}
+              {[1, 2, 3, 4, 5, 6, 0].map(index => {
+                const day = plan.days[index];
                 const open = openDay === index;
                 return (
                   <View key={DAYS[index]} style={card}>
@@ -423,6 +474,12 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '900', marginTop: 16, marginBottom: 8 },
   countNote: { fontSize: 12, textAlign: 'center', marginTop: 4 },
   chipRow: { flexDirection: 'row', gap: 10 },
+  weekRow: { flexDirection: 'row', gap: 6 },
+  weekDay: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  weekDayName: { fontSize: 13, fontWeight: '900' },
+  weekDayTag: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  presetChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
+  presetText: { fontSize: 12, fontWeight: '800' },
   dayChip: { flex: 1, borderWidth: 1.5, borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
   dayChipText: { fontSize: 17, fontWeight: '900' },
   hero: { borderRadius: 18, padding: 16, marginBottom: 12 },

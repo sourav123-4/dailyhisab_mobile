@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
 import { MainTabParamList, RootStackParamList } from '../route-types';
 import { TodayWorkoutScreen } from '../../screens/TodayWorkoutScreen';
@@ -21,7 +21,9 @@ import { FitnessHeader } from '../../components/FitnessHeader';
 import { AppDrawer, FitnessDrawerConfig } from '../../components/AppDrawer';
 import { useFitnessApp } from '../FitnessAppContext';
 import { localDateISO } from '../../utils/date';
-import { FitnessThemeProvider } from '../../theme/appTheme';
+import { FitnessThemeProvider, useAppTheme } from '../../theme/appTheme';
+import { FitnessOnboardingScreen } from '../../screens/FitnessOnboardingScreen';
+import { AppSwitchTransition } from '../../components/AppSwitchTransition';
 
 const TabNav = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -84,6 +86,8 @@ function TitanFitTabsNavigator({ navigation }: { navigation: any }) {
           },
         }}
         screenOptions={({ route }) => ({
+          // Native cross-slide between tabs so moving between pages reads as a page change.
+          animation: 'shift',
           headerShown: true,
           tabBarHideOnKeyboard: true,
           header: () => (
@@ -141,6 +145,38 @@ function DailyHisabFrame() {
   return <HisabScreenFrame navigation={navigationProp} tab={activeTab} />;
 }
 
+/** TitanFit proper once the person has set up their profile; onboarding (or a restore check) before that. */
+function TitanFitGate() {
+  const theme = useAppTheme();
+  const hisab = useHisabApp();
+  const { profile, isLoading, cloudChecked } = useFitnessApp();
+
+  if (!profile.onboarded) {
+    // A signed-in account may have a backup to restore: check it before asking for details again.
+    if (isLoading || !cloudChecked) {
+      return (
+        <View style={[styles.rootContainer, styles.centered, { backgroundColor: theme.bg }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.restoreText, { color: theme.muted }]}>Checking for your saved TitanFit data…</Text>
+        </View>
+      );
+    }
+    const accountName = (hisab.user?.displayName || '').trim();
+    return <FitnessOnboardingScreen accountName={accountName} />;
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
+      <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
+      <Stack.Screen
+        name="ActiveWorkout"
+        component={ActiveWorkoutScreen}
+        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppFlowNavigator() {
   const { appMode } = useAppMode();
   const {
@@ -157,20 +193,17 @@ export default function AppFlowNavigator() {
   return (
     <View style={styles.rootContainer}>
       {/* Signed out: the login screen lives in the Hisab frame, whichever half was open. */}
-      {appMode === 'hisab' || shouldShowAuthGate ? (
-        <DailyHisabFrame />
-      ) : (
-        <FitnessThemeProvider>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="MainTabs" component={TitanFitTabsNavigator} />
-            <Stack.Screen
-              name="ActiveWorkout"
-              component={ActiveWorkoutScreen}
-              options={{ presentation: 'fullScreenModal' }}
-            />
-          </Stack.Navigator>
-        </FitnessThemeProvider>
-      )}
+      <AppSwitchTransition mode={shouldShowAuthGate ? 'hisab' : appMode}>
+        {shown =>
+          shown === 'hisab' ? (
+            <DailyHisabFrame />
+          ) : (
+            <FitnessThemeProvider>
+              <TitanFitGate />
+            </FitnessThemeProvider>
+          )
+        }
+      </AppSwitchTransition>
 
       <SecurityLockModal
         visible={!shouldShowAuthGate && isLocked}
@@ -189,4 +222,6 @@ const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
   },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
+  restoreText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

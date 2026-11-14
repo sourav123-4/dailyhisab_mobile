@@ -116,7 +116,7 @@ export function ExerciseVideoPlayer({ exercise, compact = false }: { exercise: E
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.offlineOverlay} onPress={retry} activeOpacity={0.85} accessibilityRole="button">
-            <Text style={styles.offlineText}>Connect to the internet and sign in to play the demo</Text>
+            <Text style={styles.offlineText}>Go online and sign in to play the demo</Text>
             <View style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
               <Text style={styles.retryText}>Retry</Text>
             </View>
@@ -190,6 +190,8 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     backgroundColor: '#8a8a8c',
+    // Keeps the placeholder photo from spilling under the controls row.
+    overflow: 'hidden',
   },
   stageCompact: {
     aspectRatio: 4 / 3,
@@ -271,7 +273,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    // Wide side padding keeps the message clear of the muscle map in the top-right corner.
+    paddingHorizontal: 92,
     gap: 10,
   },
   offlineText: {

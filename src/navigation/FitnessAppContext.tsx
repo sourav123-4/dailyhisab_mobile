@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActiveExerciseLog,
@@ -13,12 +13,13 @@ import {
   WorkoutSet,
   WorkoutSplitDay,
 } from '../types/fitness';
-import { DEFAULT_WEEKLY_SPLIT, EXERCISES_DATABASE } from '../data/exercisesData';
+import { EXERCISES_DATABASE } from '../data/exercisesData';
 import { ACTIVE_ENV } from '../config/active-env';
 import { AppThemeName } from '../theme/appTheme';
 import { generateFitnessAdviceWithGemini } from '../services/geminiAiService';
 import { localDateISO, nextStreakDays } from '../utils/date';
-import { scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
+import { LOCAL_DATA_OWNER, scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
+import { readFromCloud, saveToCloud } from '../services/sync';
 
 interface FitnessContextType {
   profile: UserProfile;
@@ -32,6 +33,12 @@ interface FitnessContextType {
   themeName: AppThemeName;
   isOnline: boolean;
   isLoading: boolean;
+  /** False while a signed-in account's cloud backup is still being checked (so onboarding waits for it). */
+  cloudChecked: boolean;
+  /** True when there is any logged history (workouts, weigh-ins, meals, measurements). */
+  hasHistory: boolean;
+  /** Set when onboarding finishes so Today opens the plan builder once. */
+  planSetupRequested: boolean;
   isAuthenticated: boolean;
   activeRestTimer: number | null;
   meals: FoodMealLog[];
@@ -63,32 +70,53 @@ interface FitnessContextType {
   claimDailyStreak: () => Promise<number>;
   loginGuest: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Erases every TitanFit record for this account (phone and cloud backup) and returns to onboarding. */
+  resetFitnessData: () => Promise<void>;
+  setPlanSetupRequested: (requested: boolean) => void;
 }
 
+// A new account starts blank: the person enters their own details in onboarding.
 const DEFAULT_PROFILE: UserProfile = {
   id: 'user_local_default',
-  name: 'Athlete',
+  name: '',
   email: '',
   gender: 'male',
-  age: 26,
-  heightCm: 178,
-  startWeightKg: 74.5,
-  currentWeightKg: 74.5,
-  targetWeightKg: 80.0,
-  fitnessGoal: 'weight_gain',
+  age: 0,
+  heightCm: 0,
+  startWeightKg: 0,
+  currentWeightKg: 0,
+  targetWeightKg: 0,
+  fitnessGoal: 'maintenance',
   activityLevel: 'moderately_active',
-  experience: 'intermediate',
+  experience: 'beginner',
   unit: 'kg',
-  targetCalories: 2850,
-  targetProteinGrams: 165,
-  targetCarbsGrams: 330,
-  targetFatsGrams: 75,
-  dailyWaterTargetMl: 3500,
+  targetCalories: 0,
+  targetProteinGrams: 0,
+  targetCarbsGrams: 0,
+  targetFatsGrams: 0,
+  dailyWaterTargetMl: 0,
   todayWaterMl: 0,
   waterLogDate: localDateISO(),
   streakDays: 0,
   restTimerSeconds: 90,
+  onboarded: false,
 };
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// No preset workouts: the week stays empty until the person builds a plan.
+export const EMPTY_WEEK: WorkoutSplitDay[] = DAY_NAMES.map((dayName, dayIndex) => ({
+  dayIndex,
+  dayName,
+  splitTitle: 'No plan yet',
+  targetMuscles: [],
+  isRestDay: false,
+  exerciseIds: [],
+}));
+
+/** Records backed up to the signed-in account, so signing in again (on any phone) restores them. */
+const SYNCED_KEYS = ['PROFILE', 'SPLIT', 'WORKOUTS', 'WEIGHTS', 'MEASUREMENTS', 'MEALS'] as const;
+type SyncedKey = (typeof SYNCED_KEYS)[number];
+const cloudDocId = (name: SyncedKey) => `titanfit_${name.toLowerCase()}`;
 
 // New users start with no history: earlier builds seeded sample records with these ids,
 // which are stripped from saved data on load. Real entries use timestamped ids.
@@ -112,6 +140,32 @@ const DEFAULT_AI_MESSAGES: AIChatMessage[] = [
 
 const DEFAULT_TODAY_MEALS: FoodMealLog[] = [];
 
+
+const LIST_KEYS: SyncedKey[] = ['WORKOUTS', 'WEIGHTS', 'MEASUREMENTS', 'MEALS'];
+
+/** Combines two copies of a history list by id (the newer copy wins a clash), in the app's usual order. */
+function mergeById<T extends { id: string; date?: string }>(older: T[], newer: T[], ascending: boolean): T[] {
+  const byId = new Map<string, T>();
+  [...older, ...newer].forEach(item => item?.id && byId.set(item.id, item));
+  const sortKey = (item: T) => `${item.date || ''}|${item.id}`;
+  const sorted = [...byId.values()].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  return ascending ? sorted : sorted.reverse();
+}
+
+// A Firestore document holds at most 1 MB. Years of history could pass that, so the backup keeps
+// the most recent entries; the phone always keeps everything.
+const CLOUD_JSON_LIMIT = 700_000;
+function fitForCloud(name: SyncedKey, json: string): string {
+  if (json.length <= CLOUD_JSON_LIMIT || !LIST_KEYS.includes(name)) return json;
+  let list: unknown[] = JSON.parse(json);
+  while (list.length > 1 && JSON.stringify(list).length > CLOUD_JSON_LIMIT) {
+    const keep = Math.ceil(list.length * 0.8);
+    // Weigh-ins are stored oldest first; every other list is newest first.
+    list = name === 'WEIGHTS' ? list.slice(list.length - keep) : list.slice(0, keep);
+  }
+  return JSON.stringify(list);
+}
+
 const FitnessContext = createContext<FitnessContextType | undefined>(undefined);
 
 
@@ -129,15 +183,18 @@ const keysFor = (owner: string | null) =>
 export const FitnessAppProvider = React.memo(function FitnessAppProvider({
   owner,
   ready,
+  cloudReady = false,
   children,
 }: {
   owner: string | null;
   ready: boolean;
+  /** The signed-in account is confirmed and online, so its cloud backup can be read and written. */
+  cloudReady?: boolean;
   children: React.ReactNode;
 }) {
   const STORAGE_KEYS = useMemo(() => keysFor(owner), [owner]);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-  const [weeklySplit, setWeeklySplit] = useState<WorkoutSplitDay[]>(DEFAULT_WEEKLY_SPLIT);
+  const [weeklySplit, setWeeklySplit] = useState<WorkoutSplitDay[]>(EMPTY_WEEK);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutSession[]>(DEFAULT_WORKOUT_HISTORY);
   const [weightHistory, setWeightHistory] = useState<WeightEntry[]>(DEFAULT_WEIGHT_HISTORY);
   const [bodyMeasurements, setBodyMeasurements] = useState<BodyMeasurement[]>(DEFAULT_MEASUREMENTS);
@@ -149,14 +206,68 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [activeRestTimer, setActiveRestTimer] = useState<number | null>(null);
+  const [cloudPulled, setCloudPulled] = useState(false);
+  const [planSetupRequested, setPlanSetupRequested] = useState(false);
+
+  // When each synced key was last saved here, and which keys still need uploading.
+  const metaRef = useRef<Partial<Record<SyncedKey | 'EPOCH', number>>>({});
+  const dirtyRef = useRef(new Map<SyncedKey, string>());
+  const cloudReadyRef = useRef(false);
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pushDirty = useCallback(async () => {
+    if (!cloudReadyRef.current) return;
+    for (const [name, json] of [...dirtyRef.current]) {
+      const saved = await saveToCloud('settings', cloudDocId(name), {
+        id: cloudDocId(name),
+        json: fitForCloud(name, json),
+        savedAt: metaRef.current[name] || Date.now(),
+        // Bumped by "Reset TitanFit data"; a higher epoch replaces everything from a lower one.
+        epoch: metaRef.current.EPOCH || 0,
+      }).catch(() => false);
+      // Only clear it if nothing newer was queued while this upload ran.
+      if (saved && dirtyRef.current.get(name) === json) dirtyRef.current.delete(name);
+    }
+    // Anything that could not be uploaded (offline, quota) is retried shortly.
+    if (dirtyRef.current.size > 0) {
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = setTimeout(() => {
+        pushDirtyRef.current();
+      }, 30000);
+    }
+  }, []);
+  const pushDirtyRef = useRef(pushDirty);
+  pushDirtyRef.current = pushDirty;
+
+  const schedulePush = useCallback(() => {
+    if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(() => {
+      pushDirty();
+    }, 1500);
+  }, [pushDirty]);
+
+  /** Saves a record on the phone, stamps when, and queues it for the cloud backup. */
+  const persist = (name: SyncedKey, value: unknown) => {
+    const json = JSON.stringify(value);
+    metaRef.current = { ...metaRef.current, [name]: Date.now() };
+    dirtyRef.current.set(name, json);
+    schedulePush();
+    return Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS[name], json),
+      AsyncStorage.setItem(STORAGE_KEYS.META, JSON.stringify(metaRef.current)),
+    ]).catch(() => undefined);
+  };
 
   // Load the owner's saved data, starting from a clean slate whenever the account changes.
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
     setIsLoading(true);
+    setCloudPulled(false);
+    metaRef.current = {};
+    dirtyRef.current.clear();
     setProfile(DEFAULT_PROFILE);
-    setWeeklySplit(DEFAULT_WEEKLY_SPLIT);
+    setWeeklySplit(EMPTY_WEEK);
     setWorkoutHistory(DEFAULT_WORKOUT_HISTORY);
     setWeightHistory(DEFAULT_WEIGHT_HISTORY);
     setBodyMeasurements(DEFAULT_MEASUREMENTS);
@@ -183,6 +294,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         savedChat,
         savedTheme,
         savedMeals,
+        savedMeta,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.PROFILE),
         AsyncStorage.getItem(STORAGE_KEYS.SPLIT),
@@ -193,27 +305,13 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         AsyncStorage.getItem(STORAGE_KEYS.AI_CHAT),
         AsyncStorage.getItem(STORAGE_KEYS.THEME),
         AsyncStorage.getItem(STORAGE_KEYS.MEALS),
+        AsyncStorage.getItem(STORAGE_KEYS.META),
       ]);
       if (isCancelled()) return;
+      if (savedMeta) metaRef.current = JSON.parse(savedMeta);
 
-      if (savedProf) {
-        const parsedProf = JSON.parse(savedProf);
-        if (!parsedProf.name) {
-          parsedProf.name = 'Athlete';
-        }
-        setProfile(parsedProf);
-      }
-      if (savedSplit) {
-        const parsed = JSON.parse(savedSplit);
-        const merged = parsed.map((d: any) => {
-          if (d.dayIndex === 6 && (!d.exerciseIds || d.exerciseIds.length === 0)) {
-            const defSat = DEFAULT_WEEKLY_SPLIT.find((s) => s.dayIndex === 6);
-            return defSat || d;
-          }
-          return d;
-        });
-        setWeeklySplit(merged);
-      }
+      if (savedProf) setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(savedProf) });
+      if (savedSplit) setWeeklySplit(JSON.parse(savedSplit));
       if (savedWorkouts) setWorkoutHistory(withoutSamples(JSON.parse(savedWorkouts)));
       if (savedWeights) setWeightHistory(withoutSamples(JSON.parse(savedWeights)));
       if (savedMeas) setBodyMeasurements(withoutSamples(JSON.parse(savedMeas)));
@@ -228,6 +326,137 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     }
   };
 
+  /** Puts a saved record on screen (used for local load and for a newer cloud copy). */
+  const applyRecord = (name: SyncedKey, value: any) => {
+    if (name === 'PROFILE') setProfile({ ...DEFAULT_PROFILE, ...value });
+    else if (name === 'SPLIT') setWeeklySplit(Array.isArray(value) && value.length ? value : EMPTY_WEEK);
+    else if (name === 'WORKOUTS') setWorkoutHistory(withoutSamples(value || []));
+    else if (name === 'WEIGHTS') setWeightHistory(withoutSamples(value || []));
+    else if (name === 'MEASUREMENTS') setBodyMeasurements(withoutSamples(value || []));
+    else setMeals(withoutSamples(value || []));
+  };
+
+  const defaultRecord = (name: SyncedKey) => (name === 'PROFILE' ? DEFAULT_PROFILE : name === 'SPLIT' ? EMPTY_WEEK : []);
+
+  // Once the signed-in account is confirmed, reconcile this phone with its cloud backup:
+  // a newer cloud copy is restored here, anything newer here is uploaded. History lists from two
+  // phones are combined rather than one replacing the other.
+  const [pullAttempt, setPullAttempt] = useState(0);
+  useEffect(() => {
+    cloudReadyRef.current = false;
+    if (!ready || isLoading || !cloudReady || !owner || owner === LOCAL_DATA_OWNER) return;
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    (async () => {
+      const docs = await Promise.all(SYNCED_KEYS.map(name => readFromCloud('settings', cloudDocId(name))));
+      if (cancelled) return;
+      // Unreachable cloud: change nothing (never treat "offline" as "empty") and try again shortly.
+      if (docs.some(doc => doc === undefined)) {
+        retry = setTimeout(() => setPullAttempt(n => n + 1), 20000);
+        return;
+      }
+      const cloudEpoch = Math.max(0, ...docs.map(doc => Number(doc?.epoch || 0)));
+      const localEpoch = metaRef.current.EPOCH || 0;
+      // Timestamps are written straight to metaRef so a save made during this check is never rolled back.
+      const stamp = (key: SyncedKey | 'EPOCH', at: number) => {
+        metaRef.current = { ...metaRef.current, [key]: at };
+      };
+      const writes: [string, string][] = [];
+
+      for (let i = 0; i < SYNCED_KEYS.length; i++) {
+        const name = SYNCED_KEYS[i];
+        const doc = docs[i];
+        const cloudAt = Number(doc?.savedAt || 0);
+        const cloudJson = doc && typeof doc.json === 'string' && Number(doc.epoch || 0) === cloudEpoch ? doc.json : null;
+        const localJson = dirtyRef.current.get(name) ?? (await AsyncStorage.getItem(STORAGE_KEYS[name]));
+        if (cancelled) return;
+        const localAt = metaRef.current[name] || 0;
+        const adopt = (json: string, at: number) => {
+          applyRecord(name, JSON.parse(json));
+          writes.push([STORAGE_KEYS[name], json]);
+          stamp(name, at);
+          dirtyRef.current.delete(name);
+        };
+        const upload = (json: string) => {
+          if (!metaRef.current[name]) stamp(name, Date.now());
+          dirtyRef.current.set(name, json);
+        };
+        try {
+          if (cloudEpoch > localEpoch) {
+            // The data was reset on another phone: take the cloud's copy, or blank where it has none.
+            adopt(cloudJson ?? JSON.stringify(defaultRecord(name)), cloudAt || Date.now());
+          } else if (localEpoch > cloudEpoch) {
+            // Reset here: this phone's copy replaces the cloud's.
+            upload(localJson ?? JSON.stringify(defaultRecord(name)));
+          } else if (cloudJson && !localJson) {
+            adopt(cloudJson, cloudAt);
+          } else if (localJson && !cloudJson) {
+            upload(localJson);
+          } else if (cloudJson && localJson && cloudAt !== localAt) {
+            if (LIST_KEYS.includes(name)) {
+              const cloudList = JSON.parse(cloudJson);
+              const localList = JSON.parse(localJson);
+              const [older, newer] = cloudAt > localAt ? [localList, cloudList] : [cloudList, localList];
+              const merged = JSON.stringify(mergeById(older, newer, name === 'WEIGHTS'));
+              adopt(merged, Date.now());
+              if (merged !== cloudJson) dirtyRef.current.set(name, merged);
+            } else if (cloudAt > localAt) {
+              adopt(cloudJson, cloudAt);
+            } else {
+              upload(localJson);
+            }
+          }
+        } catch {
+          // A copy that cannot be read is skipped; the other one stays as it is.
+        }
+      }
+      if (cloudEpoch > localEpoch) stamp('EPOCH', cloudEpoch);
+      writes.push([STORAGE_KEYS.META, JSON.stringify(metaRef.current)]);
+      await AsyncStorage.multiSet(writes).catch(() => undefined);
+      if (cancelled) return;
+      cloudReadyRef.current = true;
+      setCloudPulled(true);
+      pushDirty();
+    })();
+    return () => {
+      cancelled = true;
+      cloudReadyRef.current = false;
+      if (retry) clearTimeout(retry);
+    };
+    // STORAGE_KEYS follows owner; applyRecord only calls state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, isLoading, cloudReady, owner, pullAttempt]);
+
+  // Onboarding waits for the backup check, but never for long when the network is slow or off.
+  const expectsCloud = !!owner && owner !== LOCAL_DATA_OWNER;
+  const [cloudWaitExpired, setCloudWaitExpired] = useState(false);
+  useEffect(() => {
+    setCloudWaitExpired(false);
+    if (!expectsCloud || cloudPulled) return;
+    const timer = setTimeout(() => setCloudWaitExpired(true), 7000);
+    return () => clearTimeout(timer);
+  }, [owner, expectsCloud, cloudPulled]);
+  const cloudChecked = !expectsCloud || cloudPulled || cloudWaitExpired;
+
+  const hasHistory = workoutHistory.length > 0 || weightHistory.length > 0 || meals.length > 0 || bodyMeasurements.length > 0;
+
+  const resetFitnessData = async () => {
+    // A new epoch makes this blank slate replace older copies on the cloud and on other phones.
+    metaRef.current = { ...metaRef.current, EPOCH: Date.now() };
+    setProfile(DEFAULT_PROFILE);
+    setWeeklySplit(EMPTY_WEEK);
+    setWorkoutHistory([]);
+    setWeightHistory([]);
+    setBodyMeasurements([]);
+    setMeals([]);
+    setActiveWorkout(null);
+    setAiChatHistory(DEFAULT_AI_MESSAGES);
+    await Promise.all([
+      ...SYNCED_KEYS.map(name => persist(name, defaultRecord(name))),
+      AsyncStorage.multiRemove([STORAGE_KEYS.ACTIVE_WORKOUT, STORAGE_KEYS.AI_CHAT]),
+    ]);
+  };
+
   const setThemeName = async (newTheme: AppThemeName) => {
     setThemeNameState(newTheme);
     await AsyncStorage.setItem(STORAGE_KEYS.THEME, newTheme);
@@ -236,7 +465,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
   const updateProfile = async (updates: Partial<UserProfile>) => {
     setProfile((prev) => {
       const next = { ...prev, ...updates };
-      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(next));
+      persist('PROFILE', next);
       return next;
     });
   };
@@ -422,9 +651,9 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     setProfile(updatedProfile);
 
     await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.WORKOUTS, JSON.stringify(nextHistory)),
+      persist('WORKOUTS', nextHistory),
       AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_WORKOUT),
-      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updatedProfile)),
+      persist('PROFILE', updatedProfile),
     ]);
 
     return finishedSession;
@@ -440,7 +669,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
       lastWorkoutDate: todayStr,
     };
     setProfile(updatedProfile);
-    await AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updatedProfile));
+    await persist('PROFILE', updatedProfile);
     return nextStreak;
   };
 
@@ -459,12 +688,12 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     // Functional updates so a profile edit saved in the same tick is not overwritten.
     setWeightHistory((prev) => {
       const next = [...prev, newEntry];
-      AsyncStorage.setItem(STORAGE_KEYS.WEIGHTS, JSON.stringify(next));
+      persist('WEIGHTS', next);
       return next;
     });
     setProfile((prev) => {
       const next = { ...prev, currentWeightKg: weightKg };
-      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(next));
+      persist('PROFILE', next);
       return next;
     });
   };
@@ -478,7 +707,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
 
     const nextList = [newM, ...bodyMeasurements];
     setBodyMeasurements(nextList);
-    await AsyncStorage.setItem(STORAGE_KEYS.MEASUREMENTS, JSON.stringify(nextList));
+    await persist('MEASUREMENTS', nextList);
   };
 
   const logWater = async (amountMl: number) => {
@@ -486,7 +715,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
       const today = localDateISO();
       const nextWater = (prev.waterLogDate === today ? prev.todayWaterMl : 0) + amountMl;
       const next = { ...prev, todayWaterMl: nextWater, waterLogDate: today };
-      AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(next));
+      persist('PROFILE', next);
       return next;
     });
   };
@@ -508,24 +737,24 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     };
     const nextList = [newMeal, ...meals];
     setMeals(nextList);
-    await AsyncStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(nextList));
+    await persist('MEALS', nextList);
   };
 
   const deleteMeal = async (mealId: string) => {
     const nextList = meals.filter((m) => m.id !== mealId);
     setMeals(nextList);
-    await AsyncStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(nextList));
+    await persist('MEALS', nextList);
   };
 
   const replaceWeeklySplit = async (split: WorkoutSplitDay[]) => {
     setWeeklySplit(split);
-    await AsyncStorage.setItem(STORAGE_KEYS.SPLIT, JSON.stringify(split));
+    await persist('SPLIT', split);
   };
 
   const updateSplitDay = async (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => {
     const nextSplit = weeklySplit.map((d) => (d.dayIndex === dayIndex ? { ...d, ...updatedDay } : d));
     setWeeklySplit(nextSplit);
-    await AsyncStorage.setItem(STORAGE_KEYS.SPLIT, JSON.stringify(nextSplit));
+    await persist('SPLIT', nextSplit);
   };
 
   const triggerRestTimer = (seconds = 90) => {
@@ -631,6 +860,11 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         claimDailyStreak,
         loginGuest,
         logout,
+        cloudChecked,
+        hasHistory,
+        planSetupRequested,
+        setPlanSetupRequested,
+        resetFitnessData,
       }}
     >
       {children}

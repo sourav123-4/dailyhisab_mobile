@@ -20,7 +20,8 @@ import { dailyTargetsForGoal } from '../utils/musclePlan';
 import { AppIcon } from './AppIcon';
 
 const GOALS: { id: WeightGoal; label: string; emoji: string }[] = [
-  { id: 'weight_gain', label: 'Build muscle', emoji: '💪' },
+  { id: 'weight_gain', label: 'Gain weight', emoji: '💪' },
+  { id: 'muscle_gain', label: 'Lean muscle', emoji: '⚡' },
   { id: 'weight_loss', label: 'Lose fat', emoji: '🔥' },
   { id: 'maintenance', label: 'Stay fit', emoji: '⚖️' },
 ];
@@ -61,7 +62,7 @@ const draftFrom = (p: UserProfile): Draft => ({
   heightCm: String(p.heightCm || ''),
   currentWeightKg: String(p.currentWeightKg || ''),
   targetWeightKg: String(p.targetWeightKg || ''),
-  fitnessGoal: p.fitnessGoal === 'muscle_gain' ? 'weight_gain' : p.fitnessGoal,
+  fitnessGoal: p.fitnessGoal,
   activityLevel: p.activityLevel,
   experience: p.experience,
 });

@@ -50,9 +50,9 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
         <View style={styles.titleRow}>
           <View style={[styles.pulseDot, { backgroundColor: activeMeta.color }]} />
           <View>
-            <Text style={[styles.title, { color: theme.text }]}>Exercise demo</Text>
+            <Text style={[styles.title, { color: theme.text }]}>{activeMeta.title}</Text>
             <Text style={[styles.activeMuscleLabel, { color: activeMeta.color }]}>
-              {activeMeta.title.toUpperCase()} · ATLAS
+              {viewMode === 'motion' ? 'EXAMPLE EXERCISE' : 'MUSCLES WORKED'}
             </Text>
           </View>
         </View>
@@ -117,7 +117,7 @@ export const MuscleAnatomyViewer: React.FC<MuscleAnatomyViewerProps> = ({
         <View style={[styles.detailsBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}>
           <View style={styles.detailsHeader}>
             <Text style={[styles.detailsTitle, { color: theme.text }]}>
-              {activeMeta.title} Kinematics & Muscle Activation
+              Muscles in this group
             </Text>
             <Text style={[styles.detailsSubtitle, { color: theme.muted }]}>
               {activeMeta.subtitle}

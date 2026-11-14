@@ -30,6 +30,7 @@ export function MuscleGainPlanModal({ visible, onClose }: { visible: boolean; on
         days: profile.trainingDaysPerWeek || recommendedDays(profile.experience),
         goal: 'weight_gain',
         experience: profile.experience,
+        trainingDays: profile.trainingDayIndexes,
       }),
     [profile]
   );

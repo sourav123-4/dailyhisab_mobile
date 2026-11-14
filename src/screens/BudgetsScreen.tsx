@@ -323,10 +323,16 @@ export const BudgetsScreen = React.memo(function BudgetsScreen({
                 logoutUser();
               }
             }}
-            style={[styles.signOutBtn, { borderColor: '#ef4444' }]}
+            // Signing in is a normal action (brand colour); only signing out is styled as a warning.
+            style={[
+              styles.signOutBtn,
+              localOnly || !user || user.isAnonymous
+                ? { borderColor: theme.primary, backgroundColor: theme.primary }
+                : { borderColor: '#ef4444' },
+            ]}
             activeOpacity={0.8}
           >
-            <Text style={styles.signOutBtnText}>
+            <Text style={[styles.signOutBtnText, (localOnly || !user || user.isAnonymous) && { color: '#ffffff' }]}>
               {localOnly || !user || user.isAnonymous ? 'Sign In' : 'Sign Out'}
             </Text>
           </TouchableOpacity>

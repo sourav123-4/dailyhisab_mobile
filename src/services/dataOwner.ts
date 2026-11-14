@@ -18,4 +18,6 @@ export const TITANFIT_STORAGE_KEYS = {
   THEME: '@titanfit_theme',
   AUTH: '@titanfit_auth',
   MEALS: '@titanfit_meals',
+  /** When each synced key was last saved on this phone, to pick the newer of local and cloud. */
+  META: '@titanfit_meta',
 } as const;

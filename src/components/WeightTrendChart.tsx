@@ -61,9 +61,9 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
       {/* Header with Stats */}
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: theme.text }]}>Weight Transformation</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Weight progress</Text>
           <Text style={[styles.subtitle, { color: theme.muted }]}>
-            {goal === 'weight_loss' ? 'Fat Loss & Cutting' : goal === 'weight_gain' || goal === 'muscle_gain' ? 'Hypertrophy & Bulking' : 'Body Recomposition'}
+            {goal === 'weight_loss' ? 'Losing fat' : goal === 'weight_gain' ? 'Gaining weight & muscle' : goal === 'muscle_gain' ? 'Building lean muscle' : 'Holding steady'}
           </Text>
         </View>
 
@@ -85,7 +85,7 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
           >
             {deltaFormatted}
           </Text>
-          <Text style={[styles.deltaLabel, { color: theme.subtle }]}>Since Start</Text>
+          <Text style={[styles.deltaLabel, { color: theme.subtle }]}>since start</Text>
         </View>
       </View>
 
@@ -115,7 +115,7 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({
           />
         </View>
         <Text style={[styles.progressPercentText, { color: theme.accent }]}>
-          {progressPercent}% Goal Completed
+          {progressPercent}% of the way to your target
         </Text>
       </View>
 

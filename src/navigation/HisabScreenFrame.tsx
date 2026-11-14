@@ -31,6 +31,7 @@ import { TopHeader } from '../components/TopHeader';
 import { AppDrawer } from '../components/AppDrawer';
 import { ProfileModal } from '../components/ProfileModal';
 import { BottomTabBar } from '../components/BottomTabBar';
+import { PageTransition } from '../components/PageTransition';
 
 const bottomTabs: BottomTabItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -80,6 +81,7 @@ function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
           insights={app.monthlyInsights}
           onOpenTab={app.openTab}
           onSelectCategory={app.openCategoryInHisab}
+          onSelectDay={app.openDayInHisab}
           onAddTransaction={() => {
             app.openTab('hisab');
           }}
@@ -105,6 +107,7 @@ function renderHisabTabScreen(app: HisabAppContextType, tab: Tab) {
           isTranscribing={app.isTranscribing}
           categoryFilter={app.categoryFilter}
           typeFilter={app.typeFilter}
+          dateFilter={app.dateFilter}
           filterTrigger={app.filterTrigger}
           onSelectCategory={app.openCategoryInHisab}
           saveSmartEntry={app.saveSmartEntry}
@@ -371,7 +374,7 @@ export function HisabScreenFrame({ navigation, tab }: { navigation: HisabScreenF
             />
           }
         >
-          {app.isLocked ? null : renderHisabTabScreen(app, tab)}
+          {app.isLocked ? null : <PageTransition pageKey={tab}>{renderHisabTabScreen(app, tab)}</PageTransition>}
         </ScrollView>
         <AppDrawer
           isOpen={drawerOpen}

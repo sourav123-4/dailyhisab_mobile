@@ -125,8 +125,9 @@ const themes: Record<AppThemeName, AppTheme> = {
     subtle: '#64748B',
     border: '#E2E8F0',
     borderSoft: '#F1F5F9',
-    primary: '#E11D48',
-    primarySoft: '#FFE4E6',
+    // Daily Hisab purple (matches the brand cards, mic button and header); red is kept for danger only.
+    primary: '#6D28D9',
+    primarySoft: '#EDE9FE',
     primaryText: '#FFFFFF',
     accent: '#0284C7',
     accentSoft: '#E0F2FE',

@@ -347,16 +347,16 @@ export const InvestmentsScreen = React.memo(function InvestmentsScreen({
           <View
             style={[
               styles.heroStatusPill,
-              { backgroundColor: portfolioStats.isPositive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)' },
+              { backgroundColor: portfolioStats.totalInvested <= 0 ? 'rgba(255, 255, 255, 0.16)' : portfolioStats.isPositive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)' },
             ]}
           >
             <Text
               style={[
                 styles.heroStatusText,
-                { color: portfolioStats.isPositive ? '#4ade80' : '#f87171' },
+                { color: portfolioStats.totalInvested <= 0 ? 'rgba(255, 255, 255, 0.9)' : portfolioStats.isPositive ? '#4ade80' : '#f87171' },
               ]}
             >
-              {portfolioStats.isPositive ? '▲ In Profit' : '▼ Net Loss'}
+              {portfolioStats.totalInvested <= 0 ? 'No holdings yet' : portfolioStats.netGain === 0 ? '● Break-even' : portfolioStats.isPositive ? '▲ In Profit' : '▼ Net Loss'}
             </Text>
           </View>
         </View>

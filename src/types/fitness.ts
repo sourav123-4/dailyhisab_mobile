@@ -146,10 +146,14 @@ export interface UserProfile {
   lastWorkoutDate?: string;
   restTimerSeconds: number;
   geminiApiKey?: string;
+  /** True once the person has entered their own details; until then TitanFit shows onboarding. */
+  onboarded?: boolean;
   /** Workout setup chosen in the plan builder. */
   trainingLocation?: TrainingLocation;
   gear?: GearId[];
   trainingDaysPerWeek?: number;
+  /** Weekdays the person trains (0 = Sunday); the others are rest days. */
+  trainingDayIndexes?: number[];
 }
 
 export interface AIChatMessage {

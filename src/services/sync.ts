@@ -1,4 +1,4 @@
-import { collection, deleteDoc, disableNetwork, doc, enableNetwork, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, disableNetwork, doc, enableNetwork, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 export type CloudCollection =
@@ -145,6 +145,24 @@ export async function saveToCloud(name: CloudCollection, id: string, data: Recor
       return false;
     }
     throw error;
+  }
+}
+
+/**
+ * One-off read of a single document. Returns its data, null when it does not exist, and
+ * undefined when the cloud could not be reached (so callers never mistake "offline" for "empty").
+ */
+export async function readFromCloud(name: CloudCollection, id: string): Promise<Record<string, any> | null | undefined> {
+  if (!canUseCloudSync() || !db) return undefined;
+  const targetRef = docRef(name, id);
+  if (!targetRef) return undefined;
+  try {
+    const snapshot = await getDoc(targetRef);
+    return snapshot.exists() ? (snapshot.data() as Record<string, any>) : null;
+  } catch (error) {
+    if (isQuotaError(error)) markQuotaBlocked();
+    else if (isBackendConnectionError(error)) markBackendBlocked();
+    return undefined;
   }
 }
 

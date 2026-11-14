@@ -182,9 +182,38 @@ function buildDay(template: Template, variant: number, gear: GearId[], goal: Wei
   return { title, muscles: template.muscles, exercises };
 }
 
-export function buildWeeklyPlan(opts: { gear: GearId[]; days: number; goal: WeightGoal; experience: Difficulty; location?: TrainingLocation }): WeeklyPlan {
-  const days = Math.min(6, Math.max(2, Math.round(opts.days)));
-  const layout = WEEKS[days];
+/** Monday-first order, so a week reads Mon → Sun (dayIndex 0 = Sunday). */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** The usual training days for a number of days a week (Mon/Wed/Fri for 3, and so on). */
+export function defaultTrainingDays(count: number): number[] {
+  const days = Math.min(6, Math.max(2, Math.round(count)));
+  return WEEKS[days].map((slot, dayIndex) => (slot ? dayIndex : -1)).filter(i => i >= 0);
+}
+
+/**
+ * `trainingDays` (dayIndex values, 0 = Sunday) are the days the person chose to train; every
+ * other day is a rest day. Without it, the usual days for `days` a week are used.
+ */
+export function buildWeeklyPlan(opts: {
+  gear: GearId[];
+  days: number;
+  goal: WeightGoal;
+  experience: Difficulty;
+  location?: TrainingLocation;
+  trainingDays?: number[];
+}): WeeklyPlan {
+  const chosen = opts.trainingDays && opts.trainingDays.length >= 2 ? [...new Set(opts.trainingDays)] : null;
+  const days = Math.min(6, Math.max(2, chosen ? chosen.length : Math.round(opts.days)));
+  // The split's workouts in order (e.g. Upper, Lower, Upper B, Lower B), placed onto the chosen days.
+  const sessions = WEEKS[days].filter((slot): slot is [string, number] => slot !== null);
+  const trainingDays = (chosen || defaultTrainingDays(days))
+    .slice(0, days)
+    .sort((a, b) => WEEK_ORDER.indexOf(a) - WEEK_ORDER.indexOf(b));
+  const layout: ([string, number] | null)[] = Array(7).fill(null);
+  trainingDays.forEach((dayIndex, i) => {
+    layout[dayIndex] = sessions[i];
+  });
   const planDays = layout.map(slot => (slot ? buildDay(T[slot[0]], slot[1], opts.gear, opts.goal, opts.experience) : null));
 
   const notes: string[] = [];

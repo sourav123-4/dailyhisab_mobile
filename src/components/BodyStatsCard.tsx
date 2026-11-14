@@ -6,10 +6,10 @@ import { AppIcon } from './AppIcon';
 import { BodyProfileModal } from './BodyProfileModal';
 
 const GOAL_LABEL: Record<string, string> = {
-  weight_gain: 'Build muscle',
-  muscle_gain: 'Build muscle',
+  weight_gain: 'Gain weight & muscle',
+  muscle_gain: 'Build muscle, stay lean',
   weight_loss: 'Lose fat',
-  maintenance: 'Stay fit',
+  maintenance: 'Stay fit & strong',
 };
 
 /** Current weight, target, height and age at a glance, with an Edit button that opens the editor. */

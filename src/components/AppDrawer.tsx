@@ -25,6 +25,7 @@ type NavItem = { tab: string; label: string; hint: string; icon: IconName; tint:
 const MAIN_ITEMS: NavItem[] = [
   { tab: 'dashboard', label: 'Dashboard', hint: 'Balance & insights', icon: 'home', tint: '#8b5cf6' },
   { tab: 'hisab', label: 'Daily Hisab', hint: 'All transactions', icon: 'hisab', tint: '#0ea5e9' },
+  { tab: 'notifications', label: 'Notifications', hint: 'EMI and Udhar reminders', icon: 'bell', tint: '#f59e0b' },
 ];
 
 const MONEY_ITEMS: NavItem[] = [

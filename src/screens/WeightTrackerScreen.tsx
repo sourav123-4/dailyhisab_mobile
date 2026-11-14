@@ -119,10 +119,10 @@ export const WeightTrackerScreen = () => {
   };
 
   const goalsList: { id: WeightGoal; label: string; emoji: string }[] = [
-    { id: 'weight_loss', label: 'Fat Loss (Cut)', emoji: '🔥' },
-    { id: 'weight_gain', label: 'Muscle Gain (Bulk)', emoji: '💪' },
-    { id: 'muscle_gain', label: 'Lean Mass (Recomp)', emoji: '⚡' },
-    { id: 'maintenance', label: 'Maintain & Strength', emoji: '⚖️' },
+    { id: 'weight_loss', label: 'Lose fat', emoji: '🔥' },
+    { id: 'weight_gain', label: 'Gain weight', emoji: '💪' },
+    { id: 'muscle_gain', label: 'Lean muscle', emoji: '⚡' },
+    { id: 'maintenance', label: 'Stay fit', emoji: '⚖️' },
   ];
 
   const waterPercent = Math.min(
@@ -187,7 +187,7 @@ export const WeightTrackerScreen = () => {
       >
         {/* Goal Mode Switcher Pills */}
         <View style={styles.goalSection}>
-          <Text style={[styles.sectionLabel, { color: theme.muted }]}>ACTIVE FITNESS GOAL:</Text>
+          <Text style={[styles.sectionLabel, { color: theme.muted }]}>YOUR GOAL</Text>
           <View style={styles.goalsRow}>
             {goalsList.map((g) => {
               const isSelected = profile.fitnessGoal === g.id;
@@ -234,23 +234,25 @@ export const WeightTrackerScreen = () => {
         {/* Quick Body Stats & Metrics */}
         <View style={styles.metricsGrid}>
           <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.metricLabel, { color: theme.muted }]}>CURRENT BMI</Text>
+            <Text style={[styles.metricLabel, { color: theme.muted }]}>BMI</Text>
             <Text style={[styles.metricValue, { color: theme.accent }]}>{bmi}</Text>
             <Text style={[styles.metricSub, { color: theme.subtle }]}>
-              {parseFloat(bmi) < 18.5 ? 'Underweight' : parseFloat(bmi) < 25 ? 'Normal Fit' : 'Overweight'}
+              {parseFloat(bmi) < 18.5 ? 'Underweight' : parseFloat(bmi) < 25 ? 'Healthy range' : 'Overweight'}
             </Text>
           </View>
 
           <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.metricLabel, { color: theme.muted }]}>DAILY TARGET</Text>
+            <Text style={[styles.metricLabel, { color: theme.muted }]}>CALORIES</Text>
             <Text style={[styles.metricValue, { color: theme.primary }]}>{profile.targetCalories}</Text>
             <Text style={[styles.metricSub, { color: theme.subtle }]}>kcal / day</Text>
           </View>
 
           <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
-            <Text style={[styles.metricLabel, { color: theme.muted }]}>DAILY PROTEIN</Text>
+            <Text style={[styles.metricLabel, { color: theme.muted }]}>PROTEIN</Text>
             <Text style={[styles.metricValue, { color: theme.success }]}>{profile.targetProteinGrams}g</Text>
-            <Text style={[styles.metricSub, { color: theme.subtle }]}>2.2g / kg mass</Text>
+            <Text style={[styles.metricSub, { color: theme.subtle }]}>
+              {profile.currentWeightKg > 0 ? `${(profile.targetProteinGrams / profile.currentWeightKg).toFixed(1)} g per kg` : 'per day'}
+            </Text>
           </View>
         </View>
 
@@ -262,7 +264,7 @@ export const WeightTrackerScreen = () => {
         >
           <View style={{ flex: 1 }}>
             <Text style={[styles.macroBannerTitle, { color: theme.text }]}>
-              📊 Macro & Calorie Calculator
+              📊 Calories & macros
             </Text>
             <Text style={[styles.macroBannerSub, { color: theme.muted }]}>
               Protein: {profile.targetProteinGrams}g • Carbs: {profile.targetCarbsGrams}g • Fats: {profile.targetFatsGrams}g
@@ -277,10 +279,10 @@ export const WeightTrackerScreen = () => {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontSize: 16 }}>🍽️</Text>
-                <Text style={[styles.foodCardTitle, { color: theme.text }]}>What I Eat & Nutrition</Text>
+                <Text style={[styles.foodCardTitle, { color: theme.text }]}>Today's food</Text>
               </View>
               <Text style={[styles.foodCardSubtitle, { color: theme.muted }]}>
-                AI vision & meal macro tracking for daily hypertrophy
+                Log meals by photo or by name to count calories and protein
               </Text>
             </View>
 
@@ -297,7 +299,7 @@ export const WeightTrackerScreen = () => {
           <View style={[styles.calorieProgressBox, { backgroundColor: theme.surfaceAlt }]}>
             <View style={styles.calorieProgressTop}>
               <Text style={[styles.calorieProgressLabel, { color: theme.text }]}>
-                🔥 Consumed Calories Today
+                🔥 Calories today
               </Text>
               <Text style={[styles.calorieProgressValues, { color: theme.primary }]}>
                 {totalConsumedCalories} <Text style={{ color: theme.muted, fontSize: 12 }}>/ {profile.targetCalories} kcal ({caloriePercent}%)</Text>
@@ -348,7 +350,7 @@ export const WeightTrackerScreen = () => {
 
           {/* Meals List Header */}
           <View style={styles.mealListHeader}>
-            <Text style={[styles.mealListTitle, { color: theme.muted }]}>TODAY'S LOGGED MEALS ({mealsToday.length})</Text>
+            <Text style={[styles.mealListTitle, { color: theme.muted }]}>MEALS TODAY · {mealsToday.length}</Text>
           </View>
 
           {/* Meals items */}
@@ -359,9 +361,9 @@ export const WeightTrackerScreen = () => {
               activeOpacity={0.7}
             >
               <Text style={{ fontSize: 28, marginBottom: 6 }}>🥗</Text>
-              <Text style={[styles.emptyMealTitle, { color: theme.text }]}>No Meals Logged Today Yet</Text>
+              <Text style={[styles.emptyMealTitle, { color: theme.text }]}>No meals logged yet today</Text>
               <Text style={[styles.emptyMealSub, { color: theme.muted }]}>
-                Tap here or "+ Log Meal / Scan" to calculate calories, protein & carbs from meal photos or food name!
+                Tap here to log a meal from a photo or by typing what you ate.
               </Text>
             </TouchableOpacity>
           ) : (
@@ -435,7 +437,7 @@ export const WeightTrackerScreen = () => {
         <View style={[styles.waterCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           <View style={styles.waterHeader}>
             <View>
-              <Text style={[styles.waterTitle, { color: theme.text }]}>💧 Daily Hydration</Text>
+              <Text style={[styles.waterTitle, { color: theme.text }]}>💧 Water</Text>
               <Text style={[styles.waterSub, { color: theme.muted }]}>
                 {profile.todayWaterMl} / {profile.dailyWaterTargetMl} ml ({waterPercent}%)
               </Text>
@@ -469,8 +471,8 @@ export const WeightTrackerScreen = () => {
         <View style={[styles.measureCard, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}>
           <View style={styles.measureHeader}>
             <View>
-              <Text style={[styles.measureTitle, { color: theme.text }]}>📏 Muscle Circumference</Text>
-              <Text style={[styles.measureSub, { color: theme.muted }]}>Track arm, chest, and waist growth</Text>
+              <Text style={[styles.measureTitle, { color: theme.text }]}>📏 Body measurements</Text>
+              <Text style={[styles.measureSub, { color: theme.muted }]}>Track arms, chest and waist over time</Text>
             </View>
             <TouchableOpacity
               style={[styles.measureEditBtn, { backgroundColor: theme.surfaceAlt }]}
@@ -520,7 +522,9 @@ export const WeightTrackerScreen = () => {
             style={[styles.historyRow, { backgroundColor: theme.surface, borderColor: theme.borderSoft }]}
           >
             <View>
-              <Text style={[styles.historyDate, { color: theme.text }]}>{entry.date}</Text>
+              <Text style={[styles.historyDate, { color: theme.text }]}>
+                {new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+              </Text>
               <Text style={[styles.historyNotes, { color: theme.muted }]}>{entry.notes}</Text>
             </View>
             <Text style={[styles.historyWeight, { color: theme.primary }]}>

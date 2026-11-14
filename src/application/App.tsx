@@ -75,9 +75,9 @@ const ThemedAppContainer = () => {
 // TitanFit data follows the signed-in account; the provider is memoized, so Hisab updates
 // that keep the same owner don't re-render it.
 const FitnessForCurrentAccount = ({ children }: { children: React.ReactNode }) => {
-  const { dataOwner, loaded } = useHisabApp();
+  const { dataOwner, loaded, cloudOwnerReady, localOnly } = useHisabApp();
   return (
-    <FitnessAppProvider owner={dataOwner} ready={loaded}>
+    <FitnessAppProvider owner={dataOwner} ready={loaded} cloudReady={cloudOwnerReady && !localOnly}>
       {children}
     </FitnessAppProvider>
   );
