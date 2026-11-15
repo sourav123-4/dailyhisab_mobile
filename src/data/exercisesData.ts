@@ -17,14 +17,14 @@ export const MUSCLE_ANATOMY_IMAGES: Record<MuscleGroup, any> = {
 };
 
 export const EXERCISE_3D_VIDEOS: Record<string, any> = {
-  abs_hanging_leg_raise: require('../../assets/exercise_crunch_3d.jpg'),
-  abs_plank: require('../../assets/exercise_crunch_3d.jpg'),
-  chest_barbell_bench_press: require('../../assets/exercise_bench_3d.jpg'),
-  chest_incline_dumbbell_press: require('../../assets/exercise_bench_3d.jpg'),
-  chest_cable_crossover: require('../../assets/exercise_bench_3d.jpg'),
+  abs_hanging_leg_raise: require('../../assets/muscle_abs.jpg'),
+  abs_plank: require('../../assets/muscle_abs.jpg'),
+  chest_barbell_bench_press: require('../../assets/muscle_chest.jpg'),
+  chest_incline_dumbbell_press: require('../../assets/muscle_chest.jpg'),
+  chest_cable_crossover: require('../../assets/muscle_chest.jpg'),
   chest_push_up: require('../../assets/exercise_pushup_phase1_top.jpg'),
-  shoulders_dumbbell_lateral_raise: require('../../assets/exercise_shoulder_3d.jpg'),
-  legs_leg_press: require('../../assets/exercise_squat_3d.jpg'),
+  shoulders_dumbbell_lateral_raise: require('../../assets/muscle_shoulders.jpg'),
+  legs_leg_press: require('../../assets/muscle_legs.jpg'),
 };
 
 export const ALL_MUSCLE_PARTS_BREAKDOWN: Record<

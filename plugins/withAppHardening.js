@@ -6,7 +6,8 @@ const { withAppBuildGradle, withGradleProperties, withMainActivity } = require('
  *    (never the public debug key) and fail loudly if that file is missing;
  *  - R8 shrinks and renames the Java/Kotlin code;
  *  - release builds block screenshots, screen recording and the recent-apps preview (FLAG_SECURE);
- *  - a release build closes itself if it has been re-signed with someone else's key.
+ *  - a release build closes itself if it has been re-signed with someone else's key;
+ *  - only ARM native libraries are packaged by default (smaller APK).
  */
 
 const MARK = '@wellth-hardening';
@@ -111,6 +112,9 @@ module.exports = function withAppHardening(config) {
     };
     set('android.enableMinifyInReleaseBuilds', 'true');
     set('android.enableShrinkResourcesInReleaseBuilds', 'true');
+    // Phones are ARM only. The x86 libraries (Intel emulators) added about 50 MB to the APK;
+    // pass -PreactNativeArchitectures=x86_64 on the command line when one is needed.
+    set('reactNativeArchitectures', 'armeabi-v7a,arm64-v8a');
     return mod;
   });
   config = withAppBuildGradle(config, mod => {

@@ -62,7 +62,7 @@ export const OnboardingScreen = ({ onComplete }: { onComplete?: () => void }) =>
       {step === 0 && (
         <View style={styles.splashStep}>
           <Image
-            source={require('../../assets/splash.png')}
+            source={require('../../assets/onboarding_hero.jpg')}
             style={styles.splashImage}
             resizeMode="cover"
           />
