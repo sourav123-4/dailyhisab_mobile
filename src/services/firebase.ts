@@ -143,15 +143,28 @@ export function cleanAuthError(err: any): string {
     return 'This account has been disabled.';
   }
 
+  // The API key in this build is refused by Google (wrong restriction on the key in Google Cloud).
+  if (code.includes('are-blocked') || message.includes('are-blocked') || code.includes('api-key')) {
+    return 'This version of the app can no longer sign in (its Firebase key is blocked). Install the latest version of the app.';
+  }
+  if (code.includes('app-check') || message.includes('app-check')) {
+    return 'Sign-in was refused by Firebase App Check. Install the latest version of the app.';
+  }
+  // Google Sign-In native errors: 10 / DEVELOPER_ERROR means this build's signing key is not registered in Firebase.
+  if (code === '10' || message.includes('DEVELOPER_ERROR')) {
+    return "Google sign-in is not set up for this build's signing key. Add its SHA-1 in Firebase, or sign in with email.";
+  }
+
   const cleaned = message
     .replace(/FirebaseError:\s*/gi, '')
     .replace(/Firebase:\s*/gi, '')
     .replace(/\s*\(auth\/.*\)\.?$/gi, '')
     .trim();
 
-  return cleaned.length > 2 && cleaned.toLowerCase() !== 'error'
-    ? cleaned
-    : 'Authentication failed. Check your email and password or use Offline mode.';
+  if (cleaned.length > 2 && cleaned.toLowerCase() !== 'error') return cleaned;
+  // Unknown failure: include the code so the cause can be identified instead of guessed.
+  const shortCode = code.replace(/^auth\//, '').slice(0, 80);
+  return `Sign-in failed${shortCode ? ` (${shortCode})` : ''}. Try again, or use Offline mode.`;
 }
 
 export function onAuthChange(callback: (user: User | null) => void) {

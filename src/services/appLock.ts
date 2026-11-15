@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteSecret, getSecret, setSecret } from './secureStorage';
 import { CryptoDigestAlgorithm, digestStringAsync, getRandomBytes } from 'expo-crypto';
 import type { HisabState } from '../types';
 
@@ -52,7 +52,7 @@ type AttemptState = { failures: number; lockedUntil: number };
 
 async function readAttempts(): Promise<AttemptState> {
   try {
-    const raw = await AsyncStorage.getItem(ATTEMPTS_KEY);
+    const raw = await getSecret(ATTEMPTS_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     return { failures: Number(parsed?.failures) || 0, lockedUntil: Number(parsed?.lockedUntil) || 0 };
   } catch {
@@ -72,12 +72,12 @@ export async function recordPinFailure(): Promise<number> {
   const failures = current.failures + 1;
   const over = failures - FREE_ATTEMPTS;
   const lockoutMs = over >= 0 ? Math.min(MAX_LOCKOUT_MS, BASE_LOCKOUT_MS * 2 ** over) : 0;
-  await AsyncStorage.setItem(ATTEMPTS_KEY, JSON.stringify({ failures, lockedUntil: lockoutMs ? Date.now() + lockoutMs : 0 })).catch(() => undefined);
+  await setSecret(ATTEMPTS_KEY, JSON.stringify({ failures, lockedUntil: lockoutMs ? Date.now() + lockoutMs : 0 })).catch(() => false);
   return lockoutMs;
 }
 
 export async function resetPinFailures(): Promise<void> {
-  await AsyncStorage.removeItem(ATTEMPTS_KEY).catch(() => undefined);
+  await deleteSecret(ATTEMPTS_KEY);
 }
 
 export function attemptsLeftMessage(failures: number): string {

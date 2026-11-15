@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteSecret, getSecret, setSecret } from './secureStorage';
 import { AIChatMessage, UserProfile } from '../types/fitness';
 import { ACTIVE_ENV } from '../config/active-env';
 import { geminiGenerateContent, isAiProxyAvailable } from './aiProxy';
@@ -20,7 +20,7 @@ export interface FoodNutritionAnalysis {
  */
 export async function getActiveGeminiApiKey(): Promise<string> {
   try {
-    const customKey = await AsyncStorage.getItem(GEMINI_KEY_STORAGE);
+    const customKey = await getSecret(GEMINI_KEY_STORAGE);
     if (customKey && customKey.trim().length > 5) {
       return customKey.trim();
     }
@@ -40,14 +40,14 @@ export async function isGeminiConfigured(): Promise<boolean> {
  * Save user custom Gemini API key into local device storage
  */
 export async function saveGeminiApiKey(key: string): Promise<void> {
-  await AsyncStorage.setItem(GEMINI_KEY_STORAGE, key.trim());
+  if (!(await setSecret(GEMINI_KEY_STORAGE, key.trim()))) throw new Error('Could not save the key securely on this device.');
 }
 
 /**
  * Remove stored Gemini API key
  */
 export async function clearGeminiApiKey(): Promise<void> {
-  await AsyncStorage.removeItem(GEMINI_KEY_STORAGE);
+  await deleteSecret(GEMINI_KEY_STORAGE);
 }
 
 /**

@@ -47,3 +47,7 @@ yarn-error.*
 scratch/
 *.apk
 
+
+# release signing key and its password (never commit)
+credentials/
+*.keystore

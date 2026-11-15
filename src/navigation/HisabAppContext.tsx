@@ -81,6 +81,7 @@ import { isLoanActive } from '../utils/loans';
 import { localDateISO, localMonthISO } from '../utils/date';
 import { groqChatViaProxy, transcribeAudioFile, isAiProxyAvailable } from '../services/aiProxy';
 import { normalizeAppLock, shouldRelockAfter } from '../services/appLock';
+import { loadStateSecrets, splitStateSecrets } from '../services/secureStorage';
 import { LOCAL_DATA_OWNER, scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
 
 const STORAGE_KEY = 'dailyhisab.mobile.state.v2';
@@ -871,7 +872,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
   const readOwnerState = useCallback(async (owner: string) => {
     const raw = await AsyncStorage.getItem(scopedStorageKey(STORAGE_KEY, owner));
-    const nextState = normalizeAppLock(removeDummyDataFromState(migrateState(raw ? JSON.parse(raw) : null)));
+    // The PIN hash and personal API key are kept in the device keystore, not in this plain record.
+    const secrets = await loadStateSecrets(owner);
+    const stored = raw ? { ...JSON.parse(raw), ...secrets } : Object.keys(secrets).length ? secrets : null;
+    const nextState = normalizeAppLock(removeDummyDataFromState(migrateState(stored)));
     if (deletedIdsRef.current.size > 0) {
       cloudArrayCollections.forEach(([, stateKey]) => {
         if (Array.isArray((nextState as any)[stateKey])) {
@@ -954,11 +958,21 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
 
   const asyncStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /** Saves an account's records, with its secrets split off into secure storage. */
+  const writeOwnerState = useCallback(async (owner: string, data: HisabState) => {
+    try {
+      const plain = await splitStateSecrets(owner, data);
+      await AsyncStorage.setItem(scopedStorageKey(STORAGE_KEY, owner), JSON.stringify(plain));
+    } catch {
+      // Storage is full or unavailable; the next change retries.
+    }
+  }, []);
+
   useEffect(() => {
     if (!loaded || !dataOwner) return;
     if (asyncStorageTimerRef.current) clearTimeout(asyncStorageTimerRef.current);
     asyncStorageTimerRef.current = setTimeout(() => {
-      AsyncStorage.setItem(scopedStorageKey(STORAGE_KEY, dataOwner), JSON.stringify(state)).catch(() => undefined);
+      writeOwnerState(dataOwner, state);
     }, 400);
 
     return () => {
@@ -973,7 +987,7 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
     dataOwnerRef.current = owner;
     const current = appStateSnapshotRef.current.state;
     if (previous) {
-      await AsyncStorage.setItem(scopedStorageKey(STORAGE_KEY, previous), JSON.stringify(current)).catch(() => undefined);
+      await writeOwnerState(previous, current);
     }
     const next = owner
       ? await readOwnerState(owner).catch(() => defaultState)

@@ -78,7 +78,9 @@
         }
       ],
       "./plugins/withUpiAppQueries",
-      "expo-video"
+      "./plugins/withAppHardening",
+      "expo-video",
+      "expo-secure-store"
     ]
   }
 }
