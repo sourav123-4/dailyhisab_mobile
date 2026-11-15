@@ -20,7 +20,8 @@ import { WeightTrendChart } from '../components/WeightTrendChart';
 import { MacroPlanModal } from '../components/MacroPlanModal';
 import { FoodScannerModal } from '../components/FoodScannerModal';
 import { BodyStatsCard } from '../components/BodyStatsCard';
-import { MealType, WeightGoal } from '../types/fitness';
+import { FoodMealLog, WeightGoal } from '../types/fitness';
+import { AppIcon } from '../components/AppIcon';
 import { useSheetBottomPadding } from '../components/useSheetBottomPadding';
 import { MuscleGainPlanModal } from '../components/MuscleGainPlanModal';
 import { dailyTargetsForGoal } from '../utils/musclePlan';
@@ -51,6 +52,7 @@ export const WeightTrackerScreen = () => {
   const [macroModalVisible, setMacroModalVisible] = useState(false);
   const [measureModalVisible, setMeasureModalVisible] = useState(false);
   const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const [mealToEdit, setMealToEdit] = useState<FoodMealLog | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -411,21 +413,35 @@ export const WeightTrackerScreen = () => {
                       </View>
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.deleteMealBtn}
-                      onPress={() => {
-                        Alert.alert(
-                          'Delete Meal',
-                          `Remove "${meal.name}" from today's log?`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteMeal(meal.id) },
-                          ]
-                        );
-                      }}
-                    >
-                      <Text style={{ color: theme.subtle, fontSize: 16 }}>🗑️</Text>
-                    </TouchableOpacity>
+                    <View style={styles.mealActions}>
+                      <TouchableOpacity
+                        style={styles.deleteMealBtn}
+                        onPress={() => {
+                          setMealToEdit(meal);
+                          setFoodModalVisible(true);
+                        }}
+                        accessibilityLabel={`Edit ${meal.name}`}
+                      >
+                        <AppIcon name="edit" size={15} color={theme.primary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.deleteMealBtn}
+                        accessibilityLabel={`Delete ${meal.name}`}
+                        onPress={() => {
+                          Alert.alert(
+                            'Delete Meal',
+                            `Remove "${meal.name}" from today's log?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Delete', style: 'destructive', onPress: () => deleteMeal(meal.id) },
+                            ]
+                          );
+                        }}
+                      >
+                        <AppIcon name="trash" size={15} color={theme.danger} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -649,7 +665,11 @@ export const WeightTrackerScreen = () => {
       {/* Food Scanner & Meal Logger Modal */}
       <FoodScannerModal
         visible={foodModalVisible}
-        onClose={() => setFoodModalVisible(false)}
+        editMeal={mealToEdit}
+        onClose={() => {
+          setFoodModalVisible(false);
+          setMealToEdit(null);
+        }}
       />
     </View>
   );
@@ -1228,6 +1248,10 @@ const styles = StyleSheet.create({
   macroPillText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  mealActions: {
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
   },
   deleteMealBtn: {
     padding: 8,

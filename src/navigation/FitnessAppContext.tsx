@@ -61,6 +61,7 @@ interface FitnessContextType {
   logMeasurement: (data: Omit<BodyMeasurement, 'id' | 'date'>) => Promise<void>;
   logWater: (amountMl: number) => Promise<void>;
   logMeal: (meal: Omit<FoodMealLog, 'id' | 'date'> & { date?: string }) => Promise<void>;
+  updateMeal: (mealId: string, changes: Partial<Omit<FoodMealLog, 'id'>>) => Promise<void>;
   deleteMeal: (mealId: string) => Promise<void>;
   updateSplitDay: (dayIndex: number, updatedDay: Partial<WorkoutSplitDay>) => Promise<void>;
   replaceWeeklySplit: (split: WorkoutSplitDay[]) => Promise<void>;
@@ -740,6 +741,12 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
     await persist('MEALS', nextList);
   };
 
+  const updateMeal = async (mealId: string, changes: Partial<Omit<FoodMealLog, 'id'>>) => {
+    const nextList = meals.map((m) => (m.id === mealId ? { ...m, ...changes } : m));
+    setMeals(nextList);
+    await persist('MEALS', nextList);
+  };
+
   const deleteMeal = async (mealId: string) => {
     const nextList = meals.filter((m) => m.id !== mealId);
     setMeals(nextList);
@@ -851,6 +858,7 @@ export const FitnessAppProvider = React.memo(function FitnessAppProvider({
         logMeasurement,
         logWater,
         logMeal,
+        updateMeal,
         deleteMeal,
         updateSplitDay,
         replaceWeeklySplit,

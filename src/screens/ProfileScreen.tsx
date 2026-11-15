@@ -20,6 +20,44 @@ const GOAL_LABEL: Record<string, string> = {
 
 const formatVolume = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)} kg`);
 
+function Toggle({ on, disabled, onPress, label }: { on: boolean; disabled?: boolean; onPress: () => void; label: string }) {
+  const theme = useAppTheme();
+  return (
+  <TouchableOpacity
+    activeOpacity={0.8}
+    onPress={onPress}
+    disabled={disabled}
+    accessibilityRole="switch"
+    accessibilityState={{ checked: on, disabled }}
+    accessibilityLabel={label}
+    style={[styles.toggle, { backgroundColor: on ? theme.primary : theme.surfaceAlt, borderColor: on ? theme.primary : theme.border, opacity: disabled ? 0.5 : 1 }]}
+  >
+    <View style={[styles.toggleThumb, { transform: [{ translateX: on ? 18 : 0 }] }]} />
+  </TouchableOpacity>
+  );
+}
+
+function Row({ icon, title, sub, right, onPress, last, tint }: { icon: IconName; title: string; sub?: string; right?: React.ReactNode; onPress?: () => void; last?: boolean; tint?: string }) {
+  const theme = useAppTheme();
+  return (
+  <TouchableOpacity
+    activeOpacity={onPress ? 0.7 : 1}
+    disabled={!onPress}
+    onPress={onPress}
+    style={[styles.row, !last && { borderBottomWidth: 1, borderBottomColor: theme.borderSoft }]}
+  >
+    <View style={[styles.rowIcon, { backgroundColor: `${tint || theme.primary}1f` }]}>
+      <AppIcon name={icon} size={16} color={tint || theme.primary} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.rowTitle, { color: tint && tint === theme.danger ? theme.danger : theme.text }]}>{title}</Text>
+      {sub ? <Text style={[styles.rowSub, { color: theme.muted }]}>{sub}</Text> : null}
+    </View>
+    {right ?? (onPress ? <AppIcon name="chevron-right" size={13} color={theme.subtle} /> : null)}
+  </TouchableOpacity>
+  );
+}
+
 export const ProfileScreen = () => {
   const theme = useAppTheme();
   const { setAppMode } = useAppMode();
@@ -69,38 +107,6 @@ export const ProfileScreen = () => {
   };
 
   const card = [styles.card, { backgroundColor: theme.surface, borderColor: theme.borderSoft }];
-
-  const Toggle = ({ on, disabled, onPress, label }: { on: boolean; disabled?: boolean; onPress: () => void; label: string }) => (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: on, disabled }}
-      accessibilityLabel={label}
-      style={[styles.toggle, { backgroundColor: on ? theme.primary : theme.surfaceAlt, borderColor: on ? theme.primary : theme.border, opacity: disabled ? 0.5 : 1 }]}
-    >
-      <View style={[styles.toggleThumb, { transform: [{ translateX: on ? 18 : 0 }] }]} />
-    </TouchableOpacity>
-  );
-
-  const Row = ({ icon, title, sub, right, onPress, last, tint }: { icon: IconName; title: string; sub?: string; right?: React.ReactNode; onPress?: () => void; last?: boolean; tint?: string }) => (
-    <TouchableOpacity
-      activeOpacity={onPress ? 0.7 : 1}
-      disabled={!onPress}
-      onPress={onPress}
-      style={[styles.row, !last && { borderBottomWidth: 1, borderBottomColor: theme.borderSoft }]}
-    >
-      <View style={[styles.rowIcon, { backgroundColor: `${tint || theme.primary}1f` }]}>
-        <AppIcon name={icon} size={16} color={tint || theme.primary} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.rowTitle, { color: tint && tint === theme.danger ? theme.danger : theme.text }]}>{title}</Text>
-        {sub ? <Text style={[styles.rowSub, { color: theme.muted }]}>{sub}</Text> : null}
-      </View>
-      {right ?? (onPress ? <AppIcon name="chevron-right" size={13} color={theme.subtle} /> : null)}
-    </TouchableOpacity>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>

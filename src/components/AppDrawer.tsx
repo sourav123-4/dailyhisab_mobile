@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
   Image,
@@ -11,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModuleItem, Tab } from '../types';
 import { useAppTheme } from '../theme/appTheme';
@@ -107,6 +109,16 @@ export const AppDrawer = React.memo(function AppDrawer({
     return () => animation.stop();
   }, [isOpen, progress]);
 
+  // Android back closes the drawer instead of leaving the screen behind it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isOpen, onClose]);
+
   if (!mounted) return null;
 
   const drawerTranslateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-DRAWER_WIDTH, 0] });
@@ -151,8 +163,28 @@ export const AppDrawer = React.memo(function AppDrawer({
     );
   };
 
+  const renderQuick = (quick: { icon: IconName; title: string; hint: string; color: string; soft: string; onPress: () => void }) => (
+    <TouchableOpacity
+      key={quick.title}
+      style={[styles.quickCard, { backgroundColor: quick.soft }]}
+      activeOpacity={0.8}
+      onPress={() => {
+        onClose();
+        quick.onPress();
+      }}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: quick.color }]}>
+        <AppIcon name={quick.icon} size={16} color="#ffffff" />
+      </View>
+      <Text style={[styles.quickTitle, { color: theme.text }]} numberOfLines={1}>{quick.title}</Text>
+      <Text style={[styles.quickHint, { color: theme.muted }]} numberOfLines={1}>{quick.hint}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.drawerLayer} pointerEvents={isOpen ? 'auto' : 'none'}>
+      {/* The header under the status bar is dark in every theme, so the clock and icons go light while open. */}
+      {isOpen ? <StatusBar style="light" animated /> : null}
       <Animated.View style={[styles.drawerScrim, { opacity: progress }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close navigation drawer" />
       </Animated.View>
@@ -170,7 +202,7 @@ export const AppDrawer = React.memo(function AppDrawer({
       >
         {/* Header: brand + account */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top + 12, 40) }]}>
-          <View style={styles.headerGlow} />
+          <View style={[styles.headerGlow, { backgroundColor: theme.primary }]} />
           <View style={styles.brandRow}>
             <View style={styles.logoBox}>
               <Image source={require('../../assets/app_logo.png')} style={styles.logoImage} resizeMode="cover" />
@@ -193,7 +225,7 @@ export const AppDrawer = React.memo(function AppDrawer({
               else onOpenAuth();
             }}
           >
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
               <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
             </View>
             <View style={{ flex: 1 }}>
@@ -209,71 +241,57 @@ export const AppDrawer = React.memo(function AppDrawer({
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {/* Quick actions */}
+          <View style={styles.quickRow}>
+            {fitness ? (
+              <>
+                {renderQuick({
+                  icon: 'play',
+                  title: fitness.workoutInProgress ? 'Resume workout' : 'Start workout',
+                  hint: "Today's plan",
+                  color: theme.primary,
+                  soft: theme.primarySoft,
+                  onPress: fitness.onStartWorkout,
+                })}
+                {renderQuick({
+                  icon: 'hisab',
+                  title: 'Daily Hisab',
+                  hint: 'Money & UPI',
+                  color: theme.accent,
+                  soft: theme.accentSoft,
+                  onPress: () => setAppMode('hisab'),
+                })}
+              </>
+            ) : (
+              <>
+                {onOpenPhonePe
+                  ? renderQuick({
+                      icon: 'scan',
+                      title: 'Pay via UPI',
+                      hint: 'PhonePe, GPay…',
+                      color: theme.primary,
+                      soft: theme.primarySoft,
+                      onPress: onOpenPhonePe,
+                    })
+                  : null}
+                {renderQuick({
+                  icon: 'dumbbell',
+                  title: 'TitanFit',
+                  hint: 'Workouts & diet',
+                  color: theme.accent,
+                  soft: theme.accentSoft,
+                  onPress: () => setAppMode('fitness'),
+                })}
+              </>
+            )}
+          </View>
+
           {fitness ? (
             <>
-              <View style={styles.quickRow}>
-                <TouchableOpacity
-                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#24123f' : '#f3e8ff', borderColor: theme.dark ? '#4c1d95' : '#ddd6fe' }]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    onClose();
-                    fitness.onStartWorkout();
-                  }}
-                >
-                  <Text style={styles.quickEmoji}>💪</Text>
-                  <Text style={[styles.quickTitle, { color: theme.dark ? '#d8b4fe' : '#5b21b6' }]}>
-                    {fitness.workoutInProgress ? 'Resume workout' : 'Start workout'}
-                  </Text>
-                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Today's plan</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#0f2a24' : '#ccfbf1', borderColor: theme.dark ? '#115e59' : '#99f6e4' }]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    onClose();
-                    setAppMode('hisab');
-                  }}
-                >
-                  <Text style={styles.quickEmoji}>💰</Text>
-                  <Text style={[styles.quickTitle, { color: theme.dark ? '#5eead4' : '#0f766e' }]}>Daily Hisab</Text>
-                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Money & UPI</Text>
-                </TouchableOpacity>
-              </View>
-
               <Text style={[styles.sectionTitle, { color: theme.subtle }]}>TRAINING</Text>
               {FITNESS_ITEMS.map(renderItem)}
             </>
           ) : (
             <>
-              <View style={styles.quickRow}>
-                {onOpenPhonePe ? (
-                  <TouchableOpacity
-                    style={[styles.quickCard, { backgroundColor: theme.dark ? '#24123f' : '#f3e8ff', borderColor: theme.dark ? '#4c1d95' : '#ddd6fe' }]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      onClose();
-                      onOpenPhonePe();
-                    }}
-                  >
-                    <Text style={styles.quickEmoji}>💸</Text>
-                    <Text style={[styles.quickTitle, { color: theme.dark ? '#d8b4fe' : '#5b21b6' }]}>Pay via UPI</Text>
-                    <Text style={[styles.quickHint, { color: theme.subtle }]}>PhonePe, GPay…</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  style={[styles.quickCard, { backgroundColor: theme.dark ? '#2a0f16' : '#ffe4e6', borderColor: theme.dark ? '#7f1d1d' : '#fecdd3' }]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    onClose();
-                    setAppMode('fitness');
-                  }}
-                >
-                  <Text style={styles.quickEmoji}>⚡</Text>
-                  <Text style={[styles.quickTitle, { color: theme.dark ? '#5eead4' : '#0f766e' }]}>TitanFit</Text>
-                  <Text style={[styles.quickHint, { color: theme.subtle }]}>Workouts & diet</Text>
-                </TouchableOpacity>
-              </View>
-
               <Text style={[styles.sectionTitle, { color: theme.subtle }]}>OVERVIEW</Text>
               {MAIN_ITEMS.map(renderItem)}
 
@@ -370,10 +388,9 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: '#34d399',
-    opacity: 0.22,
-    top: -90,
-    right: -70,
+    opacity: 0.35,
+    top: -120,
+    right: -90,
   },
   brandRow: {
     flexDirection: 'row',
@@ -426,12 +443,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#d1fae5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#065f46',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -475,36 +491,38 @@ const styles = StyleSheet.create({
   },
   quickCard: {
     flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 18,
+    padding: 12,
   },
-  quickEmoji: {
-    fontSize: 20,
-    marginBottom: 6,
+  quickIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   quickTitle: {
     fontSize: 13.5,
     fontWeight: '800',
   },
   quickHint: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 1,
   },
   sectionTitle: {
     fontSize: 10.5,
     fontWeight: '800',
     letterSpacing: 1,
-    marginTop: 14,
-    marginBottom: 6,
+    marginTop: 12,
+    marginBottom: 4,
     paddingHorizontal: 8,
   },
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 8,
     borderRadius: 14,
     marginBottom: 2,
@@ -529,11 +547,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navLabel: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '700',
   },
   navHint: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 1,
   },
   footer: {

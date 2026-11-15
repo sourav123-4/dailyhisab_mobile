@@ -1,4 +1,4 @@
-import { FoodMealLog, MealType } from '../types/fitness';
+import { MealType } from '../types/fitness';
 import { getActiveGeminiApiKey } from './geminiAiService';
 import { geminiGenerateContent, isAiProxyAvailable } from './aiProxy';
 
@@ -393,5 +393,70 @@ export async function analyzeFoodFromText(inputQuery: string): Promise<FoodAnaly
   if (local) return local;
   throw new FoodScanUnavailableError(
     "Couldn't recognise that as food. Try simple names like \"2 roti, dal and curd\" or \"200 g chicken with rice\"."
+  );
+}
+
+const FOOD_CORRECTION_PROMPT =
+  'You are a sports nutritionist. An earlier estimate of a meal is given as JSON, followed by a correction the user typed ' +
+  '(for example a different dish, different amounts, or items to add or remove). Apply the correction to the estimate: keep ' +
+  'everything the user did not mention, change only what they did, and recalculate the totals. Reply with JSON ' +
+  '{"name": "<short meal name>", "portion": "<total portion>", "calories": <kcal>, "protein": <g>, "carbs": <g>, "fats": <g>, ' +
+  '"confidence": <0-100>, "detectedItems": ["<item with amount>", ...], "healthNote": "<one short sentence>"}. ' +
+  'Calories must roughly equal protein*4 + carbs*4 + fats*9. Numbers only, no ranges.';
+
+/**
+ * Re-works an existing estimate from a typed correction ("it was 3 rotis, no rice, add a bowl of dal").
+ * Uses the AI when available; without it the correction is read as a fresh description of the meal.
+ * The photo (imageUri) of the original estimate is kept.
+ */
+export async function refineFoodAnalysis(current: FoodAnalysisResult, correction: string): Promise<FoodAnalysisResult> {
+  const note = correction.trim().slice(0, 300);
+  if (!note) return current;
+  const apiKey = await getActiveGeminiApiKey();
+  if (apiKey || isAiProxyAvailable()) {
+    const estimate = {
+      name: current.name,
+      portion: current.portion,
+      calories: Math.round(current.calories),
+      protein: Math.round(current.protein),
+      carbs: Math.round(current.carbs),
+      fats: Math.round(current.fats),
+      detectedItems: current.detectedItems,
+    };
+    for (const model of VISION_MODELS) {
+      try {
+        const response = await geminiGenerateContent(model, {
+          contents: [{
+            parts: [{ text: `${FOOD_CORRECTION_PROMPT}\n\nEarlier estimate: ${JSON.stringify(estimate)}\n\nThe user's correction: ${JSON.stringify(note)}` }],
+          }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+        }, apiKey);
+        const rawText = response.ok ? response.data?.candidates?.[0]?.content?.parts?.[0]?.text : null;
+        if (!rawText) continue;
+        const parsed = JSON.parse(rawText);
+        const protein = Math.max(0, Math.round(Number(parsed.protein) || 0));
+        const carbs = Math.max(0, Math.round(Number(parsed.carbs) || 0));
+        const fats = Math.max(0, Math.round(Number(parsed.fats) || 0));
+        return {
+          name: String(parsed.name || current.name),
+          portion: String(parsed.portion || current.portion),
+          calories: Math.round(Number(parsed.calories) || protein * 4 + carbs * 4 + fats * 9),
+          protein,
+          carbs,
+          fats,
+          confidenceScore: Math.min(100, Math.max(0, Math.round(Number(parsed.confidence) || current.confidenceScore))),
+          detectedItems: Array.isArray(parsed.detectedItems) && parsed.detectedItems.length ? parsed.detectedItems.map(String) : current.detectedItems,
+          imageUri: current.imageUri,
+          healthNote: parsed.healthNote ? String(parsed.healthNote) : current.healthNote,
+        };
+      } catch {
+        // Try the next model.
+      }
+    }
+  }
+  const local = analyzeFoodFromName(note);
+  if (local) return { ...local, imageUri: current.imageUri };
+  throw new FoodScanUnavailableError(
+    "Couldn't apply that right now. Check your internet, or change the numbers yourself below."
   );
 }
