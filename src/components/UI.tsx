@@ -1,7 +1,9 @@
 import React from 'react';
 import {
+  Animated,
   Keyboard,
   KeyboardTypeOptions,
+  Pressable,
   ReturnKeyTypeOptions,
   ScrollView,
   StyleProp,
@@ -9,7 +11,6 @@ import {
   Text,
   TextInput,
   TextStyle,
-  TouchableOpacity,
   View,
   ViewStyle,
   useWindowDimensions,
@@ -39,6 +40,59 @@ export const categoryIconNames: Record<string, IconName> = {
   Income: 'income',
   Others: 'general',
 };
+
+/**
+ * Springy press-feedback used across every tappable primitive. Built on the RN Animated API
+ * (useNativeDriver) so it needs no extra native module and runs on the existing build.
+ */
+function usePressScale(to = 0.96) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const onPressIn = React.useCallback(() => {
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  }, [scale, to]);
+  const onPressOut = React.useCallback(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 28, bounciness: 7 }).start();
+  }, [scale]);
+  return { scale, onPressIn, onPressOut };
+}
+
+/** Pressable that scales down slightly while held. Drop-in replacement for TouchableOpacity. */
+export function AnimatedPressable({
+  children,
+  style,
+  onPress,
+  disabled,
+  accessibilityLabel,
+  hitSlop,
+  scaleTo = 0.96,
+  wrapperStyle,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+  hitSlop?: { top?: number; bottom?: number; left?: number; right?: number };
+  scaleTo?: number;
+  wrapperStyle?: StyleProp<ViewStyle>;
+}) {
+  const { scale, onPressIn, onPressOut } = usePressScale(scaleTo);
+  return (
+    <Animated.View style={[wrapperStyle, { transform: [{ scale }] }]}>
+      <Pressable
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        accessibilityLabel={accessibilityLabel}
+        hitSlop={hitSlop}
+        style={style}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export function Field({
   label,
@@ -143,12 +197,13 @@ export function Button({
   const textColor = tone === 'primary' ? theme.primaryText : tone === 'danger' ? theme.danger : tone === 'success' ? theme.success : theme.text;
 
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       disabled={disabled}
       onPress={onPress}
+      accessibilityLabel={label}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      wrapperStyle={styles.buttonWrap}
       style={[styles.button, tone !== 'primary' && styles.outlinedButton, toneStyle, disabled && styles.disabled]}
-      activeOpacity={0.78}
     >
       {icon ? (
         <View style={{ marginRight: 6 }}>
@@ -158,7 +213,7 @@ export function Button({
       <Text style={[styles.buttonText, { color: textColor }]} numberOfLines={2}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
@@ -183,13 +238,14 @@ export function Card({
             {subtitle ? <Text style={[styles.cardSub, { color: theme.muted }]}>{subtitle}</Text> : null}
           </View>
           {action ? (
-            <TouchableOpacity
+            <AnimatedPressable
               onPress={action.onPress}
+              accessibilityLabel={action.label}
+              scaleTo={0.93}
               style={[styles.cardActionPill, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
-              activeOpacity={0.75}
             >
               <Text style={[styles.cardActionText, { color: theme.primary }]}>{action.label}</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           ) : null}
         </View>
       ) : null}
@@ -201,16 +257,18 @@ export function Card({
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress: () => void }) {
   const theme = useAppTheme();
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       onPress={onPress}
-      activeOpacity={0.78}
+      accessibilityLabel={label}
+      scaleTo={0.94}
       style={[
         styles.chip,
+        active && styles.chipActive,
         { backgroundColor: active ? theme.primary : theme.surfaceAlt, borderColor: active ? theme.primary : theme.border },
       ]}
     >
       <Text style={[styles.chipText, { color: active ? theme.primaryText : theme.muted }]}>{label}</Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
@@ -418,23 +476,23 @@ export const Ledger = React.memo(function Ledger({
                 </Text>
                 <View style={styles.iconActions}>
                   {onEdit ? (
-                    <TouchableOpacity
-                      activeOpacity={0.78}
+                    <AnimatedPressable
+                      scaleTo={0.88}
                       accessibilityLabel={`Edit ${tx.title}`}
                       onPress={() => onEdit(tx)}
                       style={[styles.iconAction, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}
                     >
                       <AppIcon name="edit" size={14} color={theme.primary} />
-                    </TouchableOpacity>
+                    </AnimatedPressable>
                   ) : null}
-                  <TouchableOpacity
-                    activeOpacity={0.78}
+                  <AnimatedPressable
+                    scaleTo={0.88}
                     accessibilityLabel={`Delete ${tx.title}`}
                     onPress={() => onDelete(tx.id)}
                     style={[styles.iconAction, { backgroundColor: theme.dangerSoft, borderColor: theme.danger }]}
                   >
                     <AppIcon name="trash" size={14} color={theme.danger} />
-                  </TouchableOpacity>
+                  </AnimatedPressable>
                 </View>
               </View>
             </View>
@@ -505,19 +563,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  buttonWrap: { flex: 1, minWidth: 96 },
   outlinedButton: { borderWidth: 1 },
   disabled: { opacity: 0.5 },
   buttonText: { fontWeight: '900', fontSize: 13.5, lineHeight: 17, textAlign: 'center', letterSpacing: 0.2 },
   card: {
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 18,
+    padding: 15,
     marginTop: 10,
     borderWidth: 1,
     shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   cardTitle: { fontSize: 17, fontWeight: '900', lineHeight: 21, letterSpacing: 0 },
@@ -532,22 +591,34 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
   },
+  chipActive: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
   chipText: { fontWeight: '800', fontSize: 12.5, lineHeight: 16 },
   emptyContainer: { paddingVertical: 16, alignItems: 'center' },
   empty: { fontStyle: 'italic', fontSize: 13 },
   metric: {
     minHeight: 78,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 16,
+    padding: 13,
     borderWidth: 1,
     justifyContent: 'space-between',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   metricRegular: { flexBasis: '48%', flexGrow: 1 },
   metricCompact: { width: '100%' },
   metricHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metricIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   metricLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
-  metricValue: { fontSize: 17, lineHeight: 22, fontWeight: '900', marginTop: 6 },
+  metricValue: { fontSize: 18.5, lineHeight: 23, fontWeight: '900', marginTop: 6, letterSpacing: -0.3 },
   metricValueCompact: { fontSize: 16, lineHeight: 21 },
   miniStat: {
     flex: 1,
