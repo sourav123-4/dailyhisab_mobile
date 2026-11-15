@@ -25,7 +25,23 @@ import {
   saveGeminiApiKey,
   clearGeminiApiKey,
 } from '../services/geminiAiService';
-import { isAiProxyAvailable } from '../services/aiProxy';
+import { isAiProxyAvailable, transcribeAudioFile } from '../services/aiProxy';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import * as Speech from 'expo-speech';
+import { ACTIVE_ENV } from '../config/active-env';
+
+const COACH_STT_PROMPT = 'Fitness coach question: workout, sets, reps, bench press, squat, deadlift, protein, creatine, bulking, cutting, calories, macros, roti, dal, paneer, chicken, rest day';
+
+// Speech reads plain sentences; drop markdown symbols and emoji so they are not spoken.
+function toSpeakable(text: string) {
+  return text
+    .replace(/\*\*|\*|#+|`|_/g, '')
+    .replace(/^[ \t]*[-•][ \t]+/gm, '')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 3800);
+}
 
 function TypingBubble({ theme }: { theme: any }) {
   const dot1 = useRef(new Animated.Value(0)).current;
@@ -114,6 +130,120 @@ export const AICoachScreen = () => {
 
   const flatListRef = useRef<FlatList>(null);
 
+  // Voice: speak a question, the coach answers in text and reads the answer aloud.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 250);
+  const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isListening) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 650, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isListening, pulse]);
+
+  // Stop talking and recording when leaving the screen.
+  useEffect(() => () => {
+    Speech.stop();
+    try {
+      if (recorder.isRecording) recorder.stop();
+    } catch { }
+  }, [recorder]);
+
+  const stopSpeaking = () => {
+    Speech.stop();
+    setIsSpeaking(false);
+  };
+
+  const speakReply = (reply: string) => {
+    const text = toSpeakable(reply);
+    if (!text) return;
+    Speech.stop();
+    setIsSpeaking(true);
+    Speech.speak(text, {
+      language: 'en-IN',
+      rate: 1.0,
+      onDone: () => setIsSpeaking(false),
+      onStopped: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
+  };
+
+  const startListening = async () => {
+    if (isTyping || isTranscribing) return;
+    if (!isAiProxyAvailable()) {
+      Alert.alert('Sign in needed', 'Voice questions need you to be signed in and online. You can still type your question.');
+      return;
+    }
+    try {
+      stopSpeaking();
+      Keyboard.dismiss();
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Microphone needed', 'Allow microphone access in your phone settings to ask by voice.');
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setIsListening(true);
+    } catch (e: any) {
+      console.warn('Coach mic error:', e);
+      Alert.alert('Microphone error', 'Could not start the microphone. Please try again.');
+    }
+  };
+
+  const cancelListening = async () => {
+    setIsListening(false);
+    try {
+      await recorder.stop();
+    } catch { }
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+  };
+
+  const finishListening = async () => {
+    if (!isListening) return;
+    const heldMs = recorderState.durationMillis || 0;
+    setIsListening(false);
+    setIsTranscribing(true);
+    try {
+      // Android's recorder fails to stop if it ran for under ~0.7s.
+      if (heldMs < 700) await new Promise(r => setTimeout(r, 700 - heldMs));
+      await recorder.stop();
+      // Release the mic so the answer plays through the speaker at normal volume.
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+      const uri = recorder.uri;
+      if (!uri) throw new Error('No audio was recorded.');
+      const text = await transcribeAudioFile(uri, ACTIVE_ENV.GROQ_STT_MODEL || 'whisper-large-v3-turbo', COACH_STT_PROMPT);
+      if (!text) throw new Error('No speech detected');
+      setIsTranscribing(false);
+      await handleSend(text, true);
+    } catch (e: any) {
+      const msg = String(e?.message || '');
+      if (/short|No speech|No audio/i.test(msg) || heldMs < 900) {
+        Alert.alert("Didn't catch that", 'Hold on a second longer and speak clearly, then tap stop.');
+      } else if (/Network/i.test(msg)) {
+        Alert.alert('No connection', 'Could not reach the voice service. Check your internet and try again.');
+      } else {
+        Alert.alert('Voice', msg || 'Could not understand the recording. Please try again.');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   useEffect(() => {
     checkActiveKey();
 
@@ -171,15 +301,16 @@ export const AICoachScreen = () => {
     Alert.alert('AI Engine Connected', 'TitanAI Engine API key saved. Real-time sports science intelligence is active!');
   };
 
-  const handleSend = async (customText?: string) => {
+  const handleSend = async (customText?: string, fromVoice = false) => {
     const messageToSend = customText || inputText;
     if (!messageToSend.trim() || isTyping) return;
 
-    setInputText('');
+    if (!fromVoice) setInputText('');
     setIsTyping(true);
 
     try {
-      await sendAICoachQuery(messageToSend.trim());
+      const reply = await sendAICoachQuery(messageToSend.trim());
+      if (fromVoice && reply) speakReply(reply);
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -234,7 +365,17 @@ export const AICoachScreen = () => {
       {/* Toolbar under the shared TitanFit header */}
       <View style={[styles.header, { borderBottomColor: theme.borderSoft, paddingTop: 10 }]}>
         <View style={styles.headerBottomRow}>
-          <Text style={[styles.toolbarCaption, { color: theme.muted }]} numberOfLines={1}>Training, form & diet answers</Text>
+          {isSpeaking ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={stopSpeaking}
+              style={[styles.speakingPill, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}
+            >
+              <Text style={[styles.speakingPillText, { color: theme.primary }]}>🔊 Speaking · Tap to stop</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.toolbarCaption, { color: theme.muted }]} numberOfLines={1}>Training, form & diet answers</Text>
+          )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
@@ -308,34 +449,69 @@ export const AICoachScreen = () => {
           },
         ]}
       >
-        <TextInput
-          style={[styles.input, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
-          placeholder="Ask TitanAI about workout splits, form, or macros..."
-          placeholderTextColor={theme.muted}
-          value={inputText}
-          onChangeText={setInputText}
-          onFocus={() => {
-            setKeyboardVisible(true);
-            navigation.setOptions({ tabBarStyle: { display: 'none' } });
-            setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }, 120);
-          }}
-          multiline
-          maxLength={300}
-        />
+        {isListening || isTranscribing ? (
+          <View style={[styles.listenBar, { backgroundColor: theme.surfaceAlt, borderColor: isListening ? '#EF4444' : theme.borderSoft }]}>
+            {isListening ? (
+              <>
+                <Animated.View
+                  style={[
+                    styles.recDot,
+                    { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }), transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }] },
+                  ]}
+                />
+                <Text style={[styles.listenText, { color: theme.text }]} numberOfLines={1}>
+                  Listening… {Math.floor((recorderState.durationMillis || 0) / 1000)}s
+                </Text>
+                <TouchableOpacity onPress={cancelListening} hitSlop={10}>
+                  <Text style={[styles.listenCancel, { color: theme.muted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={[styles.listenText, { color: theme.text }]}>Understanding your question…</Text>
+              </>
+            )}
+          </View>
+        ) : (
+          <TextInput
+            style={[styles.input, { color: theme.text, backgroundColor: theme.surfaceAlt, borderColor: theme.borderSoft }]}
+            placeholder="Ask TitanAI, or tap 🎤 to speak"
+            placeholderTextColor={theme.muted}
+            value={inputText}
+            onChangeText={setInputText}
+            onFocus={() => {
+              setKeyboardVisible(true);
+              navigation.setOptions({ tabBarStyle: { display: 'none' } });
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 120);
+            }}
+            multiline
+            maxLength={300}
+          />
+        )}
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={[
-            styles.sendBtn,
-            { backgroundColor: inputText.trim() && !isTyping ? theme.primary : theme.borderSoft },
-          ]}
-          onPress={() => handleSend()}
-          disabled={!inputText.trim() || isTyping}
-        >
-          <Text style={styles.sendBtnText}>➤</Text>
-        </TouchableOpacity>
+        {inputText.trim() && !isListening && !isTranscribing ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.sendBtn, { backgroundColor: !isTyping ? theme.primary : theme.borderSoft }]}
+            onPress={() => handleSend()}
+            disabled={isTyping}
+          >
+            <Text style={styles.sendBtnText}>➤</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            accessibilityLabel={isListening ? 'Stop and ask' : 'Ask by voice'}
+            style={[styles.sendBtn, { backgroundColor: isListening ? '#EF4444' : isTyping || isTranscribing ? theme.borderSoft : theme.primary }]}
+            onPress={isListening ? finishListening : startListening}
+            disabled={isTyping || isTranscribing}
+          >
+            <Text style={styles.micBtnText}>{isListening ? '■' : '🎤'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* AI Intelligence Engine Key Modal */}
@@ -611,6 +787,47 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  micBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+  },
+  listenBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  recDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#EF4444',
+  },
+  listenText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  listenCancel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  speakingPill: {
+    flexShrink: 1,
+    marginRight: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  speakingPillText: {
+    fontSize: 11.5,
+    fontWeight: '800',
   },
   sendBtnText: {
     color: '#FFFFFF',

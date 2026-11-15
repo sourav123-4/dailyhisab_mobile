@@ -79,7 +79,7 @@ import { AppToast, ToastConfig } from '../components/AppToast';
 import { getAppTheme } from '../theme/appTheme';
 import { isLoanActive } from '../utils/loans';
 import { localDateISO, localMonthISO } from '../utils/date';
-import { groqChatViaProxy, groqTranscribeViaProxy, isAiProxyAvailable } from '../services/aiProxy';
+import { groqChatViaProxy, transcribeAudioFile, isAiProxyAvailable } from '../services/aiProxy';
 import { normalizeAppLock, shouldRelockAfter } from '../services/appLock';
 import { LOCAL_DATA_OWNER, scopedStorageKey, TITANFIT_STORAGE_KEYS } from '../services/dataOwner';
 
@@ -1582,105 +1582,10 @@ export function HisabAppProvider({ children }: { children: ReactNode }) {
   }
 
   async function transcribeAudio(rawUri: string): Promise<string> {
-    const apiKey = (state.groqKey || '').trim();
-    const uri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
     const model = ACTIVE_ENV.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
     const prompt = 'Daily hisab expense, income, petrol, groceries, chai, tea, coffee, UPI, cash, rupees, ₹, salary, EMI, SIP, rent, doodh, sabzi, bazaar, fish, dinner, lunch';
-    // Without a personal key the server-side proxy holds the Groq key.
-    if (!apiKey) {
-      return groqTranscribeViaProxy(uri, model, prompt);
-    }
-
-    // Primary method: Read local audio file as Blob for Expo 57 WinterCG fetch
-    try {
-      const fileRes = await fetch(uri);
-      const blob = await fileRes.blob();
-      const data = new FormData();
-      data.append('file', blob, 'daily-hisab.m4a');
-      data.append('model', model);
-      data.append('response_format', 'json');
-      data.append('prompt', prompt);
-
-      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: data,
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const text = String(json.text || '').trim();
-        if (text) return text;
-      } else {
-        const errText = await res.text().catch(() => '');
-        console.warn('Groq STT fetch error:', res.status, errText);
-        if (res.status === 400 && (errText.includes('too short') || errText.includes('audio file'))) {
-          throw new Error('Recording was too short to transcribe.');
-        }
-        if (res.status === 401) {
-          throw new Error('401 Unauthorized: Invalid Groq API Key');
-        }
-      }
-    } catch (fetchErr: any) {
-      const msg = fetchErr?.message || '';
-      if (msg.includes('too short') || msg.includes('401')) {
-        throw fetchErr;
-      }
-      console.warn('Fetch blob upload fallback to XHR:', msg);
-    }
-
-    // Secondary method: Native XMLHttpRequest multipart upload
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', 'https://api.groq.com/openai/v1/audio/transcriptions');
-      xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const json = JSON.parse(xhr.responseText);
-            resolve(String(json.text || '').trim());
-          } catch (e) {
-            reject(new Error('Invalid transcription response'));
-          }
-        } else {
-          const errBody = xhr.responseText || '';
-          console.warn('XHR Groq STT error:', xhr.status, errBody);
-          if (xhr.status === 400 && (errBody.includes('too short') || errBody.includes('audio file'))) {
-            reject(new Error('Recording was too short to transcribe.'));
-          } else if (xhr.status === 401) {
-            reject(new Error('401 Unauthorized: Invalid Groq API Key'));
-          } else {
-            reject(new Error(`Groq STT (${xhr.status}): ${errBody || 'Transcription failed'}`));
-          }
-        }
-      };
-
-      xhr.onerror = (e) => {
-        console.warn('XHR STT Network error:', e);
-        reject(new Error('Network error uploading audio to voice server.'));
-      };
-
-      xhr.ontimeout = () => {
-        reject(new Error('Voice transcription request timed out.'));
-      };
-
-      xhr.timeout = 15000;
-
-      const data = new FormData();
-      data.append('file', {
-        uri,
-        name: 'daily-hisab.m4a',
-        type: 'audio/m4a',
-      } as any);
-      data.append('model', model);
-      data.append('response_format', 'json');
-      data.append('prompt', prompt);
-
-      xhr.send(data);
-    });
+    // A personal key goes straight to Groq; otherwise the server-side proxy holds the key.
+    return transcribeAudioFile(rawUri, model, prompt, (state.groqKey || '').trim() || undefined);
   }
 
   async function parseVoiceToTransactions(text: string): Promise<Transaction[]> {
